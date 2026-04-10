@@ -1,5 +1,5 @@
 import React from "react";
-import { Star, Activity, ArrowUpRight, ArrowDownRight, Clock, AlertTriangle } from "lucide-react";
+import { Star, Activity, ArrowUpRight, Clock, TrendingDown } from "lucide-react";
 
 const leagues = [
   {
@@ -157,7 +157,7 @@ export function Dashboard() {
                     <div className="flex items-center gap-8 w-1/2 justify-end">
                       <div className="flex items-center gap-2">
                         {match.signalType === "positive" && <ArrowUpRight className="w-4 h-4 text-primary" />}
-                        {match.signalType === "negative" && <AlertTriangle className="w-4 h-4 text-destructive" />}
+                        {match.signalType === "negative" && <TrendingDown className="w-4 h-4 text-amber-400" />}
                         {match.signalType === "neutral" && <Activity className="w-4 h-4 text-muted-foreground" />}
                         <span className="text-sm text-muted-foreground">{match.signal}</span>
                         <span className="text-sm font-mono font-medium text-white px-2 py-0.5 bg-secondary rounded border border-border">

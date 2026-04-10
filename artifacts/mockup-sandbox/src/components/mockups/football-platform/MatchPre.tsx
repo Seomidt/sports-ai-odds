@@ -1,5 +1,5 @@
 import React from "react";
-import { Clock, ShieldCheck, Crosshair, AlertCircle, FileText, ChevronRight } from "lucide-react";
+import { Clock, ShieldCheck, Crosshair, FileText } from "lucide-react";
 
 export function MatchPre() {
   return (
@@ -48,8 +48,8 @@ export function MatchPre() {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         {s.type === 'positive' && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
-                        {s.type === 'neutral' && <div className="w-1.5 h-1.5 rounded-full bg-accent" />}
-                        {s.type === 'negative' && <div className="w-1.5 h-1.5 rounded-full bg-destructive" />}
+                        {s.type === 'neutral' && <div className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
+                        {s.type === 'negative' && <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />}
                         <span className="font-medium text-sm">{s.label}</span>
                       </div>
                       <div className="text-xs text-muted-foreground font-mono ml-3.5">{s.value}</div>
@@ -125,7 +125,7 @@ export function MatchPre() {
                 </li>
                 <li className="flex items-center justify-between">
                   <span>Pedri (BAR)</span>
-                  <span className="text-xs font-mono text-destructive bg-destructive/10 px-1.5 py-0.5 rounded border border-destructive/20">OUT</span>
+                  <span className="text-xs font-mono text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">OUT</span>
                 </li>
               </ul>
             </div>

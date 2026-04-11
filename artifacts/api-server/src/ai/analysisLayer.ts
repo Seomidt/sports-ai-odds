@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@workspace/db";
-import { aiBettingTips, fixtureSignals, fixtures, oddsSnapshots, standings } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -140,15 +140,50 @@ async function buildBettingContext(fixtureId: number): Promise<{
     };
   }
 
-  // Signals
-  const rawSignals = await db.query.fixtureSignals.findMany({
-    where: (s, { and: andFn, eq: eqFn }) => andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, "pre")),
-  });
-
+  // Pre-match signals from teamFeatures (written by featureEngine.runPreMatchFeatures)
   const signals: Record<string, number | boolean | string> = {};
-  for (const s of rawSignals) {
-    if (s.signalBool !== null && s.signalBool !== undefined) signals[s.signalKey] = s.signalBool;
-    else if (s.signalValue !== null && s.signalValue !== undefined) signals[s.signalKey] = Math.round(s.signalValue * 1000) / 1000;
+
+  if (fixture.homeTeamId && fixture.awayTeamId) {
+    const homeFeats = await db.query.teamFeatures.findMany({
+      where: (f, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(f.fixtureId, fixtureId), eqFn(f.teamId, fixture.homeTeamId!), eqFn(f.phase, "pre")),
+    });
+    const awayFeats = await db.query.teamFeatures.findMany({
+      where: (f, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(f.fixtureId, fixtureId), eqFn(f.teamId, fixture.awayTeamId!), eqFn(f.phase, "pre")),
+    });
+    for (const feat of homeFeats) {
+      if (feat.featureValue !== null) signals[`home_${feat.featureKey}`] = Math.round(feat.featureValue * 1000) / 1000;
+    }
+    for (const feat of awayFeats) {
+      if (feat.featureValue !== null) signals[`away_${feat.featureKey}`] = Math.round(feat.featureValue * 1000) / 1000;
+    }
+
+    // H2H summary as signals
+    const h2hRows = await db.query.h2hFixtures.findMany({
+      where: (h, { or: orFn, and: andFn, eq: eqFn }) =>
+        orFn(
+          andFn(eqFn(h.forTeam1Id, fixture.homeTeamId!), eqFn(h.forTeam2Id, fixture.awayTeamId!)),
+          andFn(eqFn(h.forTeam1Id, fixture.awayTeamId!), eqFn(h.forTeam2Id, fixture.homeTeamId!))
+        ),
+      orderBy: (h, { desc: d }) => [d(h.kickoff)],
+      limit: 5,
+    });
+    if (h2hRows.length > 0) {
+      let homeWins = 0, draws = 0, awayWins = 0, totalGoals = 0;
+      for (const h of h2hRows) {
+        const hg = h.homeGoals ?? 0, ag = h.awayGoals ?? 0;
+        totalGoals += hg + ag;
+        const homeIsFixtureHome = h.homeTeamId === fixture.homeTeamId;
+        if (hg > ag) { homeIsFixtureHome ? homeWins++ : awayWins++; }
+        else if (ag > hg) { homeIsFixtureHome ? awayWins++ : homeWins++; }
+        else draws++;
+      }
+      signals["h2h_home_wins"] = homeWins;
+      signals["h2h_draws"] = draws;
+      signals["h2h_away_wins"] = awayWins;
+      signals["h2h_avg_goals"] = Math.round((totalGoals / h2hRows.length) * 10) / 10;
+    }
   }
 
   // Odds
@@ -241,8 +276,9 @@ export async function getBettingTip(fixtureId: number) {
 
   const ctx = await buildBettingContext(fixtureId);
 
-  if (Object.keys(ctx.signals).length < 3) {
-    return null; // Not enough data yet
+  // Need at least market odds (home/draw/away) to generate a meaningful tip
+  if (!ctx.odds.home && !ctx.odds.draw && !ctx.odds.away) {
+    return null;
   }
 
   const accuracy = await getAccuracyHistory();

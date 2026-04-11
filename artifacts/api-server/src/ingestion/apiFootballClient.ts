@@ -8,10 +8,23 @@ if (!API_KEY) {
 
 let requestsToday = 0;
 const MAX_REQUESTS_PER_DAY = 75_000; // Ultra plan: 75,000 req/day
-let lastRequestAt = 0;
-const MIN_REQUEST_INTERVAL_MS = 200; // Ultra plan: 500 req/min = 120ms, use 200ms safety margin
+const MIN_REQUEST_INTERVAL_MS = 250; // Ultra plan: 500 req/min = 120ms, use 250ms safety margin
 let requestLog: { timestamp: number; endpoint: string }[] = [];
 let dayResetAt = Date.now();
+
+// Serialise ALL API requests through a single promise chain to prevent concurrent
+// requests from racing past the rate-limit check.
+let requestChain: Promise<void> = Promise.resolve();
+
+function serialiseRequest<T>(fn: () => Promise<T>): Promise<T> {
+  const result = requestChain.then(() => fn());
+  // Advance the chain by the minimum interval regardless of fn outcome
+  requestChain = result.then(
+    () => new Promise<void>((r) => setTimeout(r, MIN_REQUEST_INTERVAL_MS)),
+    () => new Promise<void>((r) => setTimeout(r, MIN_REQUEST_INTERVAL_MS)),
+  );
+  return result;
+}
 
 async function apiFetch<T>(endpoint: string, params: Record<string, string | number> = {}): Promise<T | null> {
   if (!API_KEY) return null;
@@ -20,13 +33,7 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
     return null;
   }
 
-  // Rate limit: 10 req/min on free tier
-  const now = Date.now();
-  const elapsed = now - lastRequestAt;
-  if (elapsed < MIN_REQUEST_INTERVAL_MS) {
-    await new Promise((r) => setTimeout(r, MIN_REQUEST_INTERVAL_MS - elapsed));
-  }
-  lastRequestAt = Date.now();
+  return serialiseRequest(async () => {
 
   const url = new URL(`${BASE_URL}${endpoint}`);
   for (const [k, v] of Object.entries(params)) {
@@ -62,6 +69,7 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
     console.error("[api-football] Fetch error:", err);
     return null;
   }
+  }); // end serialiseRequest
 }
 
 // Reset counter daily
@@ -575,48 +583,51 @@ export async function fetchFixturesBySeason(
       break;
     }
 
-    const now = Date.now();
-    const elapsed = now - lastRequestAt;
-    if (elapsed < MIN_REQUEST_INTERVAL_MS) {
-      await new Promise((r) => setTimeout(r, MIN_REQUEST_INTERVAL_MS - elapsed));
-    }
-    lastRequestAt = Date.now();
+    let done = false;
+    await serialiseRequest(async () => {
+      const url = new URL(`${BASE_URL}/fixtures`);
+      url.searchParams.set("league", String(leagueId));
+      url.searchParams.set("season", String(season));
+      url.searchParams.set("page", String(page));
 
-    const url = new URL(`${BASE_URL}/fixtures`);
-    url.searchParams.set("league", String(leagueId));
-    url.searchParams.set("season", String(season));
-    url.searchParams.set("page", String(page));
+      try {
+        const res = await fetch(url.toString(), {
+          headers: { "x-apisports-key": API_KEY! },
+        });
 
-    try {
-      const res = await fetch(url.toString(), {
-        headers: { "x-apisports-key": API_KEY },
-      });
+        requestsToday++;
+        requestLog.push({ timestamp: Date.now(), endpoint: "/fixtures[season]" });
+        if (requestLog.length > 200) requestLog = requestLog.slice(-200);
 
-      requestsToday++;
-      requestLog.push({ timestamp: Date.now(), endpoint: "/fixtures[season]" });
-      if (requestLog.length > 200) requestLog = requestLog.slice(-200);
+        if (!res.ok) {
+          console.error(`[api-football] HTTP ${res.status} season fetch`);
+          done = true;
+          return;
+        }
 
-      if (!res.ok) {
-        console.error(`[api-football] HTTP ${res.status} season fetch`);
-        break;
+        const json = await res.json() as {
+          response: ApiFixture[];
+          errors: unknown;
+          paging: { current: number; total: number };
+        };
+
+        if (json.errors && Object.keys(json.errors as object).length > 0) {
+          console.error("[api-football] Season fetch API error:", JSON.stringify(json.errors));
+          done = true;
+          return;
+        }
+
+        all.push(...json.response);
+
+        if (json.paging.current >= json.paging.total) { done = true; return; }
+        page++;
+      } catch (err) {
+        console.error("[api-football] Season fetch error:", err);
+        done = true;
       }
+    }); // end serialiseRequest
 
-      const json = await res.json() as {
-        response: ApiFixture[];
-        errors: unknown;
-        paging: { current: number; total: number };
-      };
-
-      if (json.errors && Object.keys(json.errors as object).length > 0) break;
-
-      all.push(...json.response);
-
-      if (json.paging.current >= json.paging.total) break;
-      page++;
-    } catch (err) {
-      console.error("[api-football] Season fetch error:", err);
-      break;
-    }
+    if (done) break;
   }
 
   return all.length > 0 ? all : null;

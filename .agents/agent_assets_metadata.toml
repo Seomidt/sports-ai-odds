@@ -5,10 +5,10 @@ outputs = []
 id = "s-Rh58diIZIy3yi9ZxzM6"
 uri = "file://artifacts/football-platform/src/assets/signal-terminal-logo.png"
 type = "image"
-title = "New sports emblem logo"
+title = "Broadcast-style sports logo"
 
 [[generated]]
 id = "q3_vwcC9a2s1wDysUVVFG"
 uri = "file://artifacts/football-platform/src/assets/signal-terminal-favicon.png"
 type = "image"
-title = "New sports favicon"
+title = "Broadcast-style favicon"

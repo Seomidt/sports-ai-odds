@@ -32,21 +32,35 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
+const ALLOWED_ORIGINS = new Set(
+  (process.env.ALLOWED_ORIGINS ?? "")
+    .split(",")
+    .map((o) => o.trim())
+    .filter(Boolean),
+);
+
+function buildDevOrigins(): Set<string> {
+  const origins = new Set<string>();
+  const domain = process.env.REPLIT_DEV_DOMAIN;
+  if (domain) {
+    origins.add(`https://${domain}`);
+    origins.add(`http://${domain}`);
+  }
+  return origins;
+}
+
+const DEV_ORIGINS = buildDevOrigins();
 
 app.use(
   cors({
     credentials: true,
     origin: (origin, callback) => {
       if (!origin) { callback(null, true); return; }
-      const host = process.env.REPLIT_DEV_DOMAIN;
+      const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(origin);
       const allowed =
-        origin.startsWith("http://localhost") ||
-        (host && origin.includes(host)) ||
-        ALLOWED_ORIGINS.includes(origin);
+        isLocalhost ||
+        DEV_ORIGINS.has(origin) ||
+        ALLOWED_ORIGINS.has(origin);
       callback(allowed ? null : new Error("CORS: origin not allowed"), allowed);
     },
   }),

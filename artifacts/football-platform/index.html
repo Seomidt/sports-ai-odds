@@ -8,8 +8,28 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script type="module" src="https://widgets.api-sports.io/3.1.0/widgets.js"></script>
   </head>
   <body>
+    <!-- API-Sports widget global config — must be in DOM before widgets.js module runs -->
+    <api-sports-widget
+      id="apsw-config"
+      data-type="config"
+      data-key="local-proxy"
+      data-sport="football"
+      data-theme="SignalTerminal"
+      data-lang="en"
+      data-show-logos="true"
+      data-timezone="Europe/Copenhagen"
+    ></api-sports-widget>
+    <!-- Inline (non-module) script executes synchronously before module scripts -->
+    <script>
+      document.getElementById("apsw-config").setAttribute(
+        "data-url-football",
+        location.origin + "/api/widget-proxy"
+      );
+    </script>
+
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

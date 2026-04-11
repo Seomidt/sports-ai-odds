@@ -158,3 +158,45 @@
   -webkit-backdrop-filter: blur(10px);
   border: 1px solid rgba(255, 255, 255, 0.05);
 }
+
+/* ─── API-Sports Widget: Signal Terminal theme ────────────────────────────── */
+api-sports-widget[data-theme="SignalTerminal"] {
+  --primary-color: #18cfc0;
+  --success-color: #18cfc0;
+  --warning-color: #f59e0b;
+  --danger-color: #ef4444;
+  --light-color: #64748b;
+
+  --home-color: var(--primary-color);
+  --away-color: #f59e0b;
+
+  --text-color: #e2e8f0;
+  --text-color-info: #94a3b8;
+
+  --background-color: rgba(255, 255, 255, 0.03);
+
+  --primary-font-size: 0.72rem;
+  --secondary-font-size: 0.73rem;
+  --button-font-size: 0.75rem;
+  --title-font-size: 0.85rem;
+
+  --header-text-transform: uppercase;
+  --button-text-transform: uppercase;
+  --title-text-transform: uppercase;
+
+  --border: 1px solid rgba(255, 255, 255, 0.07);
+  --game-height: 2.4rem;
+  --league-height: 2.4rem;
+
+  --score-size: 2rem;
+  --flag-size: 18px;
+  --teams-logo-size: 18px;
+  --teams-logo-size-xl: 4rem;
+  --hover: rgba(255, 255, 255, 0.04);
+}
+
+/* Blend widget into our dark glassmorphism background */
+api-sports-widget {
+  display: block;
+  font-family: 'Inter', system-ui, sans-serif;
+}

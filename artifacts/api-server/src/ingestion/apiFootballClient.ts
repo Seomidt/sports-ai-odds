@@ -181,8 +181,20 @@ export async function fetchFixtureStats(fixtureId: number): Promise<ApiTeamStats
   return apiFetch<ApiTeamStats[]>("/fixtures/statistics", { fixture: fixtureId });
 }
 
-export async function fetchFixtureLineups(fixtureId: number): Promise<unknown[] | null> {
-  return apiFetch("/fixtures/lineups", { fixture: fixtureId });
+export interface ApiLineupPlayer {
+  player: { id: number; name: string; number: number; pos: string; grid: string | null };
+}
+
+export interface ApiLineup {
+  team: { id: number; name: string; logo: string };
+  formation: string;
+  startXI: ApiLineupPlayer[];
+  substitutes: ApiLineupPlayer[];
+  coach: { id: number | null; name: string | null; photo: string | null };
+}
+
+export async function fetchFixtureLineups(fixtureId: number): Promise<ApiLineup[] | null> {
+  return apiFetch<ApiLineup[]>("/fixtures/lineups", { fixture: fixtureId });
 }
 
 export async function fetchStandings(leagueId: number, season: number): Promise<ApiStanding[][] | null> {

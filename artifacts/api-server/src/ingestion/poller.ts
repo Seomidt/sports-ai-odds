@@ -37,6 +37,7 @@ import {
   fetchTransfers,
   type ApiFixture,
   type ApiStatItem,
+  type ApiLineup,
 } from "./apiFootballClient.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
@@ -193,23 +194,27 @@ async function syncPreMatchData() {
     const lineups = await fetchFixtureLineups(fix.fixtureId);
     if (!lineups || !Array.isArray(lineups) || lineups.length === 0) continue;
 
-    for (const lineup of lineups as Array<{ team: { id: number }; formation: string; startXI: unknown[]; substitutes: unknown[] }>) {
+    for (const lineup of lineups as ApiLineup[]) {
+      // Drizzle jsonb columns accept serializable values; JSON.stringify/parse ensures clean JSON
+      const startingXI = JSON.parse(JSON.stringify(lineup.startXI)) as ApiLineup["startXI"];
+      const substitutes = JSON.parse(JSON.stringify(lineup.substitutes)) as ApiLineup["substitutes"];
+
       await db
         .insert(fixtureLineups)
         .values({
           fixtureId: fix.fixtureId,
           teamId: lineup.team.id,
           formation: lineup.formation,
-          startingXI: lineup.startXI as never,
-          substitutes: lineup.substitutes as never,
+          startingXI,
+          substitutes,
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
           target: [fixtureLineups.fixtureId, fixtureLineups.teamId],
           set: {
             formation: lineup.formation,
-            startingXI: lineup.startXI as never,
-            substitutes: lineup.substitutes as never,
+            startingXI,
+            substitutes,
             updatedAt: new Date(),
           },
         });

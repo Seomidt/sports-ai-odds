@@ -5,6 +5,9 @@ import {
   fixtureEvents,
   fixtureLineups,
   teamFeatures,
+  predictions,
+  playerStats,
+  liveOddsSnapshots,
 } from "@workspace/db/schema";
 import { eq, and, desc, sql } from "drizzle-orm";
 
@@ -111,6 +114,40 @@ export async function runPreMatchFeatures(fixtureId: number, homeTeamId: number,
     }
   }
 
+  // Pro: API prediction win probability as features
+  const pred = await db.query.predictions.findFirst({
+    where: (p, { eq: eqFn }) => eqFn(p.fixtureId, fixtureId),
+  });
+
+  if (pred) {
+    const homeProb = (pred.homeWinPercent ?? 0) / 100;
+    const drawProb = (pred.drawPercent ?? 0) / 100;
+    const awayProb = (pred.awayWinPercent ?? 0) / 100;
+
+    await upsertFeature(fixtureId, homeTeamId, "pre", "api_win_prob", homeProb);
+    await upsertFeature(fixtureId, awayTeamId, "pre", "api_win_prob", awayProb);
+    await upsertFeature(fixtureId, homeTeamId, "pre", "api_draw_prob", drawProb);
+    await upsertFeature(fixtureId, homeTeamId, "pre", "api_goals_predicted_for", pred.goalsHome);
+    await upsertFeature(fixtureId, awayTeamId, "pre", "api_goals_predicted_for", pred.goalsAway);
+  }
+
+  // Pro: Average player rating from recent fixture player stats
+  for (const [teamId] of [[homeTeamId], [awayTeamId]] as const) {
+    const recentPlayerStats = await db.query.playerStats.findMany({
+      where: (ps, { eq: eqFn }) => eqFn(ps.teamId, teamId),
+      orderBy: (ps, { desc: d }) => [d(ps.fixtureId)],
+      limit: 22,
+    });
+
+    if (recentPlayerStats.length > 0) {
+      const rated = recentPlayerStats.filter((p) => p.rating !== null);
+      if (rated.length > 0) {
+        const avgRating = rated.reduce((acc, p) => acc + (p.rating ?? 0), 0) / rated.length;
+        await upsertFeature(fixtureId, teamId, "pre", "avg_player_rating", avgRating);
+      }
+    }
+  }
+
   console.log(`[feature-engine] Pre-match features computed for fixture ${fixtureId}`);
 }
 
@@ -178,9 +215,52 @@ export async function runLiveFeatures(fixtureId: number, homeTeamId: number, awa
   const hm = homeMomentum?.featureValue ?? 0;
   const am = awayMomentum?.featureValue ?? 0;
   const total = hm + am;
-  const upsetRisk = total > 0 ? Math.min(am / total, 1) * 0.8 + 0.1 : 0.5;
+  let upsetRisk = total > 0 ? Math.min(am / total, 1) * 0.8 + 0.1 : 0.5;
+
+  // Pro: blend with live odds movement if available
+  const recentLiveOdds = await db.query.liveOddsSnapshots.findMany({
+    where: (lo, { eq: eqFn }) => eqFn(lo.fixtureId, fixtureId),
+    orderBy: (lo, { desc: d }) => [d(lo.snappedAt)],
+    limit: 2,
+  });
+
+  if (recentLiveOdds.length === 2) {
+    const latest = recentLiveOdds[0]!;
+    const prev = recentLiveOdds[1]!;
+    // If away odds shortening (decreasing) it means market likes away more → increase upset_risk
+    const awayOddsDelta = (latest.awayWin ?? 0) - (prev.awayWin ?? 0);
+    const oddsSignal = awayOddsDelta < 0 ? 0.15 : awayOddsDelta > 0 ? -0.1 : 0;
+    upsetRisk = Math.max(0.05, Math.min(0.95, upsetRisk + oddsSignal));
+
+    // Store the odds-based live probability as a feature
+    if (latest.homeWin && latest.awayWin) {
+      const homeImplied = 1 / latest.homeWin;
+      const awayImplied = 1 / latest.awayWin;
+      const drawImplied = latest.draw ? 1 / latest.draw : 0.25;
+      const sumImplied = homeImplied + drawImplied + awayImplied;
+      await upsertFeature(fixtureId, homeTeamId, "live", "live_win_prob_market", homeImplied / sumImplied);
+      await upsertFeature(fixtureId, awayTeamId, "live", "live_win_prob_market", awayImplied / sumImplied);
+    }
+  }
+
   await upsertFeature(fixtureId, homeTeamId, "live", "upset_risk_score", upsetRisk);
   await upsertFeature(fixtureId, awayTeamId, "live", "upset_risk_score", 1 - upsetRisk);
+
+  // Pro: live player rating as feature (average of starters in this fixture)
+  for (const teamId of [homeTeamId, awayTeamId]) {
+    const livePlayerStats = await db.query.playerStats.findMany({
+      where: (ps, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(ps.fixtureId, fixtureId), eqFn(ps.teamId, teamId)),
+    });
+
+    if (livePlayerStats.length > 0) {
+      const rated = livePlayerStats.filter((p) => p.rating !== null && (p.minutesPlayed ?? 0) > 0);
+      if (rated.length > 0) {
+        const avgRating = rated.reduce((acc, p) => acc + (p.rating ?? 0), 0) / rated.length;
+        await upsertFeature(fixtureId, teamId, "live", "live_avg_player_rating", avgRating);
+      }
+    }
+  }
 }
 
 export async function runPostMatchFeatures(fixtureId: number) {

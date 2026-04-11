@@ -194,11 +194,156 @@ export async function fetchTeamInjuries(teamId: number, season: number, leagueId
   return apiFetch<ApiInjury[]>("/injuries", { team: teamId, season, league: leagueId });
 }
 
-export async function fetchOdds(fixtureId: number): Promise<ApiOdds | null> {
+export interface ApiOddsExtended extends ApiOdds {
+  _btts?: number | null;
+  _overUnder25?: number | null;
+  _handicapHome?: number | null;
+}
+
+export async function fetchOdds(fixtureId: number): Promise<ApiOddsExtended | null> {
   const data = await apiFetch<ApiOdds[]>("/odds", { fixture: fixtureId });
-  return data?.[0] ?? null;
+  const raw = data?.[0] ?? null;
+  if (!raw) return null;
+
+  const result: ApiOddsExtended = { ...raw };
+
+  for (const bm of raw.bookmakers) {
+    const bttsMarket = bm.bets.find((b) => b.name === "Both Teams Score");
+    if (bttsMarket) {
+      const yesVal = parseFloat(bttsMarket.values.find((v) => v.value === "Yes")?.odd ?? "0");
+      result._btts = yesVal || null;
+    }
+
+    const ouMarket = bm.bets.find((b) => b.name === "Goals Over/Under");
+    if (ouMarket) {
+      const over25 = ouMarket.values.find((v) => v.value === "Over 2.5");
+      result._overUnder25 = over25 ? parseFloat(over25.odd) : null;
+    }
+
+    const handicapMarket = bm.bets.find((b) => b.name === "Asian Handicap");
+    if (handicapMarket) {
+      const homeH = handicapMarket.values[0];
+      result._handicapHome = homeH ? parseFloat(homeH.odd) : null;
+    }
+
+    break;
+  }
+
+  return result;
 }
 
 export async function fetchFixturesByTeam(teamId: number, season: number, last: number): Promise<ApiFixture[] | null> {
   return apiFetch<ApiFixture[]>("/fixtures", { team: teamId, season, last });
+}
+
+// ─── Pro plan endpoints ────────────────────────────────────────────────────────
+
+export interface ApiPlayerFixtureStat {
+  player: { id: number; name: string; photo: string };
+  statistics: Array<{
+    games: { minutes: number | null; position: string | null; rating: string | null; captain: boolean };
+    goals: { total: number | null; assists: number | null };
+    shots: { total: number | null; on: number | null };
+    passes: { total: number | null; key: number | null; accuracy: string | null };
+    dribbles: { attempts: number | null; success: number | null };
+    duels: { total: number | null; won: number | null };
+    team: { id: number };
+  }>;
+}
+
+export interface ApiPrediction {
+  predictions: {
+    winner: { id: number | null; name: string | null; comment: string | null } | null;
+    win_or_draw: boolean | null;
+    under_over: string | null;
+    goals: { home: string | null; away: string | null };
+    advice: string | null;
+    percent: { home: string; draw: string; away: string };
+  };
+  teams: {
+    home: { id: number; name: string };
+    away: { id: number; name: string };
+  };
+}
+
+export interface ApiLiveOdds {
+  fixture: { id: number };
+  update: string;
+  bookmakers: Array<{
+    id: number;
+    name: string;
+    bets: Array<{
+      id: number;
+      name: string;
+      values: Array<{ value: string; odd: string; handicap: string | null; main: boolean | null; suspended: boolean }>;
+    }>;
+  }>;
+}
+
+export interface ApiTopScorer {
+  player: { id: number; name: string; photo: string };
+  statistics: Array<{
+    team: { id: number; name: string };
+    league: { id: number; season: number };
+    games: { appearances: number | null; minutes: number | null; rating: string | null; position: string | null };
+    goals: { total: number | null; assists: number | null };
+  }>;
+}
+
+export interface ApiCoach {
+  id: number;
+  name: string;
+  nationality: string | null;
+  age: number | null;
+  photo: string | null;
+  team: { id: number; name: string } | null;
+}
+
+export interface ApiSidelined {
+  player: { id: number; name: string };
+  sidelined: Array<{ type: string; start: string; end: string | null }>;
+}
+
+export interface ApiTransfer {
+  player: { id: number; name: string };
+  transfers: Array<{
+    date: string;
+    type: string;
+    teams: {
+      in: { id: number; name: string };
+      out: { id: number; name: string };
+    };
+  }>;
+}
+
+export async function fetchFixturePlayerStats(fixtureId: number): Promise<ApiPlayerFixtureStat[] | null> {
+  return apiFetch<ApiPlayerFixtureStat[]>("/fixtures/players", { fixture: fixtureId });
+}
+
+export async function fetchPredictions(fixtureId: number): Promise<ApiPrediction[] | null> {
+  return apiFetch<ApiPrediction[]>("/predictions", { fixture: fixtureId });
+}
+
+export async function fetchLiveOdds(fixtureId: number): Promise<ApiLiveOdds[] | null> {
+  return apiFetch<ApiLiveOdds[]>("/odds/live", { fixture: fixtureId });
+}
+
+export async function fetchTopScorers(leagueId: number, season: number): Promise<ApiTopScorer[] | null> {
+  return apiFetch<ApiTopScorer[]>("/players/topscorers", { league: leagueId, season });
+}
+
+export async function fetchTopAssists(leagueId: number, season: number): Promise<ApiTopScorer[] | null> {
+  return apiFetch<ApiTopScorer[]>("/players/topassists", { league: leagueId, season });
+}
+
+export async function fetchCoach(teamId: number): Promise<ApiCoach[] | null> {
+  return apiFetch<ApiCoach[]>("/coachs", { team: teamId });
+}
+
+export async function fetchSidelined(playerId: number): Promise<ApiSidelined[] | null> {
+  return apiFetch<ApiSidelined[]>("/sidelined", { player: playerId });
+}
+
+export async function fetchTransfers(teamId: number): Promise<ApiTransfer[] | null> {
+  return apiFetch<ApiTransfer[]>("/transfers", { team: teamId });
 }

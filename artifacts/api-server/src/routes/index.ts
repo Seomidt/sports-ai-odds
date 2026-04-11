@@ -7,6 +7,7 @@ import adminRouter from "./admin.js";
 import meRouter from "./me.js";
 import billingRouter from "../billing/billingRoutes.js";
 import widgetProxyRouter from "./widgetProxy.js";
+import proDataRouter from "./proData.js";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(adminRouter);
 router.use(meRouter);
 router.use(billingRouter);
 router.use(widgetProxyRouter);
+router.use(proDataRouter);
 
 export default router;

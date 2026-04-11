@@ -29,16 +29,23 @@ A 5-layer deterministic AI football analysis platform using the API-Football API
 - **Database**: PostgreSQL + Drizzle ORM
 - **AI**: Claude haiku-4-5 via Replit AI Integrations (Anthropic)
 - **Build**: esbuild (ESM bundle)
-- **Data source**: API-Football v3 (free tier, 100 req/day, 10 req/min)
+- **Data source**: API-Football v3 (**Pro plan** — 3000 req/day, 100 req/min)
+- **Live polling**: Adaptive — 15s sprint when tracked matches live, 2min idle when quiet
 
 ## DB Tables
 
 - `fixtures`, `teams`, `standings` — raw league data
 - `fixture_events`, `fixture_lineups`, `fixture_stats`, `player_stats` — match detail
-- `injuries`, `odds_snapshots` — injury & odds data
+- `injuries`, `odds_snapshots` (with btts/overUnder/handicap) — injury & multi-market odds
 - `team_features` — computed features per team/fixture/phase (pre/live/post)
 - `fixture_signals` — named signals with label + value/bool
 - `followed_fixtures`, `alert_log` — alerting system
+- **Pro**: `predictions` — API win/draw/away % + goal predictions per fixture
+- **Pro**: `live_odds_snapshots` — real-time odds movements during play
+- **Pro**: `player_season_stats` — top scorers/assists per league/season
+- **Pro**: `coaches` — current coach per team
+- **Pro**: `sidelined_players` — long-term injured players
+- **Pro**: `transfers` — recent transfers per team
 
 ## Key Commands
 
@@ -58,8 +65,16 @@ A 5-layer deterministic AI football analysis platform using the API-Football API
 - `GET /api/fixtures/:id` — fixture detail (events, stats, lineups)
 - `GET /api/fixtures/:id/signals?phase=pre|live|post` — named signals
 - `GET /api/fixtures/:id/features` — computed features
+- `GET /api/fixtures/:id/predictions` — Pro: API prediction (win/draw/away % + goals)
+- `GET /api/fixtures/:id/live-odds` — Pro: live odds snapshots timeline
+- `GET /api/fixtures/:id/player-stats` — Pro: per-player stats for match
 - `GET /api/standings/:leagueId` — league standings
 - `GET /api/teams/:id/injuries` — team injuries
+- `GET /api/teams/:id/coach` — Pro: current coach info
+- `GET /api/teams/:id/sidelined` — Pro: long-term sidelined players
+- `GET /api/teams/:id/transfers` — Pro: recent transfers
+- `GET /api/leagues/:id/topscorers?season=2024` — Pro: season top scorers
+- `GET /api/leagues/:id/topassists?season=2024` — Pro: season top assists
 - `GET /api/analysis/:id/pre|live|post` — AI analysis
 - `POST /api/alerts/explain` — generate alert text
 - `POST /api/fixtures/:id/follow` — follow a fixture (x-session-id header)

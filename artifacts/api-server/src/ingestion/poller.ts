@@ -8,6 +8,13 @@ import {
   fixtureLineups,
   injuries,
   oddsSnapshots,
+  predictions,
+  liveOddsSnapshots,
+  playerStats,
+  playerSeasonStats,
+  coaches,
+  sidelinedPlayers,
+  transfers,
 } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import {
@@ -18,13 +25,23 @@ import {
   fetchFixtureEvents,
   fetchFixtureStats,
   fetchFixtureLineups,
+  fetchFixturePlayerStats,
   fetchStandings,
   fetchOdds,
+  fetchPredictions,
+  fetchLiveOdds,
+  fetchTopScorers,
+  fetchTopAssists,
+  fetchCoach,
+  fetchSidelined,
+  fetchTransfers,
   type ApiFixture,
   type ApiStatItem,
 } from "./apiFootballClient.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
+
+const TRACKED_LEAGUE_IDS = new Set(TRACKED_LEAGUES.map((l) => l.id));
 
 function getTomorrow(): string {
   const d = new Date();
@@ -198,6 +215,9 @@ async function syncPreMatchData() {
         });
     }
 
+    // Pro: fetch predictions for upcoming fixtures
+    await syncPredictionForFixture(fix.fixtureId);
+
     // Run pre-match features + signals
     await runPreMatchFeatures(fix.fixtureId, fix.homeTeamId, fix.awayTeamId);
     await runSignalEngine(fix.fixtureId, "pre");
@@ -216,7 +236,6 @@ async function syncOdds() {
     const odds = await fetchOdds(fix.fixtureId);
     if (!odds) continue;
 
-    // Get match winner market
     for (const bm of odds.bookmakers) {
       const market = bm.bets.find((b) => b.name === "Match Winner");
       if (!market) continue;
@@ -231,11 +250,302 @@ async function syncOdds() {
         homeWin: homeVal || null,
         draw: drawVal || null,
         awayWin: awayVal || null,
+        btts: odds._btts ?? null,
+        overUnder25: odds._overUnder25 ?? null,
+        handicapHome: odds._handicapHome ?? null,
         snappedAt: new Date(),
       });
-      break; // Just first bookmaker
+      break;
     }
   }
+}
+
+async function syncPredictionForFixture(fixtureId: number) {
+  const data = await fetchPredictions(fixtureId);
+  if (!data || data.length === 0) return;
+  const pred = data[0];
+  if (!pred) return;
+
+  const p = pred.predictions;
+  const parsePercent = (s: string | undefined) => {
+    if (!s) return null;
+    return parseFloat(s.replace("%", "")) || null;
+  };
+
+  await db
+    .insert(predictions)
+    .values({
+      fixtureId,
+      homeWinPercent: parsePercent(p.percent.home),
+      drawPercent: parsePercent(p.percent.draw),
+      awayWinPercent: parsePercent(p.percent.away),
+      goalsHome: p.goals.home ? parseFloat(p.goals.home) : null,
+      goalsAway: p.goals.away ? parseFloat(p.goals.away) : null,
+      adviceText: p.advice,
+      winner: p.winner?.name ?? null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: predictions.fixtureId,
+      set: {
+        homeWinPercent: parsePercent(p.percent.home),
+        drawPercent: parsePercent(p.percent.draw),
+        awayWinPercent: parsePercent(p.percent.away),
+        goalsHome: p.goals.home ? parseFloat(p.goals.home) : null,
+        goalsAway: p.goals.away ? parseFloat(p.goals.away) : null,
+        adviceText: p.advice,
+        winner: p.winner?.name ?? null,
+        updatedAt: new Date(),
+      },
+    });
+}
+
+async function syncPlayerStatsForFixture(fixtureId: number) {
+  const data = await fetchFixturePlayerStats(fixtureId);
+  if (!data) return;
+
+  for (const teamData of data) {
+    for (const entry of teamData as unknown as Array<{
+      team: { id: number };
+      players: Array<{
+        player: { id: number; name: string };
+        statistics: Array<{
+          games: { minutes: number | null; position: string | null; rating: string | null };
+          goals: { total: number | null; assists: number | null };
+          shots: { total: number | null; on: number | null };
+          passes: { total: number | null; key: number | null; accuracy: string | null };
+          dribbles: { attempts: number | null; success: number | null };
+          duels: { total: number | null; won: number | null };
+        }>;
+      }>;
+    }>) {
+      for (const { player, statistics } of entry.players ?? []) {
+        const s = statistics[0];
+        if (!s) continue;
+
+        const passAcc = s.passes.accuracy ? parseFloat(String(s.passes.accuracy).replace("%", "")) : null;
+        const rating = s.games.rating ? parseFloat(s.games.rating) : null;
+
+        await db
+          .insert(playerStats)
+          .values({
+            fixtureId,
+            playerId: player.id,
+            teamId: entry.team.id,
+            name: player.name,
+            position: s.games.position,
+            rating: isNaN(rating ?? NaN) ? null : rating,
+            goals: s.goals.total,
+            assists: s.goals.assists,
+            minutesPlayed: s.games.minutes,
+            passAccuracy: isNaN(passAcc ?? NaN) ? null : passAcc,
+            shotsTotal: s.shots.total,
+            shotsOnTarget: s.shots.on,
+            duelsWon: s.duels.won,
+            duelsTotal: s.duels.total,
+          })
+          .onConflictDoUpdate({
+            target: [playerStats.fixtureId, playerStats.playerId],
+            set: {
+              rating: isNaN(rating ?? NaN) ? null : rating,
+              goals: s.goals.total,
+              assists: s.goals.assists,
+              minutesPlayed: s.games.minutes,
+              passAccuracy: isNaN(passAcc ?? NaN) ? null : passAcc,
+              shotsTotal: s.shots.total,
+              shotsOnTarget: s.shots.on,
+              duelsWon: s.duels.won,
+              duelsTotal: s.duels.total,
+            },
+          });
+      }
+    }
+  }
+}
+
+async function syncLiveOddsForFixture(fixtureId: number) {
+  const data = await fetchLiveOdds(fixtureId);
+  if (!data || data.length === 0) return;
+  const entry = data[0];
+  if (!entry || !entry.bookmakers.length) return;
+
+  const bm = entry.bookmakers[0]!;
+  const matchWinner = bm.bets.find((b) => b.name === "Match Winner");
+  if (!matchWinner) return;
+
+  const homeWin = parseFloat(matchWinner.values.find((v) => v.value === "Home")?.odd ?? "0") || null;
+  const draw = parseFloat(matchWinner.values.find((v) => v.value === "Draw")?.odd ?? "0") || null;
+  const awayWin = parseFloat(matchWinner.values.find((v) => v.value === "Away")?.odd ?? "0") || null;
+
+  await db.insert(liveOddsSnapshots).values({
+    fixtureId,
+    bookmaker: bm.name,
+    homeWin,
+    draw,
+    awayWin,
+    snappedAt: new Date(),
+  });
+}
+
+async function syncTopScorersAndAssists() {
+  console.log("[poller] Syncing top scorers and assists");
+  for (const league of TRACKED_LEAGUES) {
+    const [scorers, assists] = await Promise.all([
+      fetchTopScorers(league.id, league.season),
+      fetchTopAssists(league.id, league.season),
+    ]);
+
+    const all = [...(scorers ?? []), ...(assists ?? [])];
+    for (const entry of all) {
+      const s = entry.statistics[0];
+      if (!s) continue;
+      const rating = s.games.rating ? parseFloat(s.games.rating) : null;
+
+      await db
+        .insert(playerSeasonStats)
+        .values({
+          playerId: entry.player.id,
+          playerName: entry.player.name,
+          teamId: s.team.id,
+          leagueId: s.league.id,
+          seasonYear: s.league.season,
+          position: s.games.position,
+          goals: s.goals.total,
+          assists: s.goals.assists,
+          appearances: s.games.appearances,
+          minutesPlayed: s.games.minutes,
+          rating: isNaN(rating ?? NaN) ? null : rating,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [playerSeasonStats.playerId, playerSeasonStats.leagueId, playerSeasonStats.seasonYear],
+          set: {
+            goals: s.goals.total,
+            assists: s.goals.assists,
+            appearances: s.games.appearances,
+            minutesPlayed: s.games.minutes,
+            rating: isNaN(rating ?? NaN) ? null : rating,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    console.log(`[poller] Top stats synced for ${league.name}`);
+  }
+}
+
+async function syncCoachesForKnownTeams() {
+  console.log("[poller] Syncing coaches");
+  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+  for (const team of allTeams) {
+    const data = await fetchCoach(team.teamId);
+    if (!data || data.length === 0) continue;
+    const coach = data[0]!;
+
+    await db
+      .insert(coaches)
+      .values({
+        coachId: coach.id,
+        name: coach.name,
+        teamId: team.teamId,
+        nationality: coach.nationality,
+        age: coach.age,
+        photoUrl: coach.photo,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: coaches.teamId,
+        set: {
+          coachId: coach.id,
+          name: coach.name,
+          nationality: coach.nationality,
+          age: coach.age,
+          photoUrl: coach.photo,
+          updatedAt: new Date(),
+        },
+      });
+  }
+  console.log(`[poller] Coaches synced for ${allTeams.length} teams`);
+}
+
+async function syncSidelinedForRecentPlayers() {
+  console.log("[poller] Syncing sidelined players");
+  const recentLineups = await db.query.fixtureLineups.findMany({
+    orderBy: (l, { desc: d }) => [d(l.updatedAt)],
+    limit: 20,
+  });
+
+  const playerIds = new Set<number>();
+  for (const lineup of recentLineups) {
+    const xi = lineup.startingXI as Array<{ player: { id: number } }> | null;
+    const subs = lineup.substitutes as Array<{ player: { id: number } }> | null;
+    for (const p of [...(xi ?? []), ...(subs ?? [])]) {
+      if (p?.player?.id) playerIds.add(p.player.id);
+    }
+  }
+
+  for (const playerId of playerIds) {
+    const data = await fetchSidelined(playerId);
+    if (!data || data.length === 0) continue;
+    const entry = data[0]!;
+
+    for (const sl of entry.sidelined) {
+      await db
+        .insert(sidelinedPlayers)
+        .values({
+          playerId: entry.player.id,
+          playerName: entry.player.name,
+          type: sl.type,
+          startDate: sl.start,
+          endDate: sl.end,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [sidelinedPlayers.playerId, sidelinedPlayers.type, sidelinedPlayers.startDate],
+          set: { endDate: sl.end, updatedAt: new Date() },
+        });
+    }
+  }
+  console.log(`[poller] Sidelined checked for ${playerIds.size} players`);
+}
+
+async function syncTransfersForTrackedTeams() {
+  console.log("[poller] Syncing transfers");
+  const upcomingFixtures = await db.query.fixtures.findMany({
+    where: (f, { and, gte }) => and(gte(f.kickoff, new Date())),
+    columns: { homeTeamId: true, awayTeamId: true },
+    limit: 50,
+  });
+
+  const teamIds = new Set<number>();
+  for (const f of upcomingFixtures) {
+    teamIds.add(f.homeTeamId);
+    teamIds.add(f.awayTeamId);
+  }
+
+  for (const teamId of teamIds) {
+    const data = await fetchTransfers(teamId);
+    if (!data) continue;
+
+    for (const entry of data) {
+      for (const t of entry.transfers.slice(0, 5)) {
+        await db
+          .insert(transfers)
+          .values({
+            playerId: entry.player.id,
+            playerName: entry.player.name,
+            teamInId: t.teams.in.id,
+            teamInName: t.teams.in.name,
+            teamOutId: t.teams.out.id,
+            teamOutName: t.teams.out.name,
+            transferType: t.type,
+            transferDate: t.date,
+            updatedAt: new Date(),
+          })
+          .onConflictDoNothing();
+      }
+    }
+  }
+  console.log(`[poller] Transfers synced for ${teamIds.size} teams`);
 }
 
 // Track fixtures that have already had post-match processing to avoid duplicates
@@ -243,119 +553,122 @@ const postMatchProcessed = new Set<number>();
 
 let pollerStarted = false;
 
-// Adaptive live poller — sprints at 15s when matches are live, idles at 2min when quiet
+// Adaptive live poller — sprints at 15s when tracked matches are live, idles at 2min when quiet
+// Only processes fixtures from our 5 tracked leagues to stay within API quota
 async function adaptiveLiveLoop() {
   const LIVE_INTERVAL_MS = 15 * 1000;      // 15s during active play
   const IDLE_INTERVAL_MS = 2 * 60 * 1000;  // 2min when no live matches
 
-  let lastLiveCount = 0;
+  let lastTrackedCount = 0;
 
   while (true) {
     try {
       const liveData = await fetchLiveFixtures();
-      const liveCount = liveData?.length ?? 0;
+      // Filter to only our tracked leagues — avoids wasting API calls on untracked matches
+      const tracked = (liveData ?? []).filter((f) => TRACKED_LEAGUE_IDS.has(f.league.id));
+      const trackedCount = tracked.length;
 
-      if (liveCount !== lastLiveCount) {
-        console.log(`[poller] Live matches: ${liveCount} (was ${lastLiveCount}) — switching to ${liveCount > 0 ? "SPRINT (15s)" : "IDLE (2min)"} mode`);
-        lastLiveCount = liveCount;
+      if (trackedCount !== lastTrackedCount) {
+        const total = liveData?.length ?? 0;
+        console.log(`[poller] Tracked live: ${trackedCount}/${total} — switching to ${trackedCount > 0 ? "SPRINT (15s)" : "IDLE (2min)"} mode`);
+        lastTrackedCount = trackedCount;
       }
 
-      if (liveData && liveData.length > 0) {
-        for (const f of liveData) {
-          await upsertFixture(f);
+      for (const f of tracked) {
+        await upsertFixture(f);
 
-          const statusShort = f.fixture.status.short;
-          const isInPlay = ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(statusShort);
-          const isFinished = ["FT", "AET", "PEN"].includes(statusShort);
+        const statusShort = f.fixture.status.short;
+        const isInPlay = ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"].includes(statusShort);
+        const isFinished = ["FT", "AET", "PEN"].includes(statusShort);
 
-          if (isInPlay) {
-            // Full live sync: events + stats + signals
-            const events = await fetchFixtureEvents(f.fixture.id);
-            if (events) {
-              await db.delete(fixtureEvents).where(eq(fixtureEvents.fixtureId, f.fixture.id));
-              for (const ev of events) {
-                await db.insert(fixtureEvents).values({
-                  fixtureId: f.fixture.id,
-                  minute: ev.time.elapsed,
-                  extraMinute: ev.time.extra,
-                  teamId: ev.team.id,
-                  playerId: ev.player?.id ?? null,
-                  playerName: ev.player?.name ?? null,
-                  assistId: ev.assist?.id ?? null,
-                  assistName: ev.assist?.name ?? null,
-                  type: ev.type,
-                  detail: ev.detail,
-                  comments: ev.comments,
-                });
-              }
+        if (isInPlay) {
+          // Events + stats (always)
+          const events = await fetchFixtureEvents(f.fixture.id);
+          if (events) {
+            await db.delete(fixtureEvents).where(eq(fixtureEvents.fixtureId, f.fixture.id));
+            for (const ev of events) {
+              await db.insert(fixtureEvents).values({
+                fixtureId: f.fixture.id,
+                minute: ev.time.elapsed,
+                extraMinute: ev.time.extra,
+                teamId: ev.team.id,
+                playerId: ev.player?.id ?? null,
+                playerName: ev.player?.name ?? null,
+                assistId: ev.assist?.id ?? null,
+                assistName: ev.assist?.name ?? null,
+                type: ev.type,
+                detail: ev.detail,
+                comments: ev.comments,
+              });
             }
+          }
 
-            const stats = await fetchFixtureStats(f.fixture.id);
-            if (stats) {
-              for (const teamStat of stats) {
-                const getValue = (type: string): number | null => {
-                  const item = teamStat.statistics.find((s: ApiStatItem) => s.type === type);
-                  if (!item || item.value === null || item.value === undefined) return null;
-                  const val = String(item.value).replace("%", "");
-                  const num = parseFloat(val);
-                  return isNaN(num) ? null : num;
-                };
+          const stats = await fetchFixtureStats(f.fixture.id);
+          if (stats) {
+            for (const teamStat of stats) {
+              const getValue = (type: string): number | null => {
+                const item = teamStat.statistics.find((s: ApiStatItem) => s.type === type);
+                if (!item || item.value === null || item.value === undefined) return null;
+                const val = String(item.value).replace("%", "");
+                const num = parseFloat(val);
+                return isNaN(num) ? null : num;
+              };
 
-                await db
-                  .insert(fixtureStats)
-                  .values({
-                    fixtureId: f.fixture.id,
-                    teamId: teamStat.team.id,
+              await db
+                .insert(fixtureStats)
+                .values({
+                  fixtureId: f.fixture.id,
+                  teamId: teamStat.team.id,
+                  shotsOnGoal: getValue("Shots on Goal"),
+                  shotsOffGoal: getValue("Shots off Goal"),
+                  totalShots: getValue("Total Shots"),
+                  blockedShots: getValue("Blocked Shots"),
+                  cornerKicks: getValue("Corner Kicks"),
+                  fouls: getValue("Fouls"),
+                  yellowCards: getValue("Yellow Cards"),
+                  redCards: getValue("Red Cards"),
+                  ballPossession: getValue("Ball Possession"),
+                  passAccuracy: getValue("Passes %"),
+                  totalPasses: getValue("Total passes"),
+                  expectedGoals: getValue("expected_goals"),
+                  updatedAt: new Date(),
+                })
+                .onConflictDoUpdate({
+                  target: [fixtureStats.fixtureId, fixtureStats.teamId],
+                  set: {
                     shotsOnGoal: getValue("Shots on Goal"),
                     shotsOffGoal: getValue("Shots off Goal"),
                     totalShots: getValue("Total Shots"),
-                    blockedShots: getValue("Blocked Shots"),
                     cornerKicks: getValue("Corner Kicks"),
                     fouls: getValue("Fouls"),
                     yellowCards: getValue("Yellow Cards"),
                     redCards: getValue("Red Cards"),
                     ballPossession: getValue("Ball Possession"),
                     passAccuracy: getValue("Passes %"),
-                    totalPasses: getValue("Total passes"),
                     expectedGoals: getValue("expected_goals"),
                     updatedAt: new Date(),
-                  })
-                  .onConflictDoUpdate({
-                    target: [fixtureStats.fixtureId, fixtureStats.teamId],
-                    set: {
-                      shotsOnGoal: getValue("Shots on Goal"),
-                      shotsOffGoal: getValue("Shots off Goal"),
-                      totalShots: getValue("Total Shots"),
-                      cornerKicks: getValue("Corner Kicks"),
-                      fouls: getValue("Fouls"),
-                      yellowCards: getValue("Yellow Cards"),
-                      redCards: getValue("Red Cards"),
-                      ballPossession: getValue("Ball Possession"),
-                      passAccuracy: getValue("Passes %"),
-                      expectedGoals: getValue("expected_goals"),
-                      updatedAt: new Date(),
-                    },
-                  });
-              }
+                  },
+                });
             }
-
-            await runLiveFeatures(f.fixture.id, f.teams.home.id, f.teams.away.id);
-            await runSignalEngine(f.fixture.id, "live");
-          } else if (isFinished && !postMatchProcessed.has(f.fixture.id)) {
-            // Run post-match exactly once per fixture
-            postMatchProcessed.add(f.fixture.id);
-            console.log(`[poller] Post-match processing for fixture ${f.fixture.id}`);
-            await runPostMatchFeatures(f.fixture.id);
-            await runSignalEngine(f.fixture.id, "post");
           }
+
+          // Pro: player-level stats + live odds for tracked fixtures
+          await syncPlayerStatsForFixture(f.fixture.id);
+          await syncLiveOddsForFixture(f.fixture.id);
+
+          await runLiveFeatures(f.fixture.id, f.teams.home.id, f.teams.away.id);
+          await runSignalEngine(f.fixture.id, "live");
+        } else if (isFinished && !postMatchProcessed.has(f.fixture.id)) {
+          postMatchProcessed.add(f.fixture.id);
+          console.log(`[poller] Post-match processing for fixture ${f.fixture.id}`);
+          await runPostMatchFeatures(f.fixture.id);
+          await runSignalEngine(f.fixture.id, "post");
         }
       }
 
-      // Wait based on whether matches are live
-      await new Promise((r) => setTimeout(r, liveCount > 0 ? LIVE_INTERVAL_MS : IDLE_INTERVAL_MS));
+      await new Promise((r) => setTimeout(r, trackedCount > 0 ? LIVE_INTERVAL_MS : IDLE_INTERVAL_MS));
     } catch (err) {
       console.error("[poller] adaptiveLiveLoop error:", err);
-      // On error, wait 30s before retrying
       await new Promise((r) => setTimeout(r, 30 * 1000));
     }
   }
@@ -365,11 +678,16 @@ export function startPoller() {
   if (pollerStarted) return;
   pollerStarted = true;
 
-  console.log("[poller] Starting polling service (Pro plan — adaptive live mode)");
+  console.log("[poller] Starting polling service (Pro plan — full Tier 1+2+3)");
 
-  // Initial sync
+  // ── Immediate startup syncs ────────────────────────────────────────────────
   syncTodayFixtures().catch(console.error);
   syncStandings().catch(console.error);
+  // Pro: coaches + transfers on startup (low urgency, runs once)
+  setTimeout(() => syncCoachesForKnownTeams().catch(console.error), 30 * 1000);
+  setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 60 * 1000);
+
+  // ── Recurring intervals ────────────────────────────────────────────────────
 
   // Fixtures schedule: every 5 min
   setInterval(() => syncTodayFixtures().catch(console.error), 5 * 60 * 1000);
@@ -377,13 +695,24 @@ export function startPoller() {
   // Standings: every hour
   setInterval(() => syncStandings().catch(console.error), 60 * 60 * 1000);
 
-  // Pre-match lineups + odds: every 10 min
+  // Pre-match lineups + odds + predictions: every 10 min
   setInterval(() => {
     syncPreMatchData().catch(console.error);
     syncOdds().catch(console.error);
   }, 10 * 60 * 1000);
 
-  // Adaptive live loop: replaces fixed 30s interval
-  // Sprints at 15s when matches are live, idles at 2min when quiet
+  // Pro: Top scorers + assists + sidelined: once per day
+  setInterval(() => {
+    syncTopScorersAndAssists().catch(console.error);
+    syncSidelinedForRecentPlayers().catch(console.error);
+  }, 24 * 60 * 60 * 1000);
+
+  // Pro: Coaches + transfers refresh: every 3 days
+  setInterval(() => {
+    syncCoachesForKnownTeams().catch(console.error);
+    syncTransfersForTrackedTeams().catch(console.error);
+  }, 3 * 24 * 60 * 60 * 1000);
+
+  // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);
 }

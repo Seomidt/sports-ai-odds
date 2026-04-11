@@ -179,9 +179,118 @@ export const oddsSnapshots = pgTable(
     homeWin: real("home_win"),
     draw: real("draw"),
     awayWin: real("away_win"),
+    btts: real("btts"),
+    overUnder25: real("over_under_25"),
+    handicapHome: real("handicap_home"),
     snappedAt: timestamp("snapped_at").defaultNow().notNull(),
   },
   (t) => [index("odds_fixture_idx").on(t.fixtureId)]
+);
+
+// ─── Pro plan: Predictions, live odds, player season stats, coaches, sidelined, transfers ───
+
+export const predictions = pgTable(
+  "predictions",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull(),
+    homeWinPercent: real("home_win_percent"),
+    drawPercent: real("draw_percent"),
+    awayWinPercent: real("away_win_percent"),
+    goalsHome: real("goals_home"),
+    goalsAway: real("goals_away"),
+    adviceText: text("advice_text"),
+    winner: text("winner"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("predictions_fixture_unique").on(t.fixtureId)]
+);
+
+export const liveOddsSnapshots = pgTable(
+  "live_odds_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull(),
+    bookmaker: text("bookmaker"),
+    homeWin: real("home_win"),
+    draw: real("draw"),
+    awayWin: real("away_win"),
+    snappedAt: timestamp("snapped_at").defaultNow().notNull(),
+  },
+  (t) => [index("live_odds_fixture_idx").on(t.fixtureId)]
+);
+
+export const playerSeasonStats = pgTable(
+  "player_season_stats",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id").notNull(),
+    playerName: text("player_name"),
+    teamId: integer("team_id"),
+    leagueId: integer("league_id").notNull(),
+    seasonYear: integer("season_year").notNull(),
+    position: text("position"),
+    goals: integer("goals"),
+    assists: integer("assists"),
+    appearances: integer("appearances"),
+    minutesPlayed: integer("minutes_played"),
+    rating: real("rating"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("player_season_stats_unique").on(t.playerId, t.leagueId, t.seasonYear)]
+);
+
+export const coaches = pgTable(
+  "coaches",
+  {
+    id: serial("id").primaryKey(),
+    coachId: integer("coach_id").notNull(),
+    name: text("name"),
+    teamId: integer("team_id").notNull(),
+    nationality: text("nationality"),
+    age: integer("age"),
+    photoUrl: text("photo_url"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("coaches_team_unique").on(t.teamId)]
+);
+
+export const sidelinedPlayers = pgTable(
+  "sidelined_players",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id").notNull(),
+    playerName: text("player_name"),
+    teamId: integer("team_id"),
+    type: text("type"),
+    startDate: text("start_date"),
+    endDate: text("end_date"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("sidelined_team_idx").on(t.teamId),
+    unique("sidelined_player_unique").on(t.playerId, t.type, t.startDate),
+  ]
+);
+
+export const transfers = pgTable(
+  "transfers",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id").notNull(),
+    playerName: text("player_name"),
+    teamInId: integer("team_in_id"),
+    teamInName: text("team_in_name"),
+    teamOutId: integer("team_out_id"),
+    teamOutName: text("team_out_name"),
+    transferType: text("transfer_type"),
+    transferDate: text("transfer_date"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    index("transfers_player_idx").on(t.playerId),
+    index("transfers_team_in_idx").on(t.teamInId),
+  ]
 );
 
 // ─── Layer 2+3: Feature & Signal tables ────────────────────────────────────────
@@ -286,3 +395,9 @@ export type FixtureStats = typeof fixtureStats.$inferSelect;
 export type TeamFeature = typeof teamFeatures.$inferSelect;
 export type FixtureSignal = typeof fixtureSignals.$inferSelect;
 export type AlertLog = typeof alertLog.$inferSelect;
+export type Prediction = typeof predictions.$inferSelect;
+export type LiveOddsSnapshot = typeof liveOddsSnapshots.$inferSelect;
+export type PlayerSeasonStat = typeof playerSeasonStats.$inferSelect;
+export type Coach = typeof coaches.$inferSelect;
+export type SidelinedPlayer = typeof sidelinedPlayers.$inferSelect;
+export type Transfer = typeof transfers.$inferSelect;

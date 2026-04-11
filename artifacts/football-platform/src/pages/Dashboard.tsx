@@ -3,15 +3,38 @@ import type { TopPickFixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, TrendingUp, Zap, Target, ChevronRight } from "lucide-react";
+import { Activity, Clock, TrendingUp, Zap, Target, ChevronRight, Radio } from "lucide-react";
 
-function kickoffLabel(kickoff: string | null | undefined): string {
+const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
+
+function isFixtureLive(f: TopPickFixture) {
+  return f.isLive === true || LIVE_STATUSES.has(f.statusShort ?? "");
+}
+
+function kickoffLabel(kickoff: string | null | undefined, statusShort: string | null | undefined): string {
+  if (LIVE_STATUSES.has(statusShort ?? "")) {
+    const labels: Record<string,string> = { "1H":"1. halvleg","HT":"Pause","2H":"2. halvleg","ET":"Forlænget","BT":"Pause ET","P":"Straffe","INT":"Pause","LIVE":"Live" };
+    return labels[statusShort ?? ""] ?? "Live";
+  }
   if (!kickoff) return "--:--";
   const d = new Date(kickoff);
   const time = format(d, "HH:mm");
   if (isToday(d)) return time;
   if (isTomorrow(d)) return `i morgen ${time}`;
   return format(d, "dd/MM HH:mm");
+}
+
+function ScorePill({ home, away }: { home: number | null | undefined; away: number | null | undefined }) {
+  if (home == null || away == null) return null;
+  const homeWin = home > away;
+  const awayWin = away > home;
+  return (
+    <div className="flex items-center gap-1 font-mono font-bold text-sm">
+      <span className={homeWin ? "text-primary" : awayWin ? "text-destructive/70" : "text-white/60"}>{home}</span>
+      <span className="text-white/20">–</span>
+      <span className={awayWin ? "text-primary" : homeWin ? "text-destructive/70" : "text-white/60"}>{away}</span>
+    </div>
+  );
 }
 
 function SignalBadge({ count, compact = false }: { count: number; compact?: boolean }) {
@@ -38,20 +61,22 @@ function SignalBadge({ count, compact = false }: { count: number; compact?: bool
 }
 
 function TopPickCard({ fixture, rank }: { fixture: TopPickFixture; rank: number }) {
+  const live = isFixtureLive(fixture);
   const { data: signalData } = useGetFixtureSignals(
     fixture.fixtureId,
-    { phase: "pre" },
-    { query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 3 * 60 * 1000, gcTime: 10 * 60 * 1000 } }
+    { phase: live ? "live" : "pre" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    { query: { queryKey: ["signals", fixture.fixtureId, live ? "live" : "pre"], staleTime: live ? 30_000 : 3 * 60_000, gcTime: 10 * 60_000 } as any }
   );
-  const signals = signalData?.signals ?? [];
   const count = fixture.signalCount;
 
-  const borderClass =
-    count >= 4
-      ? "border-primary/40 shadow-[0_0_24px_rgba(0,255,200,0.07)]"
-      : count >= 2
-      ? "border-amber-400/30"
-      : "border-white/8";
+  const borderClass = live
+    ? "border-primary/30 shadow-[0_0_28px_rgba(0,255,200,0.09)]"
+    : count >= 4
+    ? "border-primary/40 shadow-[0_0_24px_rgba(0,255,200,0.07)]"
+    : count >= 2
+    ? "border-amber-400/30"
+    : "border-white/8";
 
   const rankColor =
     rank === 1 ? "text-primary" : rank === 2 ? "text-amber-400" : "text-violet-400";
@@ -59,56 +84,55 @@ function TopPickCard({ fixture, rank }: { fixture: TopPickFixture; rank: number 
   return (
     <Link href={`/match/${fixture.fixtureId}`}>
       <div className={`glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border ${borderClass} group`}>
-        <div className="flex justify-between items-start mb-4">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <span className={`text-xs font-mono font-bold ${rankColor} opacity-60`}>#{rank}</span>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 px-2 py-0.5 rounded font-mono">
-              <Clock className="w-3 h-3" />
-              {kickoffLabel(fixture.kickoff)}
-            </span>
+            {live ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-primary bg-primary/10 border border-primary/25 px-2 py-0.5 rounded">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                {kickoffLabel(fixture.kickoff, fixture.statusShort)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-mono text-amber-400 bg-amber-400/8 px-2 py-0.5 rounded">
+                <Clock className="w-3 h-3" />
+                {kickoffLabel(fixture.kickoff, fixture.statusShort)}
+              </span>
+            )}
+            {!live && <SignalBadge count={count} />}
           </div>
-          <SignalBadge count={count} />
+          <span className={`text-xs font-mono font-bold ${rankColor} opacity-40`}>#{rank}</span>
         </div>
 
         <div className="space-y-2 mb-4">
-          <div className="flex items-center gap-2.5 min-w-0">
-            {fixture.homeTeamLogo && (
-              <img src={fixture.homeTeamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />
-            )}
-            <span className="font-semibold text-white truncate text-sm">{fixture.homeTeamName}</span>
+          <div className="flex items-center gap-2">
+            {fixture.homeTeamLogo && <img src={fixture.homeTeamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />}
+            <span className="font-semibold text-white text-sm truncate flex-1">{fixture.homeTeamName}</span>
+            {live && <ScorePill home={fixture.homeGoals} away={null} />}
           </div>
-          <div className="flex items-center gap-2.5 min-w-0">
-            {fixture.awayTeamLogo && (
-              <img src={fixture.awayTeamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />
-            )}
-            <span className="font-medium text-white/50 truncate text-sm">{fixture.awayTeamName}</span>
+          <div className="flex items-center gap-2">
+            {fixture.awayTeamLogo && <img src={fixture.awayTeamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />}
+            <span className="font-semibold text-white/50 text-sm truncate flex-1">{fixture.awayTeamName}</span>
+            {live && <ScorePill home={null} away={fixture.awayGoals} />}
           </div>
         </div>
 
-        {signals.length > 0 && (
-          <div className="space-y-1 border-t border-white/5 pt-3">
-            {signals.slice(0, 3).map((s) => (
-              <div key={s.id} className="text-[11px] text-muted-foreground font-mono truncate">
-                · {s.signalLabel}
-              </div>
-            ))}
-            {signals.length > 3 && (
-              <div className="text-[11px] text-muted-foreground/40 font-mono">
-                +{signals.length - 3} flere signaler
-              </div>
-            )}
+        {live && (
+          <div className="flex items-center gap-2 mb-3">
+            <ScorePill home={fixture.homeGoals} away={fixture.awayGoals} />
+            {count > 0 && <SignalBadge count={count} compact />}
           </div>
         )}
+
+        {signalData?.signals?.slice(0, 2).map((s, i) => (
+          <div key={i} className="text-[11px] text-muted-foreground/60 font-mono leading-relaxed line-clamp-1 mb-0.5">
+            · {s.signalLabel}
+          </div>
+        ))}
 
         <div className="flex items-center justify-between mt-3 pt-2">
           {fixture.leagueName && (
             <div className="flex items-center gap-1.5">
-              {fixture.leagueLogo && (
-                <img src={fixture.leagueLogo} alt="" className="w-3.5 h-3.5 object-contain opacity-50" />
-              )}
-              <span className="text-[10px] text-muted-foreground/40 font-mono truncate">
-                {fixture.leagueName}
-              </span>
+              {fixture.leagueLogo && <img src={fixture.leagueLogo} alt="" className="w-3.5 h-3.5 object-contain opacity-50" />}
+              <span className="text-[10px] text-muted-foreground/40 font-mono truncate">{fixture.leagueName}</span>
             </div>
           )}
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors ml-auto" />
@@ -119,29 +143,36 @@ function TopPickCard({ fixture, rank }: { fixture: TopPickFixture; rank: number 
 }
 
 function SmallPickCard({ fixture }: { fixture: TopPickFixture }) {
+  const live = isFixtureLive(fixture);
   return (
     <Link href={`/match/${fixture.fixtureId}`}>
       <div className="glass-card p-4 rounded-xl cursor-pointer transition-all hover:bg-white/5 border border-white/5 group flex items-center gap-4">
-        <div className="shrink-0 w-14 text-center">
-          <div className="text-xs font-mono text-amber-400 font-medium leading-tight">
-            {kickoffLabel(fixture.kickoff)}
-          </div>
+        <div className="shrink-0 w-16 text-center">
+          {live ? (
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-primary">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+              {fixture.statusShort}
+            </span>
+          ) : (
+            <div className="text-xs font-mono text-amber-400 font-medium leading-tight">
+              {kickoffLabel(fixture.kickoff, fixture.statusShort)}
+            </div>
+          )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5 mb-0.5">
-            {fixture.homeTeamLogo && (
-              <img src={fixture.homeTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0" />
-            )}
+            {fixture.homeTeamLogo && <img src={fixture.homeTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0" />}
             <span className="text-sm font-medium text-white truncate">{fixture.homeTeamName}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            {fixture.awayTeamLogo && (
-              <img src={fixture.awayTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0" />
-            )}
+            {fixture.awayTeamLogo && <img src={fixture.awayTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0" />}
             <span className="text-sm font-medium text-white/45 truncate">{fixture.awayTeamName}</span>
           </div>
         </div>
-        <div className="shrink-0 flex items-center gap-2">
+        <div className="shrink-0 flex items-center gap-3">
+          {live && fixture.homeGoals != null && fixture.awayGoals != null && (
+            <ScorePill home={fixture.homeGoals} away={fixture.awayGoals} />
+          )}
           <SignalBadge count={fixture.signalCount} compact />
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
         </div>
@@ -151,13 +182,19 @@ function SmallPickCard({ fixture }: { fixture: TopPickFixture }) {
 }
 
 export function Dashboard() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, isLoading } = useGetTopPickFixtures({
-    query: { queryKey: ["top-picks"], staleTime: 90_000, gcTime: 10 * 60 * 1000, refetchInterval: 3 * 60 * 1000 },
+    query: { queryKey: ["top-picks"], staleTime: 60_000, gcTime: 10 * 60_000, refetchInterval: 90_000 } as any,
   });
 
   const allFixtures = data?.fixtures ?? [];
-  const top = allFixtures.slice(0, 3);
-  const rest = allFixtures.slice(3);
+  const liveFixtures = allFixtures.filter(isFixtureLive);
+  const prematchFixtures = allFixtures.filter((f) => !isFixtureLive(f));
+
+  const topLive = liveFixtures.slice(0, 3);
+  const restLive = liveFixtures.slice(3);
+  const topPrematch = prematchFixtures.slice(0, 3);
+  const restPrematch = prematchFixtures.slice(3);
 
   return (
     <Layout>
@@ -169,7 +206,7 @@ export function Dashboard() {
               <h1 className="text-3xl font-bold font-mono tracking-tight text-white">DASHBOARD</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              Kommende kampe rangeret efter signal-styrke — mest analyse øverst.
+              Kampe rangeret efter signal-styrke — live og kommende.
             </p>
           </div>
           {!isLoading && allFixtures.length > 0 && (
@@ -187,19 +224,46 @@ export function Dashboard() {
         ) : allFixtures.length === 0 ? (
           <div className="glass-card p-16 text-center rounded-xl flex flex-col items-center">
             <TrendingUp className="w-12 h-12 text-muted-foreground mb-4 opacity-25" />
-            <h3 className="text-lg font-medium text-white mb-1">Ingen kommende kampe</h3>
+            <h3 className="text-lg font-medium text-white mb-1">Ingen kampe at vise</h3>
             <p className="text-muted-foreground text-sm">
-              Ingen planlagte kampe inden for de næste 3 dage for de 5 fulgte ligaer.
+              Ingen planlagte eller live kampe inden for de næste 3 dage.
             </p>
           </div>
         ) : (
           <div className="space-y-10">
-            {top.length > 0 && (
+            {/* ── Live fixtures ── */}
+            {topLive.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Radio className="w-4 h-4 text-primary" />
+                  <h2 className="text-sm font-mono font-bold text-primary tracking-widest uppercase flex items-center gap-2">
+                    Live Nu
+                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  </h2>
+                  <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{liveFixtures.length} kampe i gang</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {topLive.map((f, i) => (
+                    <TopPickCard key={f.fixtureId} fixture={f} rank={i + 1} />
+                  ))}
+                </div>
+                {restLive.length > 0 && (
+                  <div className="space-y-2">
+                    {restLive.map((f) => (
+                      <SmallPickCard key={f.fixtureId} fixture={f} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── Prematch fixtures ── */}
+            {topPrematch.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Target className="w-4 h-4 text-primary" />
                   <h2 className="text-sm font-mono font-bold text-primary tracking-widest uppercase">
-                    Top Picks
+                    Kommende Top Picks
                   </h2>
                   <div className="flex items-center gap-3 ml-auto text-[10px] font-mono text-muted-foreground/50">
                     <span className="flex items-center gap-1">
@@ -208,36 +272,25 @@ export function Dashboard() {
                     <span className="flex items-center gap-1">
                       <span className="w-2 h-2 rounded-full bg-amber-400/60" /> 2–3
                     </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-violet-400/60" /> 1
-                    </span>
                   </div>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {top.map((f, i) => (
+                  {topPrematch.map((f, i) => (
                     <TopPickCard key={f.fixtureId} fixture={f} rank={i + 1} />
                   ))}
                 </div>
-              </div>
-            )}
-
-            {rest.length > 0 && (
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
-                    Øvrige kampe — {rest.length}
-                  </h2>
-                  <Link href="/pre-match">
-                    <span className="text-xs font-mono text-primary/60 hover:text-primary cursor-pointer flex items-center gap-1 transition-colors">
-                      Se alle <ChevronRight className="w-3 h-3" />
-                    </span>
-                  </Link>
-                </div>
-                <div className="space-y-2">
-                  {rest.map((f) => (
-                    <SmallPickCard key={f.fixtureId} fixture={f} />
-                  ))}
-                </div>
+                {restPrematch.length > 0 && (
+                  <div className="space-y-3">
+                    <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
+                      Øvrige kampe — {restPrematch.length}
+                    </h2>
+                    <div className="space-y-2">
+                      {restPrematch.map((f) => (
+                        <SmallPickCard key={f.fixtureId} fixture={f} />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

@@ -154,12 +154,20 @@ export function PreMatch() {
             <Activity className="w-8 h-8 text-primary animate-pulse" />
           </div>
         ) : prematch.length === 0 ? (
-          <div className="glass-card p-16 text-center rounded-xl flex flex-col items-center">
-            <Clock className="w-12 h-12 text-muted-foreground mb-4 opacity-30" />
-            <h3 className="text-lg font-medium text-white mb-1">Ingen kommende kampe</h3>
-            <p className="text-muted-foreground text-sm">
-              Ingen planlagte kampe inden for de næste 3 dage.
-            </p>
+          <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center gap-4">
+            <Clock className="w-10 h-10 text-muted-foreground opacity-30" />
+            <div>
+              <h3 className="text-lg font-medium text-white mb-1">Ingen kommende kampe</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Kampe i de overvågede ligaer er enten live eller afsluttet.
+              </p>
+              <Link href="/live">
+                <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 text-sm font-mono font-semibold hover:bg-primary/20 transition-colors">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  Se live kampe
+                </button>
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="space-y-10">

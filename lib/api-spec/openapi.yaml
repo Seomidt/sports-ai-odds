@@ -792,6 +792,9 @@ components:
           nullable: true
         signalCount:
           type: integer
+        isLive:
+          type: boolean
+          nullable: true
       required:
         - fixtureId
         - leagueId

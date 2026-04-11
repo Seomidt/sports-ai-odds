@@ -46,28 +46,40 @@ router.get("/fixtures/today", async (req, res) => {
   return res.json(body);
 });
 
-// GET /api/fixtures/top-picks — prematch fixtures ranked by pre-signal count
+// GET /api/fixtures/top-picks — prematch + live fixtures from tracked leagues ranked by signal count
 router.get("/fixtures/top-picks", async (req, res) => {
   const cacheKey = "fixtures:top-picks";
   const cached = cacheGet(cacheKey);
   if (cached) {
-    res.set("Cache-Control", "public, max-age=90, stale-while-revalidate=60");
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
     res.set("X-Cache", "HIT");
     return res.json(cached);
   }
+
+  const TRACKED_LEAGUES = [39, 140, 135, 78, 2];
+  const LIVE_STATUSES = `('1H','HT','2H','ET','BT','P','INT','LIVE')`;
+  const FINISHED_STATUSES = `('FT','AET','PEN','ABD','CANC','AWD','WO')`;
 
   const now = new Date();
   const end = new Date(now);
   end.setDate(end.getDate() + 3);
   end.setHours(23, 59, 59, 999);
 
-  const { rows } = await pool.query<{
+  type FixtureRow = {
     fixtureId: number; leagueId: number; leagueName: string; leagueLogo: string | null;
     homeTeamId: number; awayTeamId: number; homeTeamName: string; awayTeamName: string;
     homeTeamLogo: string | null; awayTeamLogo: string | null; kickoff: string | null;
     statusShort: string | null; homeGoals: number | null; awayGoals: number | null;
-    venue: string | null; signalCount: number;
-  }>(`
+    venue: string | null; signalCount: number; isLive: boolean;
+  };
+
+  const { rows } = await pool.query<FixtureRow>(`
+    WITH signals_agg AS (
+      SELECT fixture_id, COUNT(*) AS cnt
+      FROM fixture_signals
+      WHERE phase IN ('pre','live')
+      GROUP BY fixture_id
+    )
     SELECT
       f.fixture_id AS "fixtureId",
       f.league_id AS "leagueId",
@@ -84,20 +96,33 @@ router.get("/fixtures/top-picks", async (req, res) => {
       f.home_goals AS "homeGoals",
       f.away_goals AS "awayGoals",
       f.venue,
-      COUNT(s.id) AS "signalCount"
+      COALESCE(sa.cnt, 0) AS "signalCount",
+      (f.status_short IN ${LIVE_STATUSES}) AS "isLive"
     FROM fixtures f
-    LEFT JOIN fixture_signals s ON s.fixture_id = f.fixture_id AND s.phase = 'pre'
-    WHERE f.kickoff >= $1
-      AND f.kickoff <= $2
-      AND (f.status_short IS NULL OR f.status_short NOT IN ('1H','HT','2H','ET','BT','P','INT','LIVE','FT','AET','PEN','ABD','CANC','AWD','WO'))
-    GROUP BY f.fixture_id
-    ORDER BY "signalCount" DESC, f.kickoff ASC
+    LEFT JOIN signals_agg sa ON sa.fixture_id = f.fixture_id
+    WHERE
+      -- Prematch: any league, within 3 days
+      (
+        f.kickoff >= $1 AND f.kickoff <= $2
+        AND (f.status_short IS NULL OR f.status_short NOT IN ${LIVE_STATUSES})
+        AND f.status_short NOT IN ${FINISHED_STATUSES}
+      )
+      OR
+      -- Live: only tracked leagues
+      (
+        f.league_id = ANY($3)
+        AND f.status_short IN ${LIVE_STATUSES}
+      )
+    ORDER BY
+      "isLive" DESC,
+      "signalCount" DESC,
+      f.kickoff ASC
     LIMIT 50
-  `, [now, end]);
+  `, [now, end, TRACKED_LEAGUES]);
 
   const body = { fixtures: rows.map((r) => ({ ...r, signalCount: Number(r.signalCount) })) };
-  cacheSet(cacheKey, body, TTL.MIN2);
-  res.set("Cache-Control", "public, max-age=90, stale-while-revalidate=60");
+  cacheSet(cacheKey, body, TTL.MIN1);
+  res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
   res.set("X-Cache", "MISS");
   return res.json(body);
 });

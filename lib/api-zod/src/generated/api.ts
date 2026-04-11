@@ -82,6 +82,7 @@ export const GetTopPickFixturesResponse = zod.object({
       awayGoals: zod.number().nullish(),
       venue: zod.string().nullish(),
       signalCount: zod.number(),
+      isLive: zod.boolean().nullish(),
     }),
   ),
 });

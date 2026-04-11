@@ -23,4 +23,5 @@ export interface TopPickFixture {
   awayGoals?: number | null;
   venue?: string | null;
   signalCount: number;
+  isLive?: boolean | null;
 }

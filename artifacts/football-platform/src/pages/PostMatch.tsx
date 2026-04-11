@@ -3,7 +3,7 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, CheckCircle2 } from "lucide-react";
+import { Activity, CheckCircle2, Radio } from "lucide-react";
 
 const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
 
@@ -47,10 +47,21 @@ export function PostMatch() {
             <Activity className="w-8 h-8 text-primary animate-pulse" />
           </div>
         ) : postmatch.length === 0 ? (
-          <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center">
-            <CheckCircle2 className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-white mb-1">Ingen afsluttede kampe</h3>
-            <p className="text-muted-foreground">Ingen kampe er afsluttet endnu i dag.</p>
+          <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center gap-4">
+            <CheckCircle2 className="w-10 h-10 text-muted-foreground opacity-30" />
+            <div>
+              <h3 className="text-lg font-medium text-white mb-1">Ingen afsluttede kampe endnu</h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Kampresultater fra dagens runde vises her, når kampene er færdige.
+              </p>
+              <Link href="/live">
+                <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 text-sm font-mono font-semibold hover:bg-primary/20 transition-colors">
+                  <Radio className="w-3.5 h-3.5" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  Følg live kampe
+                </button>
+              </Link>
+            </div>
           </div>
         ) : (
           <div className="space-y-10">

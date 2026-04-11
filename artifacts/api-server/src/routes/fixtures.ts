@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { fixtures, fixtureSignals, teamFeatures } from "@workspace/db/schema";
 import { runPreMatchFeatures } from "../features/featureEngine.js";
@@ -97,10 +97,21 @@ router.get("/standings/:leagueId", async (req, res) => {
   const leagueId = parseInt(req.params.leagueId ?? "0");
   if (!leagueId) return res.status(400).json({ error: "Invalid league id" });
 
-  const rows = await db.query.standings.findMany({
-    where: (s, { eq: eqFn }) => eqFn(s.leagueId, leagueId),
-    orderBy: (s, { asc }) => [asc(s.rank)],
-  });
+  const { rows } = await pool.query(
+    `SELECT
+       s.id, s.league_id AS "leagueId", s.season_year AS "seasonYear",
+       s.team_id AS "teamId", s.rank, s.points, s.played,
+       s.won, s.drawn, s.lost,
+       s.goals_for AS "goalsFor", s.goals_against AS "goalsAgainst",
+       s.goals_diff AS "goalsDiff", s.form,
+       COALESCE(t.name, s.team_id::text) AS "teamName",
+       t.logo AS "teamLogo"
+     FROM standings s
+     LEFT JOIN teams t ON t.team_id = s.team_id
+     WHERE s.league_id = $1
+     ORDER BY s.rank ASC`,
+    [leagueId]
+  );
 
   return res.json({ standings: rows });
 });

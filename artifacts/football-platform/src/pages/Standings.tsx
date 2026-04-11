@@ -72,7 +72,14 @@ export function Standings() {
                     {data.standings.map((row) => (
                       <TableRow key={row.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                         <TableCell className="text-center font-mono font-bold text-white">{row.rank}</TableCell>
-                        <TableCell className="font-medium text-white">{row.teamId}</TableCell>
+                        <TableCell className="font-medium text-white">
+                          <div className="flex items-center gap-2">
+                            {(row as any).teamLogo && (
+                              <img src={(row as any).teamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />
+                            )}
+                            <span className="truncate">{(row as any).teamName ?? row.teamId}</span>
+                          </div>
+                        </TableCell>
                         <TableCell className="text-center font-mono">{row.played}</TableCell>
                         <TableCell className="text-center font-mono">{row.won}</TableCell>
                         <TableCell className="text-center font-mono">{row.drawn}</TableCell>

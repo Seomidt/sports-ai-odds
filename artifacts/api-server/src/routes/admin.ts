@@ -3,6 +3,7 @@ import { db } from "@workspace/db";
 import { allowedUsers } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
+import { getAiStats } from "../ai/analysisLayer.js";
 import { requireAdmin } from "../middlewares/requireAuth.js";
 
 const router = Router();
@@ -11,6 +12,11 @@ const router = Router();
 router.get("/admin/stats", requireAdmin, (_req, res) => {
   const stats = getApiStats();
   res.json(stats);
+});
+
+// GET /api/admin/ai-stats — AI token usage and cost
+router.get("/admin/ai-stats", requireAdmin, (_req, res) => {
+  res.json(getAiStats());
 });
 
 // GET /api/admin/users — list all allowed users

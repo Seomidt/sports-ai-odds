@@ -118,6 +118,42 @@ const FALLBACK_POST: PostAnalysis = {
   deviation_note: "N/A",
 };
 
+// ─── Token usage tracking ────────────────────────────────────────────────────
+// Claude Haiku pricing (per million tokens, USD)
+const INPUT_COST_PER_M = 0.80;
+const OUTPUT_COST_PER_M = 4.00;
+
+interface AiUsageEntry {
+  at: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
+let aiUsageLog: AiUsageEntry[] = [];
+let totalInputTokens = 0;
+let totalOutputTokens = 0;
+
+export function getAiStats() {
+  const totalCost =
+    (totalInputTokens / 1_000_000) * INPUT_COST_PER_M +
+    (totalOutputTokens / 1_000_000) * OUTPUT_COST_PER_M;
+  const last24h = Date.now() - 24 * 60 * 60 * 1000;
+  const recentEntries = aiUsageLog.filter((e) => e.at > last24h);
+  const last24hInput = recentEntries.reduce((s, e) => s + e.inputTokens, 0);
+  const last24hOutput = recentEntries.reduce((s, e) => s + e.outputTokens, 0);
+  return {
+    totalInputTokens,
+    totalOutputTokens,
+    totalTokens: totalInputTokens + totalOutputTokens,
+    estimatedCostUsd: Math.round(totalCost * 10000) / 10000,
+    last24hInputTokens: last24hInput,
+    last24hOutputTokens: last24hOutput,
+    callsTotal: aiUsageLog.length,
+    model: "claude-haiku-4-5",
+    pricingNote: `$${INPUT_COST_PER_M}/MTok in · $${OUTPUT_COST_PER_M}/MTok out`,
+  };
+}
+
 async function callClaude(prompt: string): Promise<string | null> {
   try {
     const msg = await client.messages.create({
@@ -125,6 +161,13 @@ async function callClaude(prompt: string): Promise<string | null> {
       max_tokens: 400,
       messages: [{ role: "user", content: prompt }],
     });
+    const inputTok = msg.usage?.input_tokens ?? 0;
+    const outputTok = msg.usage?.output_tokens ?? 0;
+    totalInputTokens += inputTok;
+    totalOutputTokens += outputTok;
+    aiUsageLog.push({ at: Date.now(), inputTokens: inputTok, outputTokens: outputTok });
+    if (aiUsageLog.length > 500) aiUsageLog = aiUsageLog.slice(-500);
+
     const block = msg.content[0];
     if (block?.type === "text") return block.text;
     return null;

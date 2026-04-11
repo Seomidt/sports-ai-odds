@@ -6,7 +6,7 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, ChevronRight, Brain, DollarSign, Zap } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -50,6 +50,106 @@ function formatAmount(amount: number | null, currency: string): string {
     currency: currency.toUpperCase(),
     minimumFractionDigits: 0,
   }).format(amount / 100);
+}
+
+interface AiStats {
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalTokens: number;
+  estimatedCostUsd: number;
+  last24hInputTokens: number;
+  last24hOutputTokens: number;
+  callsTotal: number;
+  model: string;
+  pricingNote: string;
+}
+
+function AiStatsSection() {
+  const { data, isLoading } = useQuery<AiStats>({
+    queryKey: ["aiStats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/ai-stats");
+      if (!res.ok) throw new Error("Failed to fetch AI stats");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
+  return (
+    <div className="border-t border-white/10 pt-8">
+      <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-6 border-b border-white/10 pb-2 flex items-center">
+        <Brain className="w-5 h-5 mr-2 text-violet-400" />
+        AI USAGE
+      </h2>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Activity className="w-6 h-6 text-primary animate-pulse" /></div>
+      ) : data ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+          {/* Total tokens */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-muted-foreground uppercase">Total Tokens</span>
+              <Zap className="w-4 h-4 text-violet-400" />
+            </div>
+            <div className="text-2xl font-mono font-bold text-white">
+              {data.totalTokens.toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">
+              {data.totalInputTokens.toLocaleString()} in · {data.totalOutputTokens.toLocaleString()} out
+            </div>
+          </div>
+
+          {/* Estimated cost */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-muted-foreground uppercase">Est. Cost</span>
+              <DollarSign className="w-4 h-4 text-teal-400" />
+            </div>
+            <div className="text-2xl font-mono font-bold text-white">
+              ${data.estimatedCostUsd.toFixed(4)}
+            </div>
+            <div className="text-[10px] text-muted-foreground font-mono mt-1 leading-relaxed">
+              {data.pricingNote}
+            </div>
+          </div>
+
+          {/* Last 24h */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-muted-foreground uppercase">Last 24h</span>
+              <Activity className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-2xl font-mono font-bold text-white">
+              {(data.last24hInputTokens + data.last24hOutputTokens).toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">
+              {data.last24hInputTokens.toLocaleString()} in · {data.last24hOutputTokens.toLocaleString()} out
+            </div>
+          </div>
+
+          {/* API calls */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-muted-foreground uppercase">AI Calls</span>
+              <Brain className="w-4 h-4 text-violet-400" />
+            </div>
+            <div className="text-2xl font-mono font-bold text-white">
+              {data.callsTotal}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">
+              {data.model}
+            </div>
+          </div>
+
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground text-center py-6">AI stats unavailable.</p>
+      )}
+    </div>
+  );
 }
 
 function BillingSection() {
@@ -438,6 +538,9 @@ export function Admin() {
             </div>
           </div>
         </div>
+
+        {/* AI Stats Section */}
+        <AiStatsSection />
 
         {/* Billing Section */}
         <div className="border-t border-white/10 pt-8">

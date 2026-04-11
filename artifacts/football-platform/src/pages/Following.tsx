@@ -1,4 +1,5 @@
 import { useGetFollowedFixtures, useGetFixture, useGetUnreadAlerts, useMarkAlertRead, useExplainAlert } from "@workspace/api-client-react";
+import type { Alert } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Activity, Bell, Info, ShieldAlert, Star, CheckCircle2 } from "lucide-react";
 import { useSession } from "@/lib/session";
@@ -88,7 +89,7 @@ export function Following() {
     }
   };
 
-  const handleExplain = async (alert: any) => {
+  const handleExplain = async (alert: Alert) => {
     setExplainingAlertId(alert.id);
     try {
       const res = await explainMutation.mutateAsync({

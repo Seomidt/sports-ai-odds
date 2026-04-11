@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { Activity, LayoutDashboard, ListOrdered, ShieldAlert, Star, LogOut, User } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
+import { AlertPoller } from "./AlertPoller";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -21,6 +22,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden text-foreground">
+      <AlertPoller />
       {/* Sidebar */}
       <aside className="w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex flex-col">
         <div className="h-16 flex items-center px-6 border-b border-white/5">

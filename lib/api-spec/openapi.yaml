@@ -64,6 +64,19 @@ paths:
               schema:
                 $ref: "#/components/schemas/TodayFixturesResponse"
 
+  /fixtures/top-picks:
+    get:
+      operationId: getTopPickFixtures
+      tags: [fixtures]
+      summary: Get upcoming prematch fixtures ranked by pre-signal count
+      responses:
+        "200":
+          description: Fixtures sorted by signal count descending
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopPicksResponse"
+
   /fixtures/followed:
     get:
       operationId: getFollowedFixtures
@@ -732,6 +745,69 @@ components:
             $ref: "#/components/schemas/LeagueGroup"
       required:
         - leagues
+
+    TopPickFixture:
+      type: object
+      properties:
+        fixtureId:
+          type: integer
+        leagueId:
+          type: integer
+        leagueName:
+          type: string
+          nullable: true
+        leagueLogo:
+          type: string
+          nullable: true
+        homeTeamId:
+          type: integer
+        awayTeamId:
+          type: integer
+        homeTeamName:
+          type: string
+          nullable: true
+        awayTeamName:
+          type: string
+          nullable: true
+        homeTeamLogo:
+          type: string
+          nullable: true
+        awayTeamLogo:
+          type: string
+          nullable: true
+        kickoff:
+          type: string
+          nullable: true
+        statusShort:
+          type: string
+          nullable: true
+        homeGoals:
+          type: integer
+          nullable: true
+        awayGoals:
+          type: integer
+          nullable: true
+        venue:
+          type: string
+          nullable: true
+        signalCount:
+          type: integer
+      required:
+        - fixtureId
+        - leagueId
+        - homeTeamId
+        - awayTeamId
+        - signalCount
+
+    TopPicksResponse:
+      type: object
+      properties:
+        fixtures:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopPickFixture"
+      required:
+        - fixtures
 
     FixtureEvent:
       type: object

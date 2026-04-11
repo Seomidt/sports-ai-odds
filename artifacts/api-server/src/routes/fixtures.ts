@@ -35,6 +35,50 @@ router.get("/fixtures/today", async (req, res) => {
   res.json({ leagues: Object.values(byLeague) });
 });
 
+// GET /api/fixtures/top-picks — prematch fixtures ranked by pre-signal count
+router.get("/fixtures/top-picks", async (req, res) => {
+  const now = new Date();
+  const end = new Date(now);
+  end.setDate(end.getDate() + 3);
+  end.setHours(23, 59, 59, 999);
+
+  const { rows } = await pool.query<{
+    fixtureId: number; leagueId: number; leagueName: string; leagueLogo: string | null;
+    homeTeamId: number; awayTeamId: number; homeTeamName: string; awayTeamName: string;
+    homeTeamLogo: string | null; awayTeamLogo: string | null; kickoff: string | null;
+    statusShort: string | null; homeGoals: number | null; awayGoals: number | null;
+    venue: string | null; signalCount: number;
+  }>(`
+    SELECT
+      f.fixture_id AS "fixtureId",
+      f.league_id AS "leagueId",
+      f.league_name AS "leagueName",
+      f.league_logo AS "leagueLogo",
+      f.home_team_id AS "homeTeamId",
+      f.away_team_id AS "awayTeamId",
+      f.home_team_name AS "homeTeamName",
+      f.away_team_name AS "awayTeamName",
+      f.home_team_logo AS "homeTeamLogo",
+      f.away_team_logo AS "awayTeamLogo",
+      f.kickoff,
+      f.status_short AS "statusShort",
+      f.home_goals AS "homeGoals",
+      f.away_goals AS "awayGoals",
+      f.venue,
+      COUNT(s.id) AS "signalCount"
+    FROM fixtures f
+    LEFT JOIN fixture_signals s ON s.fixture_id = f.fixture_id AND s.phase = 'pre'
+    WHERE f.kickoff >= $1
+      AND f.kickoff <= $2
+      AND (f.status_short IS NULL OR f.status_short NOT IN ('1H','HT','2H','ET','BT','P','INT','LIVE','FT','AET','PEN','ABD','CANC','AWD','WO'))
+    GROUP BY f.fixture_id
+    ORDER BY "signalCount" DESC, f.kickoff ASC
+    LIMIT 50
+  `, [now, end]);
+
+  return res.json({ fixtures: rows.map((r) => ({ ...r, signalCount: Number(r.signalCount) })) });
+});
+
 // GET /api/fixtures/:id — fixture details with events, lineups, stats, signals
 router.get("/fixtures/:id", async (req, res) => {
   const id = parseInt(req.params.id ?? "0");

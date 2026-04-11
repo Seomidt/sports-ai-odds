@@ -442,7 +442,23 @@ async function syncTopScorersAndAssists() {
 
 async function syncCoachesForKnownTeams() {
   console.log("[poller] Syncing coaches");
-  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+  const now = new Date();
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const upcomingFixtures = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, in7days)),
+    columns: { homeTeamId: true, awayTeamId: true },
+    limit: 60,
+  });
+  const teamIdSet = new Set<number>();
+  for (const f of upcomingFixtures) {
+    teamIdSet.add(f.homeTeamId);
+    teamIdSet.add(f.awayTeamId);
+  }
+  if (teamIdSet.size === 0) {
+    console.log("[poller] Coaches: no upcoming fixtures — skipping");
+    return;
+  }
+  const allTeams = Array.from(teamIdSet).map((id) => ({ teamId: id }));
   for (const team of allTeams) {
     const data = await fetchCoach(team.teamId);
     if (!data || data.length === 0) continue;
@@ -603,11 +619,35 @@ async function syncH2HForUpcomingFixtures() {
 
 async function syncTeamSeasonStats() {
   console.log("[poller] Syncing team season stats");
-  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+  const now = new Date();
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const upcomingFixtures = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, in7days)),
+    columns: { homeTeamId: true, awayTeamId: true, leagueId: true },
+    limit: 60,
+  });
 
-  for (const team of allTeams) {
-    for (const league of TRACKED_LEAGUES) {
-      const data = await fetchTeamStatistics(team.teamId, league.id, league.season);
+  const teamLeaguePairs = new Set<string>();
+  for (const f of upcomingFixtures) {
+    teamLeaguePairs.add(`${f.homeTeamId}:${f.leagueId}`);
+    teamLeaguePairs.add(`${f.awayTeamId}:${f.leagueId}`);
+  }
+
+  if (teamLeaguePairs.size === 0) {
+    console.log("[poller] Team season stats: no upcoming fixtures — skipping");
+    return;
+  }
+
+  for (const pair of teamLeaguePairs) {
+    const [teamIdStr, leagueIdStr] = pair.split(":");
+    const teamId = Number(teamIdStr);
+    const leagueId = Number(leagueIdStr);
+    const league = TRACKED_LEAGUES.find((l) => l.id === leagueId);
+    if (!league) continue;
+
+    const team = { teamId };
+    for (const lg of [league]) {
+      const data = await fetchTeamStatistics(team.teamId, lg.id, lg.season);
       if (!data) continue;
 
       const f = data.fixtures;
@@ -678,12 +718,28 @@ async function syncTeamSeasonStats() {
         });
     }
   }
-  console.log(`[poller] Team season stats synced for ${allTeams.length} teams`);
+  console.log(`[poller] Team season stats synced for ${teamLeaguePairs.size} team/league pairs`);
 }
 
 async function syncVenuesAndInfoForKnownTeams() {
   console.log("[poller] Syncing team info + venues");
-  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+  const now = new Date();
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const upcomingFixtures = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, in7days)),
+    columns: { homeTeamId: true, awayTeamId: true },
+    limit: 60,
+  });
+  const teamIdSet = new Set<number>();
+  for (const f of upcomingFixtures) {
+    teamIdSet.add(f.homeTeamId);
+    teamIdSet.add(f.awayTeamId);
+  }
+  if (teamIdSet.size === 0) {
+    console.log("[poller] Venues: no upcoming fixtures — skipping");
+    return;
+  }
+  const allTeams = Array.from(teamIdSet).map((id) => ({ teamId: id }));
 
   for (const team of allTeams) {
     const info = await fetchTeamInfo(team.teamId);
@@ -729,7 +785,23 @@ async function syncVenuesAndInfoForKnownTeams() {
 
 async function syncTrophiesForKnownTeams() {
   console.log("[poller] Syncing trophies");
-  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+  const now = new Date();
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const upcomingFixtures = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, in7days)),
+    columns: { homeTeamId: true, awayTeamId: true },
+    limit: 60,
+  });
+  const teamIdSet = new Set<number>();
+  for (const f of upcomingFixtures) {
+    teamIdSet.add(f.homeTeamId);
+    teamIdSet.add(f.awayTeamId);
+  }
+  if (teamIdSet.size === 0) {
+    console.log("[poller] Trophies: no upcoming fixtures — skipping");
+    return;
+  }
+  const allTeams = Array.from(teamIdSet).map((id) => ({ teamId: id }));
 
   for (const team of allTeams) {
     const data = await fetchTrophies(team.teamId);
@@ -757,7 +829,7 @@ async function syncPlayerProfilesForTopPlayers() {
   const topPlayers = await db.query.playerSeasonStats.findMany({
     columns: { playerId: true, leagueId: true, seasonYear: true },
     orderBy: (p, { desc: d }) => [d(p.goals)],
-    limit: 100,
+    limit: 20,
   });
 
   for (const entry of topPlayers) {

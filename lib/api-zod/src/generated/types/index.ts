@@ -57,6 +57,8 @@ export * from "./teamStatisticsResponse";
 export * from "./todayFixturesResponse";
 export * from "./topDisciplineResponse";
 export * from "./topDisciplineResponsePlayersItem";
+export * from "./topPickFixture";
+export * from "./topPicksResponse";
 export * from "./trophiesResponse";
 export * from "./trophyItem";
 export * from "./unreadAlertsResponse";

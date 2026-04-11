@@ -61,6 +61,32 @@ export const GetTodayFixturesResponse = zod.object({
 });
 
 /**
+ * @summary Get upcoming prematch fixtures ranked by pre-signal count
+ */
+export const GetTopPickFixturesResponse = zod.object({
+  fixtures: zod.array(
+    zod.object({
+      fixtureId: zod.number(),
+      leagueId: zod.number(),
+      leagueName: zod.string().nullish(),
+      leagueLogo: zod.string().nullish(),
+      homeTeamId: zod.number(),
+      awayTeamId: zod.number(),
+      homeTeamName: zod.string().nullish(),
+      awayTeamName: zod.string().nullish(),
+      homeTeamLogo: zod.string().nullish(),
+      awayTeamLogo: zod.string().nullish(),
+      kickoff: zod.string().nullish(),
+      statusShort: zod.string().nullish(),
+      homeGoals: zod.number().nullish(),
+      awayGoals: zod.number().nullish(),
+      venue: zod.string().nullish(),
+      signalCount: zod.number(),
+    }),
+  ),
+});
+
+/**
  * @summary Get followed fixture IDs for the current session
  */
 export const GetFollowedFixturesHeader = zod.object({

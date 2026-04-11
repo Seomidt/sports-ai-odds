@@ -46,6 +46,7 @@ import type {
   TeamStatisticsResponse,
   TodayFixturesResponse,
   TopDisciplineResponse,
+  TopPicksResponse,
   TrophiesResponse,
   UnreadAlertsResponse,
   UpdateUserBody,
@@ -266,6 +267,81 @@ export function useGetTodayFixtures<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetTodayFixturesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get upcoming prematch fixtures ranked by pre-signal count
+ */
+export const getGetTopPickFixturesUrl = () => {
+  return `/api/fixtures/top-picks`;
+};
+
+export const getTopPickFixtures = async (
+  options?: RequestInit,
+): Promise<TopPicksResponse> => {
+  return customFetch<TopPicksResponse>(getGetTopPickFixturesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTopPickFixturesQueryKey = () => {
+  return [`/api/fixtures/top-picks`] as const;
+};
+
+export const getGetTopPickFixturesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTopPickFixtures>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTopPickFixtures>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTopPickFixturesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTopPickFixtures>>
+  > = ({ signal }) => getTopPickFixtures({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTopPickFixtures>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTopPickFixturesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTopPickFixtures>>
+>;
+export type GetTopPickFixturesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get upcoming prematch fixtures ranked by pre-signal count
+ */
+
+export function useGetTopPickFixtures<
+  TData = Awaited<ReturnType<typeof getTopPickFixtures>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getTopPickFixtures>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTopPickFixturesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

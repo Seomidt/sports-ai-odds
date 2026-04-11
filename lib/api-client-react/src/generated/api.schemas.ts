@@ -49,6 +49,29 @@ export interface TodayFixturesResponse {
   leagues: LeagueGroup[];
 }
 
+export interface TopPickFixture {
+  fixtureId: number;
+  leagueId: number;
+  leagueName?: string | null;
+  leagueLogo?: string | null;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeamName?: string | null;
+  awayTeamName?: string | null;
+  homeTeamLogo?: string | null;
+  awayTeamLogo?: string | null;
+  kickoff?: string | null;
+  statusShort?: string | null;
+  homeGoals?: number | null;
+  awayGoals?: number | null;
+  venue?: string | null;
+  signalCount: number;
+}
+
+export interface TopPicksResponse {
+  fixtures: TopPickFixture[];
+}
+
 export interface FixtureEvent {
   id: number;
   fixtureId: number;

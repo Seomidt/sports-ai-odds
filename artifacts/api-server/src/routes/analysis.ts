@@ -1,17 +1,8 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { fixtureSignals } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
 import { getPreAnalysis, getLiveAnalysis, getPostAnalysis, generateAlertText } from "../ai/analysisLayer.js";
 
 const router = Router();
-
-function buildText(result: { headline: string; narrative: string; key_factors?: string[] }): string {
-  const factors = result.key_factors?.length
-    ? "\n\nKey factors: " + result.key_factors.join(" · ")
-    : "";
-  return `${result.headline}\n\n${result.narrative}${factors}`;
-}
 
 async function getSignals(fixtureId: number, phase: string) {
   return db.query.fixtureSignals.findMany({
@@ -30,7 +21,11 @@ router.get("/analysis/:fixtureId/pre", async (req, res) => {
     const signals = await getSignals(id, "pre");
     return res.json({
       phase: "pre",
-      text: buildText(result),
+      headline: result.headline,
+      narrative: result.narrative,
+      key_factors: result.key_factors,
+      favorite: result.favorite,
+      confidence: result.confidence,
       cachedAt: new Date().toISOString(),
       signals,
     });
@@ -50,7 +45,11 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
     const signals = await getSignals(id, "live");
     return res.json({
       phase: "live",
-      text: buildText(result),
+      headline: result.headline,
+      narrative: result.narrative,
+      key_factors: result.key_factors,
+      momentum_verdict: result.momentum_verdict,
+      alert_worthy: result.alert_worthy,
       cachedAt: new Date().toISOString(),
       signals,
     });
@@ -70,7 +69,11 @@ router.get("/analysis/:fixtureId/post", async (req, res) => {
     const signals = await getSignals(id, "post");
     return res.json({
       phase: "post",
-      text: buildText(result),
+      headline: result.headline,
+      narrative: result.narrative,
+      key_factors: result.key_factors,
+      deviation_note: result.deviation_note,
+      man_of_match: result.man_of_match,
       cachedAt: new Date().toISOString(),
       signals,
     });

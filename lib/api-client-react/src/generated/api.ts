@@ -32,7 +32,9 @@ import type {
   GetFixtureSignalsParams,
   HealthStatus,
   InjuriesResponse,
+  LiveOddsResponse,
   MeResponse,
+  OddsResponse,
   ReadConfirmation,
   SignalsResponse,
   StandingsResponse,
@@ -789,6 +791,180 @@ export const useUnfollowFixture = <
 > => {
   return useMutation(getUnfollowFixtureMutationOptions(options));
 };
+
+/**
+ * @summary Get latest pre-match odds snapshot for a fixture
+ */
+export const getGetFixtureOddsUrl = (id: number) => {
+  return `/api/fixtures/${id}/odds`;
+};
+
+export const getFixtureOdds = async (
+  id: number,
+  options?: RequestInit,
+): Promise<OddsResponse> => {
+  return customFetch<OddsResponse>(getGetFixtureOddsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFixtureOddsQueryKey = (id: number) => {
+  return [`/api/fixtures/${id}/odds`] as const;
+};
+
+export const getGetFixtureOddsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFixtureOdds>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureOdds>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFixtureOddsQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getFixtureOdds>>> = ({
+    signal,
+  }) => getFixtureOdds(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFixtureOdds>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFixtureOddsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFixtureOdds>>
+>;
+export type GetFixtureOddsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get latest pre-match odds snapshot for a fixture
+ */
+
+export function useGetFixtureOdds<
+  TData = Awaited<ReturnType<typeof getFixtureOdds>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureOdds>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFixtureOddsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get live odds snapshots timeline for a fixture
+ */
+export const getGetFixtureLiveOddsUrl = (id: number) => {
+  return `/api/fixtures/${id}/live-odds`;
+};
+
+export const getFixtureLiveOdds = async (
+  id: number,
+  options?: RequestInit,
+): Promise<LiveOddsResponse> => {
+  return customFetch<LiveOddsResponse>(getGetFixtureLiveOddsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFixtureLiveOddsQueryKey = (id: number) => {
+  return [`/api/fixtures/${id}/live-odds`] as const;
+};
+
+export const getGetFixtureLiveOddsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFixtureLiveOdds>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureLiveOdds>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFixtureLiveOddsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getFixtureLiveOdds>>
+  > = ({ signal }) => getFixtureLiveOdds(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFixtureLiveOdds>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFixtureLiveOddsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFixtureLiveOdds>>
+>;
+export type GetFixtureLiveOddsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get live odds snapshots timeline for a fixture
+ */
+
+export function useGetFixtureLiveOdds<
+  TData = Awaited<ReturnType<typeof getFixtureLiveOdds>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureLiveOdds>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFixtureLiveOddsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * @summary Get standings for a league

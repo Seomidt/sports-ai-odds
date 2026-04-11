@@ -139,8 +139,6 @@ export interface StandingRow {
   goalsAgainst?: number | null;
   goalsDiff?: number | null;
   form?: string | null;
-  teamName?: string | null;
-  teamLogo?: string | null;
 }
 
 export interface StandingsResponse {
@@ -161,9 +159,54 @@ export interface InjuriesResponse {
   injuries: Injury[];
 }
 
+export interface OddsSnapshot {
+  id?: number;
+  fixtureId?: number;
+  bookmaker?: string;
+  homeWin?: number;
+  draw?: number;
+  awayWin?: number;
+  btts?: number;
+  overUnder25?: number;
+  handicapHome?: number;
+  snappedAt?: string;
+}
+
+export interface OddsResponse {
+  odds: OddsSnapshot | null;
+}
+
+export interface LiveOddsSnapshot {
+  id?: number;
+  fixtureId?: number;
+  bookmaker?: string;
+  homeWin?: number;
+  draw?: number;
+  awayWin?: number;
+  snappedAt?: string;
+}
+
+export interface LiveOddsResponse {
+  liveOdds: LiveOddsSnapshot[];
+}
+
 export interface AnalysisResponse {
   phase: string;
-  text: string;
+  headline: string;
+  narrative: string;
+  key_factors?: string[];
+  /** home | away | even (pre-match only) */
+  favorite?: string;
+  /** 0.0–1.0 (pre-match only) */
+  confidence?: number;
+  /** Current momentum phrase (live only) */
+  momentum_verdict?: string;
+  /** Whether this match is alert-worthy right now (live only) */
+  alert_worthy?: boolean;
+  /** Was result expected? (post-match only) */
+  deviation_note?: string;
+  /** Optional decisive player (post-match only) */
+  man_of_match?: string;
   cachedAt?: string;
   signals?: Signal[];
 }
@@ -186,8 +229,6 @@ export interface Alert {
   alertText: string;
   isRead?: boolean | null;
   createdAt?: string;
-  homeTeamName?: string | null;
-  awayTeamName?: string | null;
 }
 
 export interface UnreadAlertsResponse {

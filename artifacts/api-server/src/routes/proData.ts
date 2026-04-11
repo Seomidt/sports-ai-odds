@@ -4,6 +4,7 @@ import { eq, desc } from "drizzle-orm";
 import {
   predictions,
   liveOddsSnapshots,
+  oddsSnapshots,
   playerStats,
   playerSeasonStats,
   coaches,
@@ -25,6 +26,19 @@ router.get("/fixtures/:id/predictions", async (req, res) => {
   res.json({ prediction: pred ?? null });
 });
 
+// GET /api/fixtures/:id/odds — latest pre-match odds snapshot
+router.get("/fixtures/:id/odds", async (req, res) => {
+  const id = parseInt(req.params.id ?? "0");
+  if (!id) return res.status(400).json({ error: "Invalid fixture id" });
+
+  const snap = await db.query.oddsSnapshots.findFirst({
+    where: (o, { eq: eqFn }) => eqFn(o.fixtureId, id),
+    orderBy: (o, { desc: d }) => [d(o.snappedAt)],
+  });
+
+  res.json({ odds: snap ?? null });
+});
+
 // GET /api/fixtures/:id/live-odds — last 10 snapshots
 router.get("/fixtures/:id/live-odds", async (req, res) => {
   const id = parseInt(req.params.id ?? "0");
@@ -33,7 +47,7 @@ router.get("/fixtures/:id/live-odds", async (req, res) => {
   const odds = await db.query.liveOddsSnapshots.findMany({
     where: (lo, { eq: eqFn }) => eqFn(lo.fixtureId, id),
     orderBy: (lo, { desc: d }) => [d(lo.snappedAt)],
-    limit: 10,
+    limit: 20,
   });
 
   res.json({ liveOdds: odds });

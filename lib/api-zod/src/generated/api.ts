@@ -225,6 +225,51 @@ export const UnfollowFixtureResponse = zod.object({
 });
 
 /**
+ * @summary Get latest pre-match odds snapshot for a fixture
+ */
+export const GetFixtureOddsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetFixtureOddsResponse = zod.object({
+  odds: zod
+    .object({
+      id: zod.number().optional(),
+      fixtureId: zod.number().optional(),
+      bookmaker: zod.string().optional(),
+      homeWin: zod.number().optional(),
+      draw: zod.number().optional(),
+      awayWin: zod.number().optional(),
+      btts: zod.number().optional(),
+      overUnder25: zod.number().optional(),
+      handicapHome: zod.number().optional(),
+      snappedAt: zod.string().optional(),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Get live odds snapshots timeline for a fixture
+ */
+export const GetFixtureLiveOddsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetFixtureLiveOddsResponse = zod.object({
+  liveOdds: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      fixtureId: zod.number().optional(),
+      bookmaker: zod.string().optional(),
+      homeWin: zod.number().optional(),
+      draw: zod.number().optional(),
+      awayWin: zod.number().optional(),
+      snappedAt: zod.string().optional(),
+    }),
+  ),
+});
+
+/**
  * @summary Get standings for a league
  */
 export const GetStandingsParams = zod.object({
@@ -282,7 +327,30 @@ export const GetPreAnalysisParams = zod.object({
 
 export const GetPreAnalysisResponse = zod.object({
   phase: zod.string(),
-  text: zod.string(),
+  headline: zod.string(),
+  narrative: zod.string(),
+  key_factors: zod.array(zod.string()).optional(),
+  favorite: zod
+    .string()
+    .optional()
+    .describe("home | away | even (pre-match only)"),
+  confidence: zod.number().optional().describe("0.0–1.0 (pre-match only)"),
+  momentum_verdict: zod
+    .string()
+    .optional()
+    .describe("Current momentum phrase (live only)"),
+  alert_worthy: zod
+    .boolean()
+    .optional()
+    .describe("Whether this match is alert-worthy right now (live only)"),
+  deviation_note: zod
+    .string()
+    .optional()
+    .describe("Was result expected? (post-match only)"),
+  man_of_match: zod
+    .string()
+    .optional()
+    .describe("Optional decisive player (post-match only)"),
   cachedAt: zod.string().optional(),
   signals: zod
     .array(
@@ -309,7 +377,30 @@ export const GetLiveAnalysisParams = zod.object({
 
 export const GetLiveAnalysisResponse = zod.object({
   phase: zod.string(),
-  text: zod.string(),
+  headline: zod.string(),
+  narrative: zod.string(),
+  key_factors: zod.array(zod.string()).optional(),
+  favorite: zod
+    .string()
+    .optional()
+    .describe("home | away | even (pre-match only)"),
+  confidence: zod.number().optional().describe("0.0–1.0 (pre-match only)"),
+  momentum_verdict: zod
+    .string()
+    .optional()
+    .describe("Current momentum phrase (live only)"),
+  alert_worthy: zod
+    .boolean()
+    .optional()
+    .describe("Whether this match is alert-worthy right now (live only)"),
+  deviation_note: zod
+    .string()
+    .optional()
+    .describe("Was result expected? (post-match only)"),
+  man_of_match: zod
+    .string()
+    .optional()
+    .describe("Optional decisive player (post-match only)"),
   cachedAt: zod.string().optional(),
   signals: zod
     .array(
@@ -336,7 +427,30 @@ export const GetPostAnalysisParams = zod.object({
 
 export const GetPostAnalysisResponse = zod.object({
   phase: zod.string(),
-  text: zod.string(),
+  headline: zod.string(),
+  narrative: zod.string(),
+  key_factors: zod.array(zod.string()).optional(),
+  favorite: zod
+    .string()
+    .optional()
+    .describe("home | away | even (pre-match only)"),
+  confidence: zod.number().optional().describe("0.0–1.0 (pre-match only)"),
+  momentum_verdict: zod
+    .string()
+    .optional()
+    .describe("Current momentum phrase (live only)"),
+  alert_worthy: zod
+    .boolean()
+    .optional()
+    .describe("Whether this match is alert-worthy right now (live only)"),
+  deviation_note: zod
+    .string()
+    .optional()
+    .describe("Was result expected? (post-match only)"),
+  man_of_match: zod
+    .string()
+    .optional()
+    .describe("Optional decisive player (post-match only)"),
   cachedAt: zod.string().optional(),
   signals: zod
     .array(

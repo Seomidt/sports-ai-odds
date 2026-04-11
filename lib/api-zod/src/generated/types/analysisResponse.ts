@@ -9,7 +9,21 @@ import type { Signal } from "./signal";
 
 export interface AnalysisResponse {
   phase: string;
-  text: string;
+  headline: string;
+  narrative: string;
+  key_factors?: string[];
+  /** home | away | even (pre-match only) */
+  favorite?: string;
+  /** 0.0–1.0 (pre-match only) */
+  confidence?: number;
+  /** Current momentum phrase (live only) */
+  momentum_verdict?: string;
+  /** Whether this match is alert-worthy right now (live only) */
+  alert_worthy?: boolean;
+  /** Was result expected? (post-match only) */
+  deviation_note?: string;
+  /** Optional decisive player (post-match only) */
+  man_of_match?: string;
   cachedAt?: string;
   signals?: Signal[];
 }

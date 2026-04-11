@@ -194,6 +194,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/FollowResponse"
 
+  /fixtures/{id}/odds:
+    get:
+      operationId: getFixtureOdds
+      tags: [fixtures]
+      summary: Get latest pre-match odds snapshot for a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Pre-match odds
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OddsResponse"
+
+  /fixtures/{id}/live-odds:
+    get:
+      operationId: getFixtureLiveOdds
+      tags: [fixtures]
+      summary: Get live odds snapshots timeline for a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Live odds timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveOddsResponse"
+
   /standings/{leagueId}:
     get:
       operationId: getStandings
@@ -846,13 +884,99 @@ components:
       required:
         - injuries
 
+    OddsSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        bookmaker:
+          type: string
+        homeWin:
+          type: number
+        draw:
+          type: number
+        awayWin:
+          type: number
+        btts:
+          type: number
+        overUnder25:
+          type: number
+        handicapHome:
+          type: number
+        snappedAt:
+          type: string
+
+    OddsResponse:
+      type: object
+      properties:
+        odds:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/OddsSnapshot"
+      required:
+        - odds
+
+    LiveOddsSnapshot:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        bookmaker:
+          type: string
+        homeWin:
+          type: number
+        draw:
+          type: number
+        awayWin:
+          type: number
+        snappedAt:
+          type: string
+
+    LiveOddsResponse:
+      type: object
+      properties:
+        liveOdds:
+          type: array
+          items:
+            $ref: "#/components/schemas/LiveOddsSnapshot"
+      required:
+        - liveOdds
+
     AnalysisResponse:
       type: object
       properties:
         phase:
           type: string
-        text:
+        headline:
           type: string
+        narrative:
+          type: string
+        key_factors:
+          type: array
+          items:
+            type: string
+        favorite:
+          type: string
+          description: "home | away | even (pre-match only)"
+        confidence:
+          type: number
+          description: "0.0–1.0 (pre-match only)"
+        momentum_verdict:
+          type: string
+          description: "Current momentum phrase (live only)"
+        alert_worthy:
+          type: boolean
+          description: "Whether this match is alert-worthy right now (live only)"
+        deviation_note:
+          type: string
+          description: "Was result expected? (post-match only)"
+        man_of_match:
+          type: string
+          description: "Optional decisive player (post-match only)"
         cachedAt:
           type: string
         signals:
@@ -861,7 +985,8 @@ components:
             $ref: "#/components/schemas/Signal"
       required:
         - phase
-        - text
+        - headline
+        - narrative
 
     ExplainAlertBody:
       type: object

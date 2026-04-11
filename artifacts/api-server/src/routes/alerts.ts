@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { followedFixtures, alertLog } from "@workspace/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 
 const router = Router();
 
@@ -52,19 +52,35 @@ router.get("/fixtures/followed", async (req, res) => {
   return res.json({ fixtureIds: rows.map((r) => r.fixtureId) });
 });
 
-// GET /api/alerts/unread — poll for new alerts
-router.get("/alerts/unread", async (req, res) => {
+// GET /api/alerts/unread — poll for new alerts (enriched with fixture team names)
+router.get("/alerts/unread", async (req, res): Promise<void> => {
   const sessionId = req.headers["x-session-id"] as string | undefined;
-  if (!sessionId) return res.status(400).json({ error: "Missing x-session-id header" });
+  if (!sessionId) {
+    res.status(400).json({ error: "Missing x-session-id header" });
+    return;
+  }
 
-  const alerts = await db.query.alertLog.findMany({
-    where: (a, { and: andFn, eq: eqFn }) =>
-      andFn(eqFn(a.sessionId, sessionId), eqFn(a.isRead, false)),
-    orderBy: (a, { desc: descFn }) => [descFn(a.createdAt)],
-    limit: 20,
-  });
+  const { rows } = await pool.query(
+    `SELECT
+       a.id,
+       a.fixture_id    AS "fixtureId",
+       a.session_id    AS "sessionId",
+       a.signal_key    AS "signalKey",
+       a.alert_text    AS "alertText",
+       a.is_read       AS "isRead",
+       a.created_at    AS "createdAt",
+       f.home_team_name AS "homeTeamName",
+       f.away_team_name AS "awayTeamName"
+     FROM alert_log a
+     LEFT JOIN fixtures f ON f.fixture_id = a.fixture_id
+     WHERE a.session_id = $1
+       AND a.is_read = false
+     ORDER BY a.created_at DESC
+     LIMIT 20`,
+    [sessionId],
+  );
 
-  return res.json({ alerts });
+  res.json({ alerts: rows });
 });
 
 // POST /api/alerts/:id/read

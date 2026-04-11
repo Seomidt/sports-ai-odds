@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useGetStandings } from "@workspace/api-client-react";
+import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
@@ -30,9 +30,8 @@ function TrendIcon({ diff }: { diff: number }) {
 }
 
 function StandingsTable({ leagueId, season }: { leagueId: number; season: number }) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, isLoading } = useGetStandings(leagueId, {
-    query: { staleTime: 10 * 60_000, gcTime: 30 * 60_000, refetchInterval: 15 * 60_000 } as any,
+    query: { queryKey: getGetStandingsQueryKey(leagueId), staleTime: 10 * 60_000, gcTime: 30 * 60_000, refetchInterval: 15 * 60_000 },
   });
 
   if (isLoading) {

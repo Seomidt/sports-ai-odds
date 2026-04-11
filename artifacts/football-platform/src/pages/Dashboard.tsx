@@ -1,4 +1,9 @@
-import { useGetTopPickFixtures, useGetFixtureSignals } from "@workspace/api-client-react";
+import {
+  useGetTopPickFixtures,
+  useGetFixtureSignals,
+  getGetTopPickFixturesQueryKey,
+  getGetFixtureSignalsQueryKey,
+} from "@workspace/api-client-react";
 import type { TopPickFixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
@@ -65,8 +70,7 @@ function TopPickCard({ fixture, rank }: { fixture: TopPickFixture; rank: number 
   const { data: signalData } = useGetFixtureSignals(
     fixture.fixtureId,
     { phase: live ? "live" : "pre" },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { query: { queryKey: ["signals", fixture.fixtureId, live ? "live" : "pre"], staleTime: live ? 30_000 : 3 * 60_000, gcTime: 10 * 60_000 } as any }
+      { query: { queryKey: getGetFixtureSignalsQueryKey(fixture.fixtureId, { phase: live ? "live" : "pre" }), staleTime: live ? 30_000 : 3 * 60_000, gcTime: 10 * 60_000 } }
   );
   const count = fixture.signalCount;
 
@@ -182,9 +186,8 @@ function SmallPickCard({ fixture }: { fixture: TopPickFixture }) {
 }
 
 export function Dashboard() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, isLoading } = useGetTopPickFixtures({
-    query: { queryKey: ["top-picks"], staleTime: 60_000, gcTime: 10 * 60_000, refetchInterval: 90_000 } as any,
+    query: { queryKey: getGetTopPickFixturesQueryKey(), staleTime: 60_000, gcTime: 10 * 60_000, refetchInterval: 90_000 },
   });
 
   const allFixtures = data?.fixtures ?? [];

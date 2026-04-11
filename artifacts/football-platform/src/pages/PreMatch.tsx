@@ -1,4 +1,4 @@
-import { useGetTodayFixtures, useGetFixtureSignals } from "@workspace/api-client-react";
+import { useGetTodayFixtures, useGetFixtureSignals, getGetTodayFixturesQueryKey } from "@workspace/api-client-react";
 import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
@@ -109,9 +109,8 @@ function PreMatchCard({ fixture }: { fixture: Fixture }) {
 }
 
 export function PreMatch() {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, isLoading } = useGetTodayFixtures({
-    query: { staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 } as any,
+    query: { queryKey: getGetTodayFixturesQueryKey(), staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 },
   });
 
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);

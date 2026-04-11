@@ -1,51 +1,69 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { getPreAnalysis, getLiveAnalysis, getPostAnalysis, generateAlertText } from "../ai/analysisLayer.js";
+import {
+  getBettingTip,
+  getLiveAnalysis,
+  triggerPostMatchReview,
+  getAiAccuracyStats,
+  generateAlertText,
+} from "../ai/analysisLayer.js";
 
 const router = Router();
 
-async function getSignals(fixtureId: number, phase: string) {
-  return db.query.fixtureSignals.findMany({
-    where: (s, { and: andFn, eq: eqFn }) =>
-      andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, phase)),
-  });
-}
-
-// GET /api/analysis/:fixtureId/pre
-// AI result cached 30 min in analysisLayer; HTTP cache 25 min
-router.get("/analysis/:fixtureId/pre", async (req, res) => {
-  const id = parseInt(req.params.fixtureId ?? "0");
+// GET /api/analysis/:fixtureId/betting-tip — pre-match betting recommendation (stored in DB permanently)
+router.get("/analysis/:fixtureId/betting-tip", async (req, res) => {
+  const id = parseInt(req.params["fixtureId"] ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
 
   try {
-    const result = await getPreAnalysis(id);
-    const signals = await getSignals(id, "pre");
-    res.set("Cache-Control", "public, max-age=1500, stale-while-revalidate=300");
-    return res.json({
-      phase: "pre",
-      headline: result.headline,
-      narrative: result.narrative,
-      key_factors: result.key_factors,
-      favorite: result.favorite,
-      confidence: result.confidence,
-      cachedAt: new Date().toISOString(),
-      signals,
-    });
+    const tip = await getBettingTip(id);
+    if (!tip) {
+      return res.json({ tip: null, message: "Insufficient signal data — tip not yet available." });
+    }
+    res.set("Cache-Control", "public, max-age=900, stale-while-revalidate=300");
+    return res.json({ tip });
   } catch (err) {
-    console.error("[analysis] pre error:", err);
-    return res.status(500).json({ error: "Analysis failed" });
+    console.error("[analysis] betting-tip error:", err);
+    return res.status(500).json({ error: "Tip generation failed" });
   }
 });
 
-// GET /api/analysis/:fixtureId/live
-// AI result cached 5 min in analysisLayer; HTTP cache 4 min
+// GET /api/analysis/:fixtureId/post-review — post-match review (outcome + summary)
+router.get("/analysis/:fixtureId/post-review", async (req, res) => {
+  const id = parseInt(req.params["fixtureId"] ?? "0");
+  if (!id) return res.status(400).json({ error: "Invalid fixture id" });
+
+  try {
+    // Trigger review if not done yet (idempotent)
+    await triggerPostMatchReview(id);
+
+    const tip = await db.query.aiBettingTips.findFirst({
+      where: (t, { eq: eqFn }) => eqFn(t.fixtureId, id),
+    });
+
+    if (!tip) {
+      return res.json({ review: null, message: "No prediction was made for this fixture." });
+    }
+
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=3600");
+    return res.json({ review: tip });
+  } catch (err) {
+    console.error("[analysis] post-review error:", err);
+    return res.status(500).json({ error: "Review generation failed" });
+  }
+});
+
+// GET /api/analysis/:fixtureId/live — live in-play analysis (5 min TTL)
 router.get("/analysis/:fixtureId/live", async (req, res) => {
-  const id = parseInt(req.params.fixtureId ?? "0");
+  const id = parseInt(req.params["fixtureId"] ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
 
   try {
     const result = await getLiveAnalysis(id);
-    const signals = await getSignals(id, "live");
+    const signals = await db.query.fixtureSignals.findMany({
+      where: (s, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(s.fixtureId, id), eqFn(s.phase, "live")),
+    });
     res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
     return res.json({
       phase: "live",
@@ -63,29 +81,15 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
   }
 });
 
-// GET /api/analysis/:fixtureId/post
-// AI result cached permanently in analysisLayer; HTTP cache 1 day
-router.get("/analysis/:fixtureId/post", async (req, res) => {
-  const id = parseInt(req.params.fixtureId ?? "0");
-  if (!id) return res.status(400).json({ error: "Invalid fixture id" });
-
+// GET /api/analysis/accuracy — AI track record (admin + display)
+router.get("/analysis/accuracy", async (_req, res) => {
   try {
-    const result = await getPostAnalysis(id);
-    const signals = await getSignals(id, "post");
-    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=3600");
-    return res.json({
-      phase: "post",
-      headline: result.headline,
-      narrative: result.narrative,
-      key_factors: result.key_factors,
-      deviation_note: result.deviation_note,
-      man_of_match: result.man_of_match,
-      cachedAt: new Date().toISOString(),
-      signals,
-    });
+    const stats = await getAiAccuracyStats();
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    return res.json(stats);
   } catch (err) {
-    console.error("[analysis] post error:", err);
-    return res.status(500).json({ error: "Analysis failed" });
+    console.error("[analysis] accuracy error:", err);
+    return res.status(500).json({ error: "Failed to fetch accuracy stats" });
   }
 });
 

@@ -552,9 +552,39 @@ export const oddsMarkets = pgTable(
   (t) => [index("odds_markets_fixture_idx").on(t.fixtureId)]
 );
 
+// ─── AI Betting Intelligence ──────────────────────────────────────────────────
+
+export const aiBettingTips = pgTable(
+  "ai_betting_tips",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull().unique(),
+    homeTeam: text("home_team"),
+    awayTeam: text("away_team"),
+    kickoff: timestamp("kickoff"),
+    leagueName: text("league_name"),
+    // The recommendation
+    recommendation: text("recommendation").notNull(),
+    betType: text("bet_type").notNull(),
+    betSide: text("bet_side"),
+    trustScore: integer("trust_score").notNull(),
+    reasoning: text("reasoning").notNull(),
+    marketOdds: real("market_odds"),
+    // Post-match review (filled in after FT)
+    outcome: text("outcome"),
+    reviewHeadline: text("review_headline"),
+    reviewSummary: text("review_summary"),
+    accuracyNote: text("accuracy_note"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    reviewedAt: timestamp("reviewed_at"),
+  },
+  (t) => [index("ai_betting_tips_fixture_idx").on(t.fixtureId)]
+);
+
 export type H2HFixture = typeof h2hFixtures.$inferSelect;
 export type TeamSeasonStats = typeof teamSeasonStats.$inferSelect;
 export type PlayerProfile = typeof playerProfiles.$inferSelect;
 export type Venue = typeof venues.$inferSelect;
 export type Trophy = typeof trophies.$inferSelect;
+export type AiBettingTip = typeof aiBettingTips.$inferSelect;
 export type OddsMarket = typeof oddsMarkets.$inferSelect;

@@ -1,9 +1,7 @@
 import { 
   useGetFixture, 
   useGetFixtureSignals, 
-  useGetPreAnalysis, 
-  useGetLiveAnalysis, 
-  useGetPostAnalysis,
+  useGetLiveAnalysis,
   useGetFixtureOdds,
   useGetFixtureLiveOdds,
   useGetFixtureH2H,
@@ -15,12 +13,12 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { format } from "date-fns";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 
 export function Match() {
   const [, params] = useRoute("/match/:id");
@@ -145,13 +143,13 @@ export function Match() {
             </TabsList>
             
             <TabsContent value="pre" className="mt-4">
-              <AnalysisTab fixtureId={id} phase="pre" />
+              <BettingIntelTab fixtureId={id} />
             </TabsContent>
             <TabsContent value="live" className="mt-4">
-              <AnalysisTab fixtureId={id} phase="live" />
+              <LiveAnalysisTab fixtureId={id} />
             </TabsContent>
             <TabsContent value="post" className="mt-4">
-              <AnalysisTab fixtureId={id} phase="post" />
+              <PostReviewTab fixtureId={id} />
             </TabsContent>
             <TabsContent value="odds" className="mt-4">
               <OddsTab fixtureId={id} isLive={isLive} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
@@ -180,181 +178,324 @@ export function Match() {
   );
 }
 
-function AnalysisTab({ fixtureId, phase }: { fixtureId: number, phase: 'pre' | 'live' | 'post' }) {
-  const sigStale = phase === 'post' ? Infinity : phase === 'live' ? 30_000 : 3 * 60_000;
-  const { data: signalsData } = useGetFixtureSignals(fixtureId, { phase }, {
-    query: { enabled: !!fixtureId, queryKey: ['signals', fixtureId, phase], staleTime: sigStale, gcTime: phase === 'post' ? Infinity : 10 * 60_000 }
+// ─── Betting Intel (Pre-match) ────────────────────────────────────────────────
+
+interface BettingTip {
+  id: number;
+  fixtureId: number;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  recommendation: string;
+  betType: string;
+  betSide: string | null;
+  trustScore: number;
+  reasoning: string;
+  marketOdds: number | null;
+  outcome: string | null;
+  reviewHeadline: string | null;
+  reviewSummary: string | null;
+  accuracyNote: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+function TrustGauge({ score }: { score: number }) {
+  const color = score >= 7 ? 'text-teal-400' : score >= 5 ? 'text-amber-400' : 'text-red-400';
+  const bgColor = score >= 7 ? 'bg-teal-400' : score >= 5 ? 'bg-amber-400' : 'bg-red-400';
+  const label = score >= 8 ? 'STRONG' : score >= 6 ? 'MODERATE' : score >= 4 ? 'WEAK' : 'VERY WEAK';
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between items-center">
+        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Trust Score</span>
+        <span className={`text-xs font-mono font-bold ${color} uppercase`}>{label}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 flex gap-0.5">
+          {Array.from({ length: 10 }, (_, i) => (
+            <div
+              key={i}
+              className={`flex-1 h-2 rounded-sm transition-all ${i < score ? bgColor : 'bg-white/10'}`}
+            />
+          ))}
+        </div>
+        <span className={`text-lg font-mono font-bold tabular-nums ${color}`}>{score}<span className="text-xs text-muted-foreground">/10</span></span>
+      </div>
+    </div>
+  );
+}
+
+function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
+  const { data, isLoading } = useQuery<{ tip: BettingTip | null; message?: string }>({
+    queryKey: ['bettingTip', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/analysis/${fixtureId}/betting-tip`);
+      if (!res.ok) throw new Error('Failed to fetch betting tip');
+      return res.json();
+    },
+    staleTime: 15 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
-  const { data: preAnalysis, isLoading: isLoadingPre } = useGetPreAnalysis(fixtureId, {
-    query: { enabled: phase === 'pre' && !!fixtureId, queryKey: ['preAnalysis', fixtureId], staleTime: 25 * 60_000, gcTime: 30 * 60_000 }
+  const { data: accData } = useQuery<{ hitRate: number | null; reviewed: number; hits: number }>({
+    queryKey: ['aiAccuracy'],
+    queryFn: async () => {
+      const res = await fetch('/api/analysis/accuracy');
+      if (!res.ok) throw new Error('Failed to fetch accuracy');
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
   });
-  const { data: liveAnalysis, isLoading: isLoadingLive } = useGetLiveAnalysis(fixtureId, {
-    query: { enabled: phase === 'live' && !!fixtureId, queryKey: ['liveAnalysis', fixtureId], staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: phase === 'live' ? 30_000 : false }
-  });
-  const { data: postAnalysis, isLoading: isLoadingPost } = useGetPostAnalysis(fixtureId, {
-    query: { enabled: phase === 'post' && !!fixtureId, queryKey: ['postAnalysis', fixtureId], staleTime: Infinity, gcTime: Infinity }
-  });
 
-  const analysis = phase === 'pre' ? preAnalysis : phase === 'live' ? liveAnalysis : postAnalysis;
-  const isLoading = phase === 'pre' ? isLoadingPre : phase === 'live' ? isLoadingLive : isLoadingPost;
+  const tip = data?.tip;
 
-  const getSignalColor = (signalKey: string, value: unknown) => {
-    if (signalKey.includes('goal') || signalKey.includes('red_card')) return 'text-destructive bg-destructive/10 border-destructive/20';
-    if (signalKey.includes('warn') || signalKey.includes('danger') || value === false) return 'text-amber-400 bg-amber-400/10 border-amber-400/20';
-    if (signalKey.includes('info')) return 'text-violet-400 bg-violet-400/10 border-violet-400/20';
-    return 'text-primary bg-primary/10 border-primary/20';
-  };
-
-  const getSignalIcon = (signalKey: string) => {
-    if (signalKey.includes('goal') || signalKey.includes('red_card')) return AlertTriangle;
-    if (signalKey.includes('warn')) return AlertTriangle;
-    if (signalKey.includes('info')) return Info;
-    return CheckCircle2;
-  };
-
-  const favoriteColor = (fav?: string) => {
-    if (fav === 'home') return 'text-teal-400 bg-teal-400/10 border-teal-400/20';
-    if (fav === 'away') return 'text-teal-400 bg-teal-400/10 border-teal-400/20';
-    return 'text-violet-400 bg-violet-400/10 border-violet-400/20';
+  const betTypeLabel = (t: string) => {
+    if (t === 'match_result') return 'Match Result';
+    if (t === 'over_under') return 'Goals Market';
+    if (t === 'btts') return 'Both Teams to Score';
+    if (t === 'no_bet') return 'No Bet';
+    return t;
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-      {/* Main AI analysis card */}
-      <div className="md:col-span-2 space-y-4">
-        <div className="glass-card p-6 rounded-xl min-h-[300px]">
-          <h3 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase mb-5 flex items-center">
-            <Activity className="w-4 h-4 mr-2 text-primary" />
-            AI SYNTHESIS — {phase.toUpperCase()}
-          </h3>
-
-          {isLoading ? (
-            <div className="flex items-center justify-center py-16">
-              <Activity className="w-6 h-6 text-primary animate-pulse" />
+    <div className="space-y-4">
+      {isLoading ? (
+        <div className="glass-card p-10 rounded-xl flex items-center justify-center">
+          <Activity className="w-6 h-6 text-primary animate-pulse" />
+        </div>
+      ) : !tip ? (
+        <div className="glass-card p-8 rounded-xl text-center space-y-2">
+          <Target className="w-8 h-8 text-white/20 mx-auto" />
+          <p className="text-muted-foreground text-sm">
+            {data?.message ?? "Betting tip not yet available — signal data is still being computed."}
+          </p>
+          <p className="text-xs text-muted-foreground font-mono opacity-60">
+            Tips are generated once sufficient pre-match data is available (odds + form + H2H).
+          </p>
+        </div>
+      ) : tip.betType === 'no_bet' ? (
+        <div className="glass-card p-6 rounded-xl border border-amber-400/20 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
+              <Minus className="w-5 h-5 text-amber-400" />
             </div>
-          ) : analysis?.headline ? (
-            <div className="space-y-5">
-              {/* Headline */}
-              <p className="text-xl font-bold text-white leading-snug">{analysis.headline}</p>
-
-              {/* Phase-specific badges */}
-              {phase === 'pre' && (
-                <div className="flex flex-wrap gap-2 items-center">
-                  {analysis.favorite && (
-                    <span className={`text-xs font-mono font-bold px-3 py-1 rounded-full border uppercase ${favoriteColor(analysis.favorite)}`}>
-                      Favourite: {analysis.favorite}
-                    </span>
-                  )}
-                  {typeof analysis.confidence === 'number' && (
-                    <div className="flex items-center gap-2 flex-1 min-w-[140px]">
-                      <span className="text-xs font-mono text-muted-foreground uppercase">Confidence</span>
-                      <div className="flex-1 bg-white/5 rounded-full h-1.5 overflow-hidden">
-                        <div
-                          className="h-1.5 rounded-full bg-teal-400"
-                          style={{ width: `${Math.round(analysis.confidence * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono text-teal-400 tabular-nums">{Math.round(analysis.confidence * 100)}%</span>
-                    </div>
-                  )}
+            <div>
+              <div className="text-xs font-mono text-amber-400 uppercase tracking-wider">AI Verdict</div>
+              <div className="text-lg font-bold text-white">No clear edge — skip this fixture</div>
+            </div>
+          </div>
+          <p className="text-muted-foreground text-sm leading-relaxed">{tip.reasoning}</p>
+          <TrustGauge score={tip.trustScore} />
+        </div>
+      ) : (
+        <>
+          {/* Main tip card */}
+          <div className="glass-card p-6 rounded-xl border border-primary/20 space-y-5">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+                  {betTypeLabel(tip.betType)}
                 </div>
-              )}
-
-              {phase === 'live' && (
-                <div className="flex flex-wrap gap-2 items-center">
-                  {analysis.momentum_verdict && (
-                    <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-violet-400 bg-violet-400/10 border-violet-400/20 uppercase">
-                      Momentum: {analysis.momentum_verdict}
-                    </span>
-                  )}
-                  {analysis.alert_worthy && (
-                    <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-amber-400 bg-amber-400/10 border-amber-400/20 uppercase flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                      Alert-worthy
-                    </span>
-                  )}
+                <div className="text-2xl font-bold text-white leading-tight">
+                  {tip.recommendation}
                 </div>
-              )}
+                {tip.marketOdds != null && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-xs font-mono text-muted-foreground uppercase">Market Odds</span>
+                    <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0 w-14 h-14 rounded-xl bg-primary/10 border border-primary/20 flex flex-col items-center justify-center">
+                <Target className="w-5 h-5 text-primary mb-0.5" />
+                <span className="text-[10px] font-mono text-muted-foreground uppercase">BET</span>
+              </div>
+            </div>
 
-              {phase === 'post' && analysis.deviation_note && (
-                <div className="text-xs font-mono text-amber-400 bg-amber-400/5 border border-amber-400/15 px-3 py-2 rounded-lg">
-                  {analysis.deviation_note}
-                </div>
-              )}
+            <TrustGauge score={tip.trustScore} />
 
-              {/* Narrative */}
-              <p className="text-muted-foreground leading-relaxed">{analysis.narrative}</p>
+            <div className="border-t border-white/5 pt-4">
+              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">AI Reasoning</div>
+              <p className="text-sm text-white/80 leading-relaxed">{tip.reasoning}</p>
+            </div>
 
-              {/* Key factors */}
-              {analysis.key_factors && analysis.key_factors.length > 0 && (
-                <div className="space-y-2 border-t border-white/5 pt-4">
-                  <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Key Factors</span>
-                  <div className="flex flex-wrap gap-2">
-                    {analysis.key_factors.map((f, i) => (
-                      <span key={i} className="text-xs font-mono text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded">
-                        {f}
-                      </span>
-                    ))}
+            <div className="text-[10px] font-mono text-muted-foreground/40 border-t border-white/5 pt-2">
+              Generated {format(new Date(tip.createdAt), 'MMM dd, HH:mm')} · For informational purposes only
+            </div>
+          </div>
+
+          {/* AI accuracy tracker */}
+          {accData && accData.reviewed > 0 && (
+            <div className="glass-card p-4 rounded-xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-violet-400" />
+                <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">AI Track Record</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="text-right">
+                  <div className="text-xs font-mono text-muted-foreground">Hit Rate</div>
+                  <div className={`text-sm font-mono font-bold tabular-nums ${(accData.hitRate ?? 0) >= 55 ? 'text-teal-400' : 'text-amber-400'}`}>
+                    {accData.hitRate ?? '—'}%
                   </div>
                 </div>
-              )}
-
-              {/* Man of match */}
-              {phase === 'post' && analysis.man_of_match && (
-                <div className="flex items-center gap-2 border-t border-white/5 pt-4">
-                  <CheckCircle2 className="w-4 h-4 text-teal-400" />
-                  <span className="text-xs font-mono text-muted-foreground uppercase">Decisive Player</span>
-                  <span className="text-sm font-mono font-bold text-teal-400">{analysis.man_of_match}</span>
+                <div className="text-right">
+                  <div className="text-xs font-mono text-muted-foreground">Tips Reviewed</div>
+                  <div className="text-sm font-mono font-bold text-white tabular-nums">{accData.hits}/{accData.reviewed}</div>
                 </div>
-              )}
-
-              {analysis.cachedAt && (
-                <div className="text-[10px] font-mono opacity-30 pt-2">
-                  Synthesized {format(new Date(analysis.cachedAt), 'HH:mm:ss')}
-                </div>
-              )}
+              </div>
             </div>
-          ) : (
-            <p className="text-muted-foreground leading-relaxed italic py-8">
-              Analysis pending — waiting for sufficient signal data for {phase}-phase model execution.
-            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Live Analysis Tab ────────────────────────────────────────────────────────
+
+function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
+  const { data: liveAnalysis, isLoading } = useGetLiveAnalysis(fixtureId, {
+    query: {
+      enabled: !!fixtureId,
+      queryKey: ['liveAnalysis', fixtureId],
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchInterval: 30_000
+    } as any // eslint-disable-line @typescript-eslint/no-explicit-any
+  });
+
+  return (
+    <div className="glass-card p-6 rounded-xl min-h-[280px]">
+      <h3 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase mb-5 flex items-center">
+        <Activity className="w-4 h-4 mr-2 text-primary" />
+        LIVE ANALYSIS
+      </h3>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-16">
+          <Activity className="w-6 h-6 text-primary animate-pulse" />
+        </div>
+      ) : liveAnalysis?.headline ? (
+        <div className="space-y-4">
+          <p className="text-xl font-bold text-white leading-snug">{liveAnalysis.headline}</p>
+          <div className="flex flex-wrap gap-2">
+            {liveAnalysis.momentum_verdict && (
+              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-violet-400 bg-violet-400/10 border-violet-400/20 uppercase">
+                {liveAnalysis.momentum_verdict}
+              </span>
+            )}
+            {liveAnalysis.alert_worthy && (
+              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-amber-400 bg-amber-400/10 border-amber-400/20 uppercase flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                Alert-worthy
+              </span>
+            )}
+          </div>
+          <p className="text-muted-foreground leading-relaxed">{liveAnalysis.narrative}</p>
+          {liveAnalysis.key_factors && liveAnalysis.key_factors.length > 0 && (
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+              {liveAnalysis.key_factors.map((f: string, i: number) => (
+                <span key={i} className="text-xs font-mono text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded">{f}</span>
+              ))}
+            </div>
           )}
         </div>
-      </div>
-      
-      {/* Signals sidebar */}
-      <div className="space-y-4">
-        <h3 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">Detected Signals</h3>
-        
-        {!signalsData?.signals?.length ? (
-          <div className="glass-card p-6 rounded-xl text-center">
-            <p className="text-sm text-muted-foreground">No anomalous signals detected.</p>
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {signalsData.signals.map((signal) => {
-              const Icon = getSignalIcon(signal.signalKey);
-              const colors = getSignalColor(signal.signalKey, signal.signalBool);
-              
-              return (
-                <div key={signal.id} className={`p-3.5 rounded-xl border flex items-start gap-3 ${colors}`}>
-                  <Icon className="w-4 h-4 mt-0.5 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <h4 className="font-bold text-sm leading-tight mb-1">{signal.signalLabel}</h4>
-                    {signal.signalValue !== undefined && signal.signalValue !== null && (
-                      <div className="font-mono text-xs opacity-70">VAL: {String(signal.signalValue)}</div>
-                    )}
-                    <div className="text-[10px] uppercase tracking-wider mt-1.5 opacity-50 font-mono">
-                      {format(new Date(signal.triggeredAt || Date.now()), 'HH:mm:ss')}
-                    </div>
-                  </div>
+      ) : (
+        <p className="text-muted-foreground italic py-8 text-center">Live analysis pending — waiting for in-play signal data.</p>
+      )}
+    </div>
+  );
+}
+
+// ─── Post Match Review Tab ────────────────────────────────────────────────────
+
+function PostReviewTab({ fixtureId }: { fixtureId: number }) {
+  const { data, isLoading } = useQuery<{ review: BettingTip | null; message?: string }>({
+    queryKey: ['postReview', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/analysis/${fixtureId}/post-review`);
+      if (!res.ok) throw new Error('Failed to fetch post review');
+      return res.json();
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
+  const review = data?.review;
+
+  const outcomeConfig = {
+    hit: { label: 'HIT', color: 'text-teal-400 bg-teal-400/10 border-teal-400/30', icon: CheckCircle2 },
+    miss: { label: 'MISS', color: 'text-red-400 bg-red-400/10 border-red-400/30', icon: X },
+    partial: { label: 'PARTIAL', color: 'text-amber-400 bg-amber-400/10 border-amber-400/30', icon: Minus },
+  };
+
+  return (
+    <div className="space-y-4">
+      {isLoading ? (
+        <div className="glass-card p-10 rounded-xl flex items-center justify-center">
+          <Activity className="w-6 h-6 text-primary animate-pulse" />
+        </div>
+      ) : !review ? (
+        <div className="glass-card p-8 rounded-xl text-center space-y-2">
+          <Target className="w-8 h-8 text-white/20 mx-auto" />
+          <p className="text-muted-foreground text-sm">
+            {data?.message ?? "No prediction was made for this fixture."}
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* Original prediction */}
+          <div className="glass-card p-5 rounded-xl border border-white/10 space-y-3">
+            <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Original Prediction</div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1">
+                <div className="text-lg font-bold text-white">{review.recommendation}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-mono text-muted-foreground">Trust</span>
+                  <span className="text-xs font-mono font-bold text-primary">{review.trustScore}/10</span>
+                  {review.marketOdds != null && (
+                    <>
+                      <span className="text-white/20">·</span>
+                      <span className="text-xs font-mono text-muted-foreground">Odds</span>
+                      <span className="text-xs font-mono font-bold text-teal-400">{review.marketOdds.toFixed(2)}</span>
+                    </>
+                  )}
                 </div>
-              );
-            })}
+              </div>
+              {review.outcome && outcomeConfig[review.outcome as keyof typeof outcomeConfig] && (() => {
+                const cfg = outcomeConfig[review.outcome as keyof typeof outcomeConfig];
+                const Icon = cfg.icon;
+                return (
+                  <span className={`flex items-center gap-1.5 text-sm font-mono font-bold px-3 py-1.5 rounded-full border uppercase shrink-0 ${cfg.color}`}>
+                    <Icon className="w-4 h-4" /> {cfg.label}
+                  </span>
+                );
+              })()}
+            </div>
+            <p className="text-sm text-white/60 leading-relaxed border-t border-white/5 pt-3">{review.reasoning}</p>
           </div>
-        )}
-      </div>
+
+          {/* Review summary */}
+          {review.reviewHeadline && (
+            <div className="glass-card p-5 rounded-xl space-y-3">
+              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Match Review</div>
+              <p className="text-base font-bold text-white">{review.reviewHeadline}</p>
+              {review.reviewSummary && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{review.reviewSummary}</p>
+              )}
+              {review.accuracyNote && (
+                <div className="border-t border-white/5 pt-3">
+                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1.5">Signal Accuracy</div>
+                  <p className="text-xs text-white/70 font-mono leading-relaxed">{review.accuracyNote}</p>
+                </div>
+              )}
+              {review.reviewedAt && (
+                <div className="text-[10px] font-mono text-muted-foreground/40">
+                  Reviewed {format(new Date(review.reviewedAt), 'MMM dd, HH:mm')}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

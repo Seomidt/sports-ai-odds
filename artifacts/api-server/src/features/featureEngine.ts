@@ -12,6 +12,7 @@ import {
   teamSeasonStats,
 } from "@workspace/db/schema";
 import { eq, and, desc, sql, or } from "drizzle-orm";
+import { triggerPostMatchReview } from "../ai/analysisLayer.js";
 
 async function upsertFeature(fixtureId: number, teamId: number, phase: string, featureKey: string, featureValue: number | null) {
   await db
@@ -391,4 +392,9 @@ export async function runPostMatchFeatures(fixtureId: number) {
   }
 
   console.log(`[feature-engine] Post-match features computed for fixture ${fixtureId}`);
+
+  // Trigger AI betting tip review (non-blocking)
+  triggerPostMatchReview(fixtureId).catch((err) =>
+    console.error(`[feature-engine] Post-match review error for ${fixtureId}:`, err)
+  );
 }

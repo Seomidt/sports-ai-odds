@@ -27,6 +27,8 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
       retry: (failureCount, error: unknown) => {
         const status = (error as { status?: number })?.status;
         if (status && status >= 400 && status < 500) return false;

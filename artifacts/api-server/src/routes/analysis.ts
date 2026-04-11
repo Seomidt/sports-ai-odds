@@ -12,6 +12,7 @@ async function getSignals(fixtureId: number, phase: string) {
 }
 
 // GET /api/analysis/:fixtureId/pre
+// AI result cached 30 min in analysisLayer; HTTP cache 25 min
 router.get("/analysis/:fixtureId/pre", async (req, res) => {
   const id = parseInt(req.params.fixtureId ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
@@ -19,6 +20,7 @@ router.get("/analysis/:fixtureId/pre", async (req, res) => {
   try {
     const result = await getPreAnalysis(id);
     const signals = await getSignals(id, "pre");
+    res.set("Cache-Control", "public, max-age=1500, stale-while-revalidate=300");
     return res.json({
       phase: "pre",
       headline: result.headline,
@@ -36,6 +38,7 @@ router.get("/analysis/:fixtureId/pre", async (req, res) => {
 });
 
 // GET /api/analysis/:fixtureId/live
+// AI result cached 5 min in analysisLayer; HTTP cache 4 min
 router.get("/analysis/:fixtureId/live", async (req, res) => {
   const id = parseInt(req.params.fixtureId ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
@@ -43,6 +46,7 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
   try {
     const result = await getLiveAnalysis(id);
     const signals = await getSignals(id, "live");
+    res.set("Cache-Control", "public, max-age=60, stale-while-revalidate=30");
     return res.json({
       phase: "live",
       headline: result.headline,
@@ -60,6 +64,7 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
 });
 
 // GET /api/analysis/:fixtureId/post
+// AI result cached permanently in analysisLayer; HTTP cache 1 day
 router.get("/analysis/:fixtureId/post", async (req, res) => {
   const id = parseInt(req.params.fixtureId ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
@@ -67,6 +72,7 @@ router.get("/analysis/:fixtureId/post", async (req, res) => {
   try {
     const result = await getPostAnalysis(id);
     const signals = await getSignals(id, "post");
+    res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=3600");
     return res.json({
       phase: "post",
       headline: result.headline,

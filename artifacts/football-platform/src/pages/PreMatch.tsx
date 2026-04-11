@@ -33,7 +33,7 @@ function PreMatchCard({ fixture }: { fixture: Fixture }) {
   const { data: signalData } = useGetFixtureSignals(
     fixture.fixtureId,
     { phase: "pre" },
-    { query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 5 * 60 * 1000 } }
+    { query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 3 * 60 * 1000, gcTime: 10 * 60 * 1000 } }
   );
   const signals = signalData?.signals ?? [];
 
@@ -109,7 +109,9 @@ function PreMatchCard({ fixture }: { fixture: Fixture }) {
 }
 
 export function PreMatch() {
-  const { data, isLoading } = useGetTodayFixtures();
+  const { data, isLoading } = useGetTodayFixtures({
+    query: { queryKey: ["fixtures-today"], staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 },
+  });
 
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);
   const prematch = all

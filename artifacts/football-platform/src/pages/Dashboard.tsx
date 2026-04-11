@@ -41,7 +41,7 @@ function TopPickCard({ fixture, rank }: { fixture: TopPickFixture; rank: number 
   const { data: signalData } = useGetFixtureSignals(
     fixture.fixtureId,
     { phase: "pre" },
-    { query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 5 * 60 * 1000 } }
+    { query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 3 * 60 * 1000, gcTime: 10 * 60 * 1000 } }
   );
   const signals = signalData?.signals ?? [];
   const count = fixture.signalCount;
@@ -152,7 +152,7 @@ function SmallPickCard({ fixture }: { fixture: TopPickFixture }) {
 
 export function Dashboard() {
   const { data, isLoading } = useGetTopPickFixtures({
-    query: { queryKey: ["top-picks"], staleTime: 2 * 60 * 1000, refetchInterval: 5 * 60 * 1000 },
+    query: { queryKey: ["top-picks"], staleTime: 90_000, gcTime: 10 * 60 * 1000, refetchInterval: 3 * 60 * 1000 },
   });
 
   const allFixtures = data?.fixtures ?? [];

@@ -181,11 +181,20 @@ export function Match() {
 }
 
 function AnalysisTab({ fixtureId, phase }: { fixtureId: number, phase: 'pre' | 'live' | 'post' }) {
-  const { data: signalsData } = useGetFixtureSignals(fixtureId, { phase }, { query: { enabled: !!fixtureId, queryKey: ['signals', fixtureId, phase] } });
-  
-  const { data: preAnalysis, isLoading: isLoadingPre } = useGetPreAnalysis(fixtureId, { query: { enabled: phase === 'pre' && !!fixtureId, queryKey: ['preAnalysis', fixtureId] }});
-  const { data: liveAnalysis, isLoading: isLoadingLive } = useGetLiveAnalysis(fixtureId, { query: { enabled: phase === 'live' && !!fixtureId, queryKey: ['liveAnalysis', fixtureId], refetchInterval: phase === 'live' ? 30_000 : false } });
-  const { data: postAnalysis, isLoading: isLoadingPost } = useGetPostAnalysis(fixtureId, { query: { enabled: phase === 'post' && !!fixtureId, queryKey: ['postAnalysis', fixtureId] }});
+  const sigStale = phase === 'post' ? Infinity : phase === 'live' ? 30_000 : 3 * 60_000;
+  const { data: signalsData } = useGetFixtureSignals(fixtureId, { phase }, {
+    query: { enabled: !!fixtureId, queryKey: ['signals', fixtureId, phase], staleTime: sigStale, gcTime: phase === 'post' ? Infinity : 10 * 60_000 }
+  });
+
+  const { data: preAnalysis, isLoading: isLoadingPre } = useGetPreAnalysis(fixtureId, {
+    query: { enabled: phase === 'pre' && !!fixtureId, queryKey: ['preAnalysis', fixtureId], staleTime: 25 * 60_000, gcTime: 30 * 60_000 }
+  });
+  const { data: liveAnalysis, isLoading: isLoadingLive } = useGetLiveAnalysis(fixtureId, {
+    query: { enabled: phase === 'live' && !!fixtureId, queryKey: ['liveAnalysis', fixtureId], staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: phase === 'live' ? 30_000 : false }
+  });
+  const { data: postAnalysis, isLoading: isLoadingPost } = useGetPostAnalysis(fixtureId, {
+    query: { enabled: phase === 'post' && !!fixtureId, queryKey: ['postAnalysis', fixtureId], staleTime: Infinity, gcTime: Infinity }
+  });
 
   const analysis = phase === 'pre' ? preAnalysis : phase === 'live' ? liveAnalysis : postAnalysis;
   const isLoading = phase === 'pre' ? isLoadingPre : phase === 'live' ? isLoadingLive : isLoadingPost;
@@ -353,9 +362,9 @@ function AnalysisTab({ fixtureId, phase }: { fixtureId: number, phase: 'pre' | '
 // ─── OddsTab ──────────────────────────────────────────────────────────────────
 
 function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number; isLive: boolean; homeTeam: string; awayTeam: string }) {
-  const { data: preData } = useGetFixtureOdds(fixtureId);
-  const { data: liveData } = useGetFixtureLiveOdds(fixtureId);
-  const { data: marketsData } = useGetFixtureOddsMarkets(fixtureId);
+  const { data: preData } = useGetFixtureOdds(fixtureId, { query: { staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
+  const { data: liveData } = useGetFixtureLiveOdds(fixtureId, { query: { staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: 30_000 } });
+  const { data: marketsData } = useGetFixtureOddsMarkets(fixtureId, { query: { staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
 
   const snap = preData?.odds ?? null;
   const liveOdds = liveData?.liveOdds ?? [];
@@ -489,9 +498,9 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
   homeTeam: string;
   awayTeam: string;
 }) {
-  const { data: h2hData, isLoading } = useGetFixtureH2H(fixtureId);
-  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2024 });
-  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2024 });
+  const { data: h2hData, isLoading } = useGetFixtureH2H(fixtureId, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
+  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2024 }, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
+  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2024 }, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
 
   const h2hRows = h2hData?.h2h ?? [];
   const homeSeasonStats = homeStats?.statistics?.[0] ?? null;

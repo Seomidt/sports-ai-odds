@@ -9,6 +9,7 @@ import { useGetMe } from "@workspace/api-client-react";
 import { SessionProvider } from "./lib/session";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
+import { Fixtures } from "./pages/Fixtures";
 import { Match } from "./pages/Match";
 import { Standings } from "./pages/Standings";
 import { Following } from "./pages/Following";
@@ -201,6 +202,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/sign-up/*?" component={SignUpPage} />
             
             <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
+            <Route path="/fixtures"><ProtectedRoute component={Fixtures} /></Route>
             <Route path="/match/:id"><ProtectedRoute component={Match} /></Route>
             <Route path="/standings"><ProtectedRoute component={Standings} /></Route>
             <Route path="/following"><ProtectedRoute component={Following} /></Route>

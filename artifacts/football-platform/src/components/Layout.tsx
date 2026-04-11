@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, LayoutDashboard, ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X } from "lucide-react";
+import { Activity, LayoutDashboard, ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, CalendarDays } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { AlertPoller } from "./AlertPoller";
@@ -14,6 +14,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/fixtures", label: "Kampe", icon: CalendarDays },
     { href: "/standings", label: "Standings", icon: ListOrdered },
     { href: "/following", label: "Following", icon: Star },
   ];

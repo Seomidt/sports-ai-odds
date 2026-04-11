@@ -19,9 +19,10 @@ router.get("/fixtures/today", async (req, res) => {
 
   const now = new Date();
   const start = new Date(now);
+  start.setDate(start.getDate() - 3); // include last 3 days for PostMatch
   start.setHours(0, 0, 0, 0);
   const end = new Date(now);
-  end.setDate(end.getDate() + 3);
+  end.setDate(end.getDate() + 7);
   end.setHours(23, 59, 59, 999);
 
   const rows = await db.query.fixtures.findMany({

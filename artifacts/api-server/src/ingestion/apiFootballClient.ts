@@ -91,11 +91,11 @@ export function getApiStats() {
 }
 
 export const TRACKED_LEAGUES = [
-  { id: 39, name: "Premier League", season: 2024 },
-  { id: 140, name: "La Liga", season: 2024 },
-  { id: 135, name: "Serie A", season: 2024 },
-  { id: 78, name: "Bundesliga", season: 2024 },
-  { id: 2, name: "Champions League", season: 2024 },
+  { id: 39, name: "Premier League", season: 2025 },
+  { id: 140, name: "La Liga", season: 2025 },
+  { id: 135, name: "Serie A", season: 2025 },
+  { id: 78, name: "Bundesliga", season: 2025 },
+  { id: 2, name: "Champions League", season: 2025 },
 ];
 
 export interface ApiFixture {

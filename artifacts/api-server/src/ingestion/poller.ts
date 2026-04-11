@@ -133,17 +133,16 @@ async function syncFixturesForDate(date: string) {
 }
 
 async function syncNearTermFixtures() {
-  // Today + tomorrow: called frequently (every 3 min)
+  // Yesterday + today + tomorrow: called frequently (every 3 min)
   const today = new Date().toISOString().split("T")[0]!;
+  await syncFixturesForDate(getDateOffset(-1)); // yesterday — catches FT games for PostMatch
   await syncFixturesForDate(today);
   await syncFixturesForDate(getTomorrow());
 }
 
 async function syncTodayFixtures() {
-  // Full 7-day window: called every 2 hours for days 3-7
-  const today = new Date().toISOString().split("T")[0]!;
-  await syncFixturesForDate(today);
-  for (let i = 1; i <= 6; i++) {
+  // 3 days back + today + 7 days ahead: called every 2 hours
+  for (let i = -3; i <= 6; i++) {
     await syncFixturesForDate(getDateOffset(i));
   }
 }

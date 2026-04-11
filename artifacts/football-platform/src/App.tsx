@@ -18,6 +18,7 @@ import { Standings } from "./pages/Standings";
 import { Following } from "./pages/Following";
 import { Admin } from "./pages/Admin";
 import NotFound from "./pages/not-found";
+import accessPendingImage from "@assets/IMG_3621_1775934471623.png";
 import { ShieldAlert, Activity } from "lucide-react";
 
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -99,10 +100,13 @@ function ClerkQueryClientCacheInvalidator() {
 function AccessPendingPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background text-center px-4">
+      <div className="w-40 h-40 rounded-3xl overflow-hidden border border-white/10 bg-white/5 mb-6 shadow-2xl">
+        <img src={accessPendingImage} alt="Access pending" className="w-full h-full object-cover" />
+      </div>
       <ShieldAlert className="w-16 h-16 text-secondary mb-6" />
       <h1 className="text-3xl font-bold font-mono text-white mb-2 tracking-tight">ACCESS PENDING</h1>
       <p className="text-muted-foreground max-w-md mb-8">
-        Your account has been authenticated but you lack authorization to access the terminal. Please contact a syndicate administrator to grant access.
+        Your account is signed in, but access has not been granted yet. If you should have access, ask an admin to approve your account.
       </p>
       <button onClick={() => window.location.href = '/'} className="px-6 py-2 border border-white/10 rounded-md text-sm font-mono text-white hover:bg-white/5 transition-colors">
         RETURN

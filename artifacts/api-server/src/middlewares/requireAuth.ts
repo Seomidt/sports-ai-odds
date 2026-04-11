@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import { allowedUsers } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-const ADMIN_EMAIL = "seomidt@gmail.com";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "seomidt@gmail.com";
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const auth = getAuth(req);

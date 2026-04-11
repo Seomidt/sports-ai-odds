@@ -73,7 +73,9 @@ export function Following() {
     request: { headers: { 'x-session-id': sessionId } }
   });
 
-  const markReadMutation = useMarkAlertRead();
+  const markReadMutation = useMarkAlertRead({
+    request: { headers: { 'x-session-id': sessionId } }
+  });
   const explainMutation = useExplainAlert();
   const [explainingAlertId, setExplainingAlertId] = useState<number | null>(null);
 

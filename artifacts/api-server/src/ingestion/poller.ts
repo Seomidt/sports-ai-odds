@@ -360,7 +360,7 @@ async function syncLiveOddsForFixture(fixtureId: number) {
   const data = await fetchLiveOdds(fixtureId);
   if (!data || data.length === 0) return;
   const entry = data[0];
-  if (!entry || !entry.bookmakers.length) return;
+  if (!entry || !entry.bookmakers || entry.bookmakers.length === 0) return;
 
   const bm = entry.bookmakers[0]!;
   const matchWinner = bm.bets.find((b) => b.name === "Match Winner");

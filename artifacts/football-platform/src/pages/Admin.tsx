@@ -420,20 +420,6 @@ export function Admin() {
                   </div>
                 </div>
 
-                <div className="glass-card p-6 rounded-xl">
-                  <h3 className="text-sm font-mono text-muted-foreground uppercase mb-4">Recent Ingestions</h3>
-                  <div className="space-y-3">
-                    {statsData.recentRequests?.map((req, i) => (
-                      <div key={i} className="flex justify-between items-center text-sm font-mono border-b border-white/5 pb-2 last:border-0">
-                        <span className="text-white truncate pr-4">{req.endpoint}</span>
-                        <span className="text-muted-foreground whitespace-nowrap">{format(new Date(req.time), 'HH:mm:ss')}</span>
-                      </div>
-                    ))}
-                    {!statsData.recentRequests?.length && (
-                      <div className="text-sm text-muted-foreground text-center py-4">No recent activity</div>
-                    )}
-                  </div>
-                </div>
               </div>
             ) : null}
           </div>

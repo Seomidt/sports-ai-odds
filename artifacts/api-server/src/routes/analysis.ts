@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db } from "@workspace/db";
 import {
   getBettingTip,
+  getBettingTips,
   getLiveAnalysis,
   triggerPostMatchReview,
   getAiAccuracyStats,
@@ -10,18 +11,17 @@ import {
 
 const router = Router();
 
-// GET /api/analysis/:fixtureId/betting-tip — pre-match betting recommendation (stored in DB permanently)
 router.get("/analysis/:fixtureId/betting-tip", async (req, res) => {
   const id = parseInt(req.params["fixtureId"] ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
 
   try {
-    const tip = await getBettingTip(id);
-    if (!tip) {
-      return res.json({ tip: null, message: "Insufficient signal data — tip not yet available." });
+    const tips = await getBettingTips(id);
+    if (!tips || tips.length === 0) {
+      return res.json({ tips: [], tip: null, message: "Insufficient signal data — tip not yet available." });
     }
     res.set("Cache-Control", "public, max-age=900, stale-while-revalidate=300");
-    return res.json({ tip });
+    return res.json({ tips, tip: tips[0] });
   } catch (err) {
     console.error("[analysis] betting-tip error:", err);
     return res.status(500).json({ error: "Tip generation failed" });
@@ -37,16 +37,16 @@ router.get("/analysis/:fixtureId/post-review", async (req, res) => {
     // Trigger review if not done yet (idempotent)
     await triggerPostMatchReview(id);
 
-    const tip = await db.query.aiBettingTips.findFirst({
+    const tips = await db.query.aiBettingTips.findMany({
       where: (t, { eq: eqFn }) => eqFn(t.fixtureId, id),
     });
 
-    if (!tip) {
-      return res.json({ review: null, message: "No prediction was made for this fixture." });
+    if (!tips.length) {
+      return res.json({ reviews: [], review: null, message: "No prediction was made for this fixture." });
     }
 
     res.set("Cache-Control", "public, max-age=86400, stale-while-revalidate=3600");
-    return res.json({ review: tip });
+    return res.json({ reviews: tips, review: tips[0] });
   } catch (err) {
     console.error("[analysis] post-review error:", err);
     return res.status(500).json({ error: "Review generation failed" });

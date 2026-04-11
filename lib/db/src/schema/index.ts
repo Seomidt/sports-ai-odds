@@ -9,6 +9,7 @@ import {
   jsonb,
   index,
   unique,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
@@ -558,19 +559,18 @@ export const aiBettingTips = pgTable(
   "ai_betting_tips",
   {
     id: serial("id").primaryKey(),
-    fixtureId: integer("fixture_id").notNull().unique(),
+    fixtureId: integer("fixture_id").notNull(),
     homeTeam: text("home_team"),
     awayTeam: text("away_team"),
     kickoff: timestamp("kickoff"),
     leagueName: text("league_name"),
-    // The recommendation
     recommendation: text("recommendation").notNull(),
     betType: text("bet_type").notNull(),
     betSide: text("bet_side"),
     trustScore: integer("trust_score").notNull(),
     reasoning: text("reasoning").notNull(),
     marketOdds: real("market_odds"),
-    // Post-match review (filled in after FT)
+    valueRating: text("value_rating"),
     outcome: text("outcome"),
     reviewHeadline: text("review_headline"),
     reviewSummary: text("review_summary"),
@@ -578,7 +578,10 @@ export const aiBettingTips = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
     reviewedAt: timestamp("reviewed_at"),
   },
-  (t) => [index("ai_betting_tips_fixture_idx").on(t.fixtureId)]
+  (t) => [
+    index("ai_betting_tips_fixture_idx").on(t.fixtureId),
+    uniqueIndex("ai_betting_tips_fixture_bet_uniq").on(t.fixtureId, t.betType),
+  ]
 );
 
 export type H2HFixture = typeof h2hFixtures.$inferSelect;

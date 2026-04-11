@@ -119,8 +119,10 @@ export function Match() {
               </div>
               
               <div className="flex flex-col items-center justify-center w-1/3">
-                <div className="text-5xl md:text-7xl font-mono font-bold text-white tracking-tighter">
-                  {fixture.homeGoals ?? '-'} <span className="text-white/20 px-2">:</span> {fixture.awayGoals ?? '-'}
+                <div className="flex items-center justify-center gap-2 text-5xl md:text-7xl font-mono font-bold text-white tracking-tighter whitespace-nowrap">
+                  <span>{fixture.homeGoals ?? '-'}</span>
+                  <span className="text-white/20">:</span>
+                  <span>{fixture.awayGoals ?? '-'}</span>
                 </div>
                 {fixture.kickoff && !isLive && fixture.statusShort === 'NS' && (
                   <span className="mt-4 text-muted-foreground font-mono">{format(new Date(fixture.kickoff), 'MMM dd, HH:mm')}</span>
@@ -195,6 +197,7 @@ interface BettingTip {
   trustScore: number;
   reasoning: string;
   marketOdds: number | null;
+  valueRating: string | null;
   outcome: string | null;
   reviewHeadline: string | null;
   reviewSummary: string | null;
@@ -228,8 +231,76 @@ function TrustGauge({ score }: { score: number }) {
   );
 }
 
+function ValueBadge({ rating }: { rating: string | null }) {
+  if (!rating) return null;
+  const config: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    strong_value: { label: 'STRONG VALUE', color: 'text-teal-300', bg: 'bg-teal-400/10', border: 'border-teal-400/30' },
+    value: { label: 'VALUE', color: 'text-teal-400', bg: 'bg-teal-400/10', border: 'border-teal-400/20' },
+    fair: { label: 'FAIR PRICE', color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20' },
+    overpriced: { label: 'OVERPRICED', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20' },
+  };
+  const c = config[rating] ?? config.fair!;
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${c.color} ${c.bg} border ${c.border}`}>
+      {c.label}
+    </span>
+  );
+}
+
+function TipCard({ tip, betTypeLabel }: { tip: BettingTip; betTypeLabel: string }) {
+  const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
+  const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
+
+  return (
+    <div className={`glass-card p-5 rounded-xl border ${borderColor} space-y-4`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
+              {betTypeLabel}
+            </span>
+            <ValueBadge rating={tip.valueRating} />
+          </div>
+          <div className="text-xl font-bold text-white leading-tight">
+            {tip.recommendation}
+          </div>
+          {tip.marketOdds != null && (
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-xs font-mono text-muted-foreground uppercase">Odds</span>
+              <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
+            </div>
+          )}
+        </div>
+        <div className="shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
+              {tip.trustScore}
+            </span>
+            <span className="text-xs text-muted-foreground font-mono">/10</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex gap-0.5">
+        {Array.from({ length: 10 }, (_, i) => (
+          <div
+            key={i}
+            className={`flex-1 h-1.5 rounded-sm ${
+              i < tip.trustScore
+                ? (tip.trustScore >= 7 ? 'bg-teal-400' : tip.trustScore >= 5 ? 'bg-amber-400' : 'bg-white/30')
+                : 'bg-white/10'
+            }`}
+          />
+        ))}
+      </div>
+
+      <p className="text-sm text-white/70 leading-relaxed">{tip.reasoning}</p>
+    </div>
+  );
+}
+
 function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
-  const { data, isLoading } = useQuery<{ tip: BettingTip | null; message?: string }>({
+  const { data, isLoading } = useQuery<{ tips: BettingTip[]; tip: BettingTip | null; message?: string }>({
     queryKey: ['bettingTip', fixtureId],
     queryFn: async () => {
       const res = await fetch(`/api/analysis/${fixtureId}/betting-tip`);
@@ -250,7 +321,7 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     staleTime: 5 * 60_000,
   });
 
-  const tip = data?.tip;
+  const tips = data?.tips ?? [];
 
   const betTypeLabel = (t: string) => {
     if (t === 'match_result') return 'Match Result';
@@ -260,13 +331,22 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     return t;
   };
 
+  const bestTip = tips.reduce<BettingTip | null>((best, tip) => {
+    if (!best) return tip;
+    const bestValueScore = best.valueRating === 'strong_value' ? 3 : best.valueRating === 'value' ? 2 : best.valueRating === 'fair' ? 1 : 0;
+    const tipValueScore = tip.valueRating === 'strong_value' ? 3 : tip.valueRating === 'value' ? 2 : tip.valueRating === 'fair' ? 1 : 0;
+    if (tipValueScore > bestValueScore) return tip;
+    if (tipValueScore === bestValueScore && tip.trustScore > best.trustScore) return tip;
+    return best;
+  }, null);
+
   return (
     <div className="space-y-4">
       {isLoading ? (
         <div className="glass-card p-10 rounded-xl flex items-center justify-center">
           <Activity className="w-6 h-6 text-primary animate-pulse" />
         </div>
-      ) : !tip ? (
+      ) : tips.length === 0 ? (
         <div className="glass-card p-8 rounded-xl text-center space-y-2">
           <Target className="w-8 h-8 text-white/20 mx-auto" />
           <p className="text-muted-foreground text-sm">
@@ -276,58 +356,30 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
             Tips are generated once sufficient pre-match data is available (odds + form + H2H).
           </p>
         </div>
-      ) : tip.betType === 'no_bet' ? (
-        <div className="glass-card p-6 rounded-xl border border-amber-400/20 space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-amber-400/10 border border-amber-400/20 flex items-center justify-center">
-              <Minus className="w-5 h-5 text-amber-400" />
-            </div>
-            <div>
-              <div className="text-xs font-mono text-amber-400 uppercase tracking-wider">AI Verdict</div>
-              <div className="text-lg font-bold text-white">No clear edge — skip this fixture</div>
-            </div>
-          </div>
-          <p className="text-muted-foreground text-sm leading-relaxed">{tip.reasoning}</p>
-          <TrustGauge score={tip.trustScore} />
-        </div>
       ) : (
         <>
-          {/* Main tip card */}
-          <div className="glass-card p-6 rounded-xl border border-primary/20 space-y-5">
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
-                  {betTypeLabel(tip.betType)}
-                </div>
-                <div className="text-2xl font-bold text-white leading-tight">
-                  {tip.recommendation}
-                </div>
-                {tip.marketOdds != null && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs font-mono text-muted-foreground uppercase">Market Odds</span>
-                    <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
-                  </div>
-                )}
+          {bestTip && (bestTip.valueRating === 'value' || bestTip.valueRating === 'strong_value') && (
+            <div className="glass-card p-4 rounded-xl border border-teal-400/20 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-teal-400/10 border border-teal-400/20 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-teal-400" />
               </div>
-              <div className="shrink-0 w-14 h-14 rounded-xl bg-primary/10 border border-primary/20 flex flex-col items-center justify-center">
-                <Target className="w-5 h-5 text-primary mb-0.5" />
-                <span className="text-[10px] font-mono text-muted-foreground uppercase">BET</span>
+              <div>
+                <div className="text-xs font-mono text-teal-400 uppercase tracking-wider">Best Value Pick</div>
+                <div className="text-sm font-bold text-white">{bestTip.recommendation} @ {bestTip.marketOdds?.toFixed(2)}</div>
               </div>
             </div>
+          )}
 
-            <TrustGauge score={tip.trustScore} />
+          {tips.map((tip) => (
+            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabel(tip.betType)} />
+          ))}
 
-            <div className="border-t border-white/5 pt-4">
-              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-2">AI Reasoning</div>
-              <p className="text-sm text-white/80 leading-relaxed">{tip.reasoning}</p>
+          {tips[0] && (
+            <div className="text-[10px] font-mono text-muted-foreground/40 text-center">
+              Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
             </div>
+          )}
 
-            <div className="text-[10px] font-mono text-muted-foreground/40 border-t border-white/5 pt-2">
-              Generated {format(new Date(tip.createdAt), 'MMM dd, HH:mm')} · For informational purposes only
-            </div>
-          </div>
-
-          {/* AI accuracy tracker */}
           {accData && accData.reviewed > 0 && (
             <div className="glass-card p-4 rounded-xl flex items-center justify-between gap-4">
               <div className="flex items-center gap-2">
@@ -425,7 +477,7 @@ function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
 // ─── Post Match Review Tab ────────────────────────────────────────────────────
 
 function PostReviewTab({ fixtureId }: { fixtureId: number }) {
-  const { data, isLoading } = useQuery<{ review: BettingTip | null; message?: string }>({
+  const { data, isLoading } = useQuery<{ reviews: BettingTip[]; review: BettingTip | null; message?: string }>({
     queryKey: ['postReview', fixtureId],
     queryFn: async () => {
       const res = await fetch(`/api/analysis/${fixtureId}/post-review`);
@@ -436,12 +488,19 @@ function PostReviewTab({ fixtureId }: { fixtureId: number }) {
     gcTime: Infinity,
   });
 
-  const review = data?.review;
+  const reviews = data?.reviews ?? [];
 
   const outcomeConfig = {
     hit: { label: 'HIT', color: 'text-teal-400 bg-teal-400/10 border-teal-400/30', icon: CheckCircle2 },
     miss: { label: 'MISS', color: 'text-red-400 bg-red-400/10 border-red-400/30', icon: X },
     partial: { label: 'PARTIAL', color: 'text-amber-400 bg-amber-400/10 border-amber-400/30', icon: Minus },
+  };
+
+  const betTypeLabel = (t: string) => {
+    if (t === 'match_result') return 'Match Result';
+    if (t === 'over_under') return 'Goals Market';
+    if (t === 'btts') return 'Both Teams to Score';
+    return t;
   };
 
   return (
@@ -450,7 +509,7 @@ function PostReviewTab({ fixtureId }: { fixtureId: number }) {
         <div className="glass-card p-10 rounded-xl flex items-center justify-center">
           <Activity className="w-6 h-6 text-primary animate-pulse" />
         </div>
-      ) : !review ? (
+      ) : reviews.length === 0 ? (
         <div className="glass-card p-8 rounded-xl text-center space-y-2">
           <Target className="w-8 h-8 text-white/20 mx-auto" />
           <p className="text-muted-foreground text-sm">
@@ -459,58 +518,63 @@ function PostReviewTab({ fixtureId }: { fixtureId: number }) {
         </div>
       ) : (
         <>
-          {/* Original prediction */}
-          <div className="glass-card p-5 rounded-xl border border-white/10 space-y-3">
-            <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Original Prediction</div>
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="text-lg font-bold text-white">{review.recommendation}</div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono text-muted-foreground">Trust</span>
-                  <span className="text-xs font-mono font-bold text-primary">{review.trustScore}/10</span>
-                  {review.marketOdds != null && (
-                    <>
-                      <span className="text-white/20">·</span>
-                      <span className="text-xs font-mono text-muted-foreground">Odds</span>
-                      <span className="text-xs font-mono font-bold text-teal-400">{review.marketOdds.toFixed(2)}</span>
-                    </>
-                  )}
+          {reviews.map((review) => (
+            <div key={review.id} className="glass-card p-5 rounded-xl border border-white/10 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(review.betType)}</div>
+                {review.outcome && outcomeConfig[review.outcome as keyof typeof outcomeConfig] && (() => {
+                  const cfg = outcomeConfig[review.outcome as keyof typeof outcomeConfig];
+                  const Icon = cfg.icon;
+                  return (
+                    <span className={`flex items-center gap-1.5 text-xs font-mono font-bold px-2.5 py-1 rounded-full border uppercase shrink-0 ${cfg.color}`}>
+                      <Icon className="w-3.5 h-3.5" /> {cfg.label}
+                    </span>
+                  );
+                })()}
+              </div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="text-lg font-bold text-white">{review.recommendation}</div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-mono text-muted-foreground">Trust</span>
+                    <span className="text-xs font-mono font-bold text-primary">{review.trustScore}/10</span>
+                    {review.marketOdds != null && (
+                      <>
+                        <span className="text-white/20">·</span>
+                        <span className="text-xs font-mono text-muted-foreground">Odds</span>
+                        <span className="text-xs font-mono font-bold text-teal-400">{review.marketOdds.toFixed(2)}</span>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-              {review.outcome && outcomeConfig[review.outcome as keyof typeof outcomeConfig] && (() => {
-                const cfg = outcomeConfig[review.outcome as keyof typeof outcomeConfig];
-                const Icon = cfg.icon;
-                return (
-                  <span className={`flex items-center gap-1.5 text-sm font-mono font-bold px-3 py-1.5 rounded-full border uppercase shrink-0 ${cfg.color}`}>
-                    <Icon className="w-4 h-4" /> {cfg.label}
-                  </span>
-                );
-              })()}
+              <p className="text-sm text-white/60 leading-relaxed border-t border-white/5 pt-3">{review.reasoning}</p>
             </div>
-            <p className="text-sm text-white/60 leading-relaxed border-t border-white/5 pt-3">{review.reasoning}</p>
-          </div>
+          ))}
 
-          {/* Review summary */}
-          {review.reviewHeadline && (
-            <div className="glass-card p-5 rounded-xl space-y-3">
-              <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Match Review</div>
-              <p className="text-base font-bold text-white">{review.reviewHeadline}</p>
-              {review.reviewSummary && (
-                <p className="text-sm text-muted-foreground leading-relaxed">{review.reviewSummary}</p>
-              )}
-              {review.accuracyNote && (
-                <div className="border-t border-white/5 pt-3">
-                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1.5">Signal Accuracy</div>
-                  <p className="text-xs text-white/70 font-mono leading-relaxed">{review.accuracyNote}</p>
-                </div>
-              )}
-              {review.reviewedAt && (
-                <div className="text-[10px] font-mono text-muted-foreground/40">
-                  Reviewed {format(new Date(review.reviewedAt), 'MMM dd, HH:mm')}
-                </div>
-              )}
-            </div>
-          )}
+          {reviews.find(r => r.reviewHeadline) && (() => {
+            const review = reviews.find(r => r.reviewHeadline)!;
+            return (
+              <div className="glass-card p-5 rounded-xl space-y-3">
+                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Match Review</div>
+                <p className="text-base font-bold text-white">{review.reviewHeadline}</p>
+                {review.reviewSummary && (
+                  <p className="text-sm text-muted-foreground leading-relaxed">{review.reviewSummary}</p>
+                )}
+                {review.accuracyNote && (
+                  <div className="border-t border-white/5 pt-3">
+                    <div className="text-xs font-mono text-muted-foreground uppercase mb-1.5">Signal Accuracy</div>
+                    <p className="text-xs text-white/70 font-mono leading-relaxed">{review.accuracyNote}</p>
+                  </div>
+                )}
+                {review.reviewedAt && (
+                  <div className="text-[10px] font-mono text-muted-foreground/40">
+                    Reviewed {format(new Date(review.reviewedAt), 'MMM dd, HH:mm')}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </>
       )}
     </div>

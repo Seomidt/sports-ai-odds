@@ -81,7 +81,16 @@ A 5-layer deterministic AI football analysis platform using the API-Football API
 - `GET /api/teams/:id/transfers` — Pro: recent transfers
 - `GET /api/leagues/:id/topscorers?season=2024` — Pro: season top scorers
 - `GET /api/leagues/:id/topassists?season=2024` — Pro: season top assists
-- `GET /api/analysis/:id/pre|live|post` — AI analysis
+- `GET /api/analysis/:id/betting-tip` — Multi-market AI betting tips (match_result, over_under, btts) with value analysis
+- `GET /api/analysis/:id/post-review` — Post-match review for all tip markets
+- `GET /api/analysis/:id/live` — Live in-play AI analysis
 - `POST /api/alerts/explain` — generate alert text
 - `POST /api/fixtures/:id/follow` — follow a fixture (x-session-id header)
 - `GET /api/alerts/unread` — unread alerts for session
+
+## AI Betting Tips
+
+- **Multi-market**: Each fixture gets 3 tips — match_result, over_under, btts
+- **Value analysis**: AI confidence vs market implied probability → strong_value / value / fair / overpriced
+- **DB**: `ai_betting_tips` table with composite unique on (fixture_id, bet_type)
+- **Post-match grading**: Each market tip individually graded hit/miss/partial after FT

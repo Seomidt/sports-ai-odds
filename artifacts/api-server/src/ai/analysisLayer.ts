@@ -232,12 +232,16 @@ async function buildBettingContext(fixtureId: number): Promise<{
 
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
-const BettingTipSchema = z.object({
+const SingleTipSchema = z.object({
   recommendation: z.string(),
   bet_type: z.enum(["match_result", "over_under", "btts", "no_bet"]),
   bet_side: z.string().nullable().optional(),
   trust_score: z.number().min(1).max(10),
   reasoning: z.string(),
+});
+
+const MultiBettingTipSchema = z.object({
+  tips: z.array(SingleTipSchema).min(1).max(3),
 });
 
 const PostReviewSchema = z.object({
@@ -265,25 +269,52 @@ const FALLBACK_LIVE: LiveAnalysis = {
   alert_worthy: false,
 };
 
-// ─── Betting tip ──────────────────────────────────────────────────────────────
+// ─── Value calculation ────────────────────────────────────────────────────────
 
-export async function getBettingTip(fixtureId: number) {
-  // Return from DB if already generated (tips are permanent once created)
-  const existing = await db.query.aiBettingTips.findFirst({
+function calcValueRating(trustScore: number, marketOdds: number | null): string {
+  if (!marketOdds || marketOdds <= 1) return "neutral";
+  const impliedProb = 1 / marketOdds;
+  const aiProb = trustScore / 10;
+  const edge = aiProb - impliedProb;
+  if (edge >= 0.15) return "strong_value";
+  if (edge >= 0.05) return "value";
+  if (edge >= -0.05) return "fair";
+  return "overpriced";
+}
+
+function getMarketOddsForTip(
+  tip: { bet_type: string; bet_side?: string | null },
+  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null },
+): number | null {
+  if (tip.bet_type === "match_result") {
+    if (tip.bet_side === "home") return odds.home;
+    if (tip.bet_side === "away") return odds.away;
+    if (tip.bet_side === "draw") return odds.draw;
+  } else if (tip.bet_type === "over_under") {
+    return odds.over25 ?? null;
+  } else if (tip.bet_type === "btts") {
+    return odds.btts;
+  }
+  return null;
+}
+
+// ─── Betting tips (multi-market) ─────────────────────────────────────────────
+
+export async function getBettingTips(fixtureId: number) {
+  const existing = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
   });
-  if (existing) return existing;
+  if (existing.length >= 3) return existing;
 
   const ctx = await buildBettingContext(fixtureId);
 
-  // Need at least market odds (home/draw/away) to generate a meaningful tip
   if (!ctx.odds.home && !ctx.odds.draw && !ctx.odds.away) {
     return null;
   }
 
   const accuracy = await getAccuracyHistory();
 
-  const prompt = `You are a professional football betting analyst. Your job is to find the single best betting edge for the upcoming match.
+  const prompt = `You are a professional football betting analyst. Analyse ALL THREE markets for this upcoming match and give a verdict on each.
 
 Match: ${ctx.matchLabel}
 League: ${ctx.leagueName ?? "Unknown"}
@@ -304,82 +335,100 @@ Your accuracy history: ${accuracy.summary}
 ${accuracy.totalReviewed > 0 ? `Calibrate your trust scores to reflect your ${accuracy.hitRate}% hit rate — do not be overconfident.` : "This is your first tip — be conservative with trust scores."}
 
 INSTRUCTIONS:
-- Pick the market with the clearest edge based on the signals and odds
-- If no clear edge exists, choose "No Bet"
+- Give exactly 3 tips: one for match_result, one for over_under, one for btts
+- For each, pick the side with the best edge
 - Trust score 1-4 = weak edge, 5-7 = reasonable edge, 8-10 = strong edge
-- Reason in plain English, max 60 words, mention specific signals that support this
+- Compare your confidence against the market odds — if you think home win probability is 60% but market odds imply 50%, that's value
+- Reasoning: max 50 words per tip, mention the odds and specific signals
 
 Respond with ONLY valid JSON:
 {
-  "recommendation": "Home Win",
-  "bet_type": "match_result",
-  "bet_side": "home",
-  "trust_score": 7,
-  "reasoning": "Arsenal have strong home form (last 5 wins) and their H2H record vs Chelsea shows 3 home wins in last 4 meetings. Away side missing key striker. Odds of 1.95 offer value."
+  "tips": [
+    {
+      "recommendation": "Home Win",
+      "bet_type": "match_result",
+      "bet_side": "home",
+      "trust_score": 7,
+      "reasoning": "Strong home form (W4 in last 5) and H2H dominance. Odds of 2.14 imply 47% probability but signals suggest ~60% — clear value."
+    },
+    {
+      "recommendation": "Over 2.5 Goals",
+      "bet_type": "over_under",
+      "bet_side": "over",
+      "trust_score": 6,
+      "reasoning": "H2H avg 3.2 goals, both teams attack-minded. Odds of 1.90 represent fair price for this matchup."
+    },
+    {
+      "recommendation": "BTTS Yes",
+      "bet_type": "btts",
+      "bet_side": "yes",
+      "trust_score": 5,
+      "reasoning": "Both teams score in 70% of recent matches. Odds of 1.83 slightly overpriced given defensive records."
+    }
+  ]
 }
 
-bet_type must be one of: "match_result", "over_under", "btts", "no_bet"
 bet_side for match_result: "home", "away", "draw"
 bet_side for over_under: "over", "under"
-bet_side for btts: "yes", "no"
-bet_side for no_bet: null`;
+bet_side for btts: "yes", "no"`;
 
   const raw = await callClaude(prompt);
-  const parsed = parseJson(raw, BettingTipSchema, null as unknown as z.infer<typeof BettingTipSchema>);
+  const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);
 
-  if (!parsed?.recommendation) return null;
+  if (!parsed?.tips?.length) return null;
 
-  // Find relevant market odds
-  let marketOdds: number | null = null;
-  if (parsed.bet_type === "match_result") {
-    if (parsed.bet_side === "home") marketOdds = ctx.odds.home;
-    else if (parsed.bet_side === "away") marketOdds = ctx.odds.away;
-    else if (parsed.bet_side === "draw") marketOdds = ctx.odds.draw;
-  } else if (parsed.bet_type === "over_under" && parsed.bet_side === "over") {
-    marketOdds = ctx.odds.over25;
-  } else if (parsed.bet_type === "btts") {
-    marketOdds = ctx.odds.btts;
+  const storedTips = [];
+  for (const tip of parsed.tips) {
+    if (tip.bet_type === "no_bet") continue;
+    const marketOdds = getMarketOddsForTip(tip, ctx.odds);
+    const valueRating = calcValueRating(tip.trust_score, marketOdds);
+
+    const [stored] = await db.insert(aiBettingTips).values({
+      fixtureId,
+      homeTeam: ctx.homeTeam,
+      awayTeam: ctx.awayTeam,
+      kickoff: ctx.kickoff ? new Date(ctx.kickoff) : null,
+      leagueName: ctx.leagueName,
+      recommendation: tip.recommendation,
+      betType: tip.bet_type,
+      betSide: tip.bet_side ?? null,
+      trustScore: Math.round(tip.trust_score),
+      reasoning: tip.reasoning,
+      marketOdds,
+      valueRating,
+    }).onConflictDoUpdate({
+      target: [aiBettingTips.fixtureId, aiBettingTips.betType],
+      set: {
+        recommendation: tip.recommendation,
+        betSide: tip.bet_side ?? null,
+        trustScore: Math.round(tip.trust_score),
+        reasoning: tip.reasoning,
+        marketOdds,
+        valueRating,
+      },
+    }).returning();
+    if (stored) storedTips.push(stored);
   }
 
-  // Store in DB permanently
-  const [stored] = await db.insert(aiBettingTips).values({
-    fixtureId,
-    homeTeam: ctx.homeTeam,
-    awayTeam: ctx.awayTeam,
-    kickoff: ctx.kickoff ? new Date(ctx.kickoff) : null,
-    leagueName: ctx.leagueName,
-    recommendation: parsed.recommendation,
-    betType: parsed.bet_type,
-    betSide: parsed.bet_side ?? null,
-    trustScore: Math.round(parsed.trust_score),
-    reasoning: parsed.reasoning,
-    marketOdds,
-  }).onConflictDoUpdate({
-    target: aiBettingTips.fixtureId,
-    set: {
-      recommendation: parsed.recommendation,
-      betType: parsed.bet_type,
-      betSide: parsed.bet_side ?? null,
-      trustScore: Math.round(parsed.trust_score),
-      reasoning: parsed.reasoning,
-      marketOdds,
-    },
-  }).returning();
+  console.log(`[ai] Generated ${storedTips.length} betting tips for fixture ${fixtureId}`);
+  return storedTips;
+}
 
-  console.log(`[ai] Betting tip for fixture ${fixtureId}: ${parsed.recommendation} (trust ${parsed.trust_score}/10)`);
-  return stored ?? null;
+export async function getBettingTip(fixtureId: number) {
+  const tips = await getBettingTips(fixtureId);
+  return tips && tips.length > 0 ? tips[0] : null;
 }
 
 // ─── Post-match review ────────────────────────────────────────────────────────
 
-/** Called after a match reaches FT status. Grades the original tip. */
 export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
-  const tip = await db.query.aiBettingTips.findFirst({
+  const tips = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
   });
 
-  if (!tip) return; // No tip was made for this fixture
-  if (tip.outcome) return; // Already reviewed
+  if (!tips.length) return;
+  const unreviewedTips = tips.filter(t => !t.outcome);
+  if (!unreviewedTips.length) return;
 
   const fixture = await db.query.fixtures.findFirst({
     where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
@@ -387,7 +436,6 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
 
   if (!fixture || fixture.homeGoals == null || fixture.awayGoals == null) return;
 
-  // Determine actual result
   const hg = fixture.homeGoals;
   const ag = fixture.awayGoals;
   const totalGoals = hg + ag;
@@ -395,36 +443,6 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
   const bttsResult = hg > 0 && ag > 0;
   const over25Result = totalGoals > 2;
 
-  // Mathematically determine outcome (no AI needed for this)
-  let outcome: "hit" | "miss" | "partial" = "miss";
-
-  if (tip.betType === "no_bet") {
-    outcome = "hit"; // No-bet is always correct (avoid signal)
-  } else if (tip.betType === "match_result") {
-    if (
-      (tip.betSide === "home" && actualResult === "home_win") ||
-      (tip.betSide === "away" && actualResult === "away_win") ||
-      (tip.betSide === "draw" && actualResult === "draw")
-    ) {
-      outcome = "hit";
-    }
-  } else if (tip.betType === "over_under") {
-    if (
-      (tip.betSide === "over" && over25Result) ||
-      (tip.betSide === "under" && !over25Result)
-    ) {
-      outcome = "hit";
-    }
-  } else if (tip.betType === "btts") {
-    if (
-      (tip.betSide === "yes" && bttsResult) ||
-      (tip.betSide === "no" && !bttsResult)
-    ) {
-      outcome = "hit";
-    }
-  }
-
-  // Get post-match signals for context
   const postSignals = await db.query.fixtureSignals.findMany({
     where: (s, { and: andFn, eq: eqFn }) => andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, "post")),
   });
@@ -436,7 +454,36 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
 
   const resultStr = `${fixture.homeTeamName} ${hg} - ${ag} ${fixture.awayTeamName} (FT)`;
 
-  const prompt = `You are reviewing your own football betting prediction.
+  for (const tip of unreviewedTips) {
+    let outcome: "hit" | "miss" | "partial" = "miss";
+
+    if (tip.betType === "no_bet") {
+      outcome = "hit";
+    } else if (tip.betType === "match_result") {
+      if (
+        (tip.betSide === "home" && actualResult === "home_win") ||
+        (tip.betSide === "away" && actualResult === "away_win") ||
+        (tip.betSide === "draw" && actualResult === "draw")
+      ) {
+        outcome = "hit";
+      }
+    } else if (tip.betType === "over_under") {
+      if (
+        (tip.betSide === "over" && over25Result) ||
+        (tip.betSide === "under" && !over25Result)
+      ) {
+        outcome = "hit";
+      }
+    } else if (tip.betType === "btts") {
+      if (
+        (tip.betSide === "yes" && bttsResult) ||
+        (tip.betSide === "no" && !bttsResult)
+      ) {
+        outcome = "hit";
+      }
+    }
+
+    const prompt = `You are reviewing your own football betting prediction.
 
 Your original tip: "${tip.recommendation}" — ${tip.reasoning}
 Trust score you assigned: ${tip.trustScore}/10
@@ -445,35 +492,36 @@ Outcome: ${outcome.toUpperCase()} (${resultStr})
 Post-match signals:
 ${JSON.stringify(signalCtx, null, 2)}
 
-Write a brief honest review of what happened. Was the reasoning sound even if the bet lost? What signals proved accurate? What was misleading?
+Write a brief honest review. Was the reasoning sound? What signals were right or wrong?
 
 Respond with ONLY valid JSON:
 {
   "outcome": "${outcome}",
   "review_headline": "One sentence recap (max 12 words)",
-  "review_summary": "Two sentences: what happened in the match and whether it was expected. Max 50 words.",
+  "review_summary": "Two sentences max 50 words.",
   "accuracy_note": "One sentence on what signal data was right or wrong. Max 25 words."
 }`;
 
-  const raw = await callClaude(prompt);
-  const review = parseJson(raw, PostReviewSchema, {
-    outcome,
-    review_headline: resultStr,
-    review_summary: `${fixture.homeTeamName} ${hg}-${ag} ${fixture.awayTeamName}. Tip was ${outcome}.`,
-    accuracy_note: "Review generated from match result.",
-  });
+    const raw = await callClaude(prompt);
+    const review = parseJson(raw, PostReviewSchema, {
+      outcome,
+      review_headline: resultStr,
+      review_summary: `${fixture.homeTeamName} ${hg}-${ag} ${fixture.awayTeamName}. Tip was ${outcome}.`,
+      accuracy_note: "Review generated from match result.",
+    });
 
-  await db.update(aiBettingTips)
-    .set({
-      outcome: review.outcome,
-      reviewHeadline: review.review_headline,
-      reviewSummary: review.review_summary,
-      accuracyNote: review.accuracy_note,
-      reviewedAt: new Date(),
-    })
-    .where(eq(aiBettingTips.fixtureId, fixtureId));
+    await db.update(aiBettingTips)
+      .set({
+        outcome: review.outcome,
+        reviewHeadline: review.review_headline,
+        reviewSummary: review.review_summary,
+        accuracyNote: review.accuracy_note,
+        reviewedAt: new Date(),
+      })
+      .where(eq(aiBettingTips.id, tip.id));
 
-  console.log(`[ai] Post-match review for fixture ${fixtureId}: ${review.outcome.toUpperCase()}`);
+    console.log(`[ai] Post-match review for fixture ${fixtureId} (${tip.betType}): ${review.outcome.toUpperCase()}`);
+  }
 }
 
 // ─── Live analysis (kept for live tab) ───────────────────────────────────────

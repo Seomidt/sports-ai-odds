@@ -162,6 +162,8 @@ export interface StandingRow {
   goalsAgainst?: number | null;
   goalsDiff?: number | null;
   form?: string | null;
+  teamName?: string | null;
+  teamLogo?: string | null;
 }
 
 export interface StandingsResponse {
@@ -386,6 +388,8 @@ export interface Alert {
   alertText: string;
   isRead?: boolean | null;
   createdAt?: string;
+  homeTeamName?: string | null;
+  awayTeamName?: string | null;
 }
 
 export interface UnreadAlertsResponse {

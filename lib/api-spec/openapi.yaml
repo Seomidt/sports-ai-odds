@@ -1049,6 +1049,12 @@ components:
         form:
           type: string
           nullable: true
+        teamName:
+          type: string
+          nullable: true
+        teamLogo:
+          type: string
+          nullable: true
       required:
         - id
         - leagueId
@@ -1506,6 +1512,12 @@ components:
           nullable: true
         createdAt:
           type: string
+        homeTeamName:
+          type: string
+          nullable: true
+        awayTeamName:
+          type: string
+          nullable: true
       required:
         - id
         - fixtureId

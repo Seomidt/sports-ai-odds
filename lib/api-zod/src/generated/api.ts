@@ -504,6 +504,8 @@ export const GetStandingsResponse = zod.object({
       goalsAgainst: zod.number().nullish(),
       goalsDiff: zod.number().nullish(),
       form: zod.string().nullish(),
+      teamName: zod.string().nullish(),
+      teamLogo: zod.string().nullish(),
     }),
   ),
 });
@@ -709,6 +711,8 @@ export const GetUnreadAlertsResponse = zod.object({
       alertText: zod.string(),
       isRead: zod.boolean().nullish(),
       createdAt: zod.string().optional(),
+      homeTeamName: zod.string().nullish(),
+      awayTeamName: zod.string().nullish(),
     }),
   ),
 });

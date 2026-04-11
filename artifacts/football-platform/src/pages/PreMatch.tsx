@@ -109,8 +109,9 @@ function PreMatchCard({ fixture }: { fixture: Fixture }) {
 }
 
 export function PreMatch() {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, isLoading } = useGetTodayFixtures({
-    query: { queryKey: ["fixtures-today"], staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 },
+    query: { staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 } as any,
   });
 
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);

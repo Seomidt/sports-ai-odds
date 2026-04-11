@@ -362,9 +362,12 @@ function AnalysisTab({ fixtureId, phase }: { fixtureId: number, phase: 'pre' | '
 // ─── OddsTab ──────────────────────────────────────────────────────────────────
 
 function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number; isLive: boolean; homeTeam: string; awayTeam: string }) {
-  const { data: preData } = useGetFixtureOdds(fixtureId, { query: { staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
-  const { data: liveData } = useGetFixtureLiveOdds(fixtureId, { query: { staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: 30_000 } });
-  const { data: marketsData } = useGetFixtureOddsMarkets(fixtureId, { query: { staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: preData } = useGetFixtureOdds(fixtureId, { query: { staleTime: 2 * 60_000, gcTime: 10 * 60_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: liveData } = useGetFixtureLiveOdds(fixtureId, { query: { staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: 30_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: marketsData } = useGetFixtureOddsMarkets(fixtureId, { query: { staleTime: 2 * 60_000, gcTime: 10 * 60_000 } as any });
 
   const snap = preData?.odds ?? null;
   const liveOdds = liveData?.liveOdds ?? [];
@@ -498,9 +501,12 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
   homeTeam: string;
   awayTeam: string;
 }) {
-  const { data: h2hData, isLoading } = useGetFixtureH2H(fixtureId, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
-  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2024 }, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
-  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2024 }, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: h2hData, isLoading } = useGetFixtureH2H(fixtureId, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2024 }, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } as any });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2024 }, { query: { staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } as any });
 
   const h2hRows = h2hData?.h2h ?? [];
   const homeSeasonStats = homeStats?.statistics?.[0] ?? null;

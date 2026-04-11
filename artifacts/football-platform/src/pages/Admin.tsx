@@ -234,7 +234,7 @@ function HistoricalDataSection() {
             }
           </Button>
           <p className="text-xs text-muted-foreground font-mono leading-relaxed">
-            Imports all historical fixtures for tracked leagues. Runs automatically at startup — use this to re-seed or add extra seasons.
+            Imports all historical fixtures and stores them permanently in the database. Runs automatically once on first boot. Use this to add extra seasons or force a re-import.
           </p>
         </div>
 

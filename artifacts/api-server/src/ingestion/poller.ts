@@ -22,7 +22,7 @@ import {
   trophies,
   oddsMarkets,
 } from "@workspace/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, lt, sql } from "drizzle-orm";
 import {
   TRACKED_LEAGUES,
   fetchTodayFixtures,
@@ -1249,13 +1249,33 @@ export function startPoller() {
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);
 
-  // Historical data seed: run once at startup (60s delay to avoid API burst),
-  // then refresh current season every 24 hours
-  setTimeout(() => seedHistoricalData(2).catch(console.error), 60 * 1000);
-  setInterval(() => seedHistoricalData(1).catch(console.error), 24 * 60 * 60 * 1000);
+  // Historical data seed: only run if database has no past-season fixtures yet.
+  // Runs once at startup (60s delay). Can always be triggered manually via admin panel.
+  setTimeout(() => seedHistoricalIfNeeded().catch(console.error), 60 * 1000);
 }
 
 // ─── Historical season seed ────────────────────────────────────────────────────
+
+/** Auto-seed guard: only fetches historical fixtures if none exist in the database yet.
+ *  This means the heavy API fetch runs exactly once (first boot), never again unless
+ *  manually triggered via the admin panel. */
+async function seedHistoricalIfNeeded(): Promise<void> {
+  const currentSeason = TRACKED_LEAGUES[0]!.season; // e.g. 2025
+  const [row] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(fixtures)
+    .where(lt(fixtures.seasonYear, currentSeason))
+    .limit(1);
+
+  const historicalCount = row?.count ?? 0;
+  if (historicalCount > 0) {
+    console.log(`[seeder] Skipping auto-seed — ${historicalCount} historical fixtures already in DB`);
+    return;
+  }
+
+  console.log("[seeder] No historical fixtures found — starting initial seed (2 seasons)");
+  await seedHistoricalData(2);
+}
 
 export interface SeedStatus {
   running: boolean;

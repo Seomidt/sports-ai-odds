@@ -533,53 +533,39 @@ export const GetTeamInjuriesResponse = zod.object({
 });
 
 /**
- * @summary Get pre-match AI analysis for a fixture
+ * @summary Get AI betting tip for a fixture (pre-match intelligence)
  */
-export const GetPreAnalysisParams = zod.object({
+export const GetBettingTipForFixtureParams = zod.object({
   fixtureId: zod.coerce.number(),
 });
 
-export const GetPreAnalysisResponse = zod.object({
-  phase: zod.string(),
-  headline: zod.string(),
-  narrative: zod.string(),
-  key_factors: zod.array(zod.string()).optional(),
-  favorite: zod
-    .string()
-    .optional()
-    .describe("home | away | even (pre-match only)"),
-  confidence: zod.number().optional().describe("0.0–1.0 (pre-match only)"),
-  momentum_verdict: zod
-    .string()
-    .optional()
-    .describe("Current momentum phrase (live only)"),
-  alert_worthy: zod
-    .boolean()
-    .optional()
-    .describe("Whether this match is alert-worthy right now (live only)"),
-  deviation_note: zod
-    .string()
-    .optional()
-    .describe("Was result expected? (post-match only)"),
-  man_of_match: zod
-    .string()
-    .optional()
-    .describe("Optional decisive player (post-match only)"),
-  cachedAt: zod.string().optional(),
-  signals: zod
-    .array(
-      zod.object({
-        id: zod.number(),
-        fixtureId: zod.number(),
-        phase: zod.string(),
-        signalKey: zod.string(),
-        signalLabel: zod.string(),
-        signalValue: zod.number().nullish(),
-        signalBool: zod.boolean().nullish(),
-        triggeredAt: zod.string().optional(),
-      }),
-    )
-    .optional(),
+export const GetBettingTipForFixtureResponse = zod.object({
+  tip: zod
+    .object({
+      id: zod.number(),
+      fixtureId: zod.number(),
+      homeTeam: zod.string().nullish(),
+      awayTeam: zod.string().nullish(),
+      recommendation: zod.string(),
+      betType: zod
+        .string()
+        .describe("match_result | over_under | btts | no_bet"),
+      betSide: zod.string().nullish(),
+      trustScore: zod.number().describe("1-10 trust score"),
+      reasoning: zod.string(),
+      marketOdds: zod.number().nullish(),
+      outcome: zod
+        .string()
+        .nullish()
+        .describe("hit | miss | partial | null (pending)"),
+      reviewHeadline: zod.string().nullish(),
+      reviewSummary: zod.string().nullish(),
+      accuracyNote: zod.string().nullish(),
+      createdAt: zod.string(),
+      reviewedAt: zod.string().nullish(),
+    })
+    .nullish(),
+  message: zod.string().optional(),
 });
 
 /**
@@ -594,11 +580,6 @@ export const GetLiveAnalysisResponse = zod.object({
   headline: zod.string(),
   narrative: zod.string(),
   key_factors: zod.array(zod.string()).optional(),
-  favorite: zod
-    .string()
-    .optional()
-    .describe("home | away | even (pre-match only)"),
-  confidence: zod.number().optional().describe("0.0–1.0 (pre-match only)"),
   momentum_verdict: zod
     .string()
     .optional()
@@ -607,14 +588,6 @@ export const GetLiveAnalysisResponse = zod.object({
     .boolean()
     .optional()
     .describe("Whether this match is alert-worthy right now (live only)"),
-  deviation_note: zod
-    .string()
-    .optional()
-    .describe("Was result expected? (post-match only)"),
-  man_of_match: zod
-    .string()
-    .optional()
-    .describe("Optional decisive player (post-match only)"),
   cachedAt: zod.string().optional(),
   signals: zod
     .array(
@@ -633,53 +606,50 @@ export const GetLiveAnalysisResponse = zod.object({
 });
 
 /**
- * @summary Get post-match AI analysis for a fixture
+ * @summary Get post-match AI prediction review (hit/miss grading)
  */
-export const GetPostAnalysisParams = zod.object({
+export const GetPostReviewParams = zod.object({
   fixtureId: zod.coerce.number(),
 });
 
-export const GetPostAnalysisResponse = zod.object({
-  phase: zod.string(),
-  headline: zod.string(),
-  narrative: zod.string(),
-  key_factors: zod.array(zod.string()).optional(),
-  favorite: zod
-    .string()
-    .optional()
-    .describe("home | away | even (pre-match only)"),
-  confidence: zod.number().optional().describe("0.0–1.0 (pre-match only)"),
-  momentum_verdict: zod
-    .string()
-    .optional()
-    .describe("Current momentum phrase (live only)"),
-  alert_worthy: zod
-    .boolean()
-    .optional()
-    .describe("Whether this match is alert-worthy right now (live only)"),
-  deviation_note: zod
-    .string()
-    .optional()
-    .describe("Was result expected? (post-match only)"),
-  man_of_match: zod
-    .string()
-    .optional()
-    .describe("Optional decisive player (post-match only)"),
-  cachedAt: zod.string().optional(),
-  signals: zod
-    .array(
-      zod.object({
-        id: zod.number(),
-        fixtureId: zod.number(),
-        phase: zod.string(),
-        signalKey: zod.string(),
-        signalLabel: zod.string(),
-        signalValue: zod.number().nullish(),
-        signalBool: zod.boolean().nullish(),
-        triggeredAt: zod.string().optional(),
-      }),
-    )
-    .optional(),
+export const GetPostReviewResponse = zod.object({
+  review: zod
+    .object({
+      id: zod.number(),
+      fixtureId: zod.number(),
+      homeTeam: zod.string().nullish(),
+      awayTeam: zod.string().nullish(),
+      recommendation: zod.string(),
+      betType: zod
+        .string()
+        .describe("match_result | over_under | btts | no_bet"),
+      betSide: zod.string().nullish(),
+      trustScore: zod.number().describe("1-10 trust score"),
+      reasoning: zod.string(),
+      marketOdds: zod.number().nullish(),
+      outcome: zod
+        .string()
+        .nullish()
+        .describe("hit | miss | partial | null (pending)"),
+      reviewHeadline: zod.string().nullish(),
+      reviewSummary: zod.string().nullish(),
+      accuracyNote: zod.string().nullish(),
+      createdAt: zod.string(),
+      reviewedAt: zod.string().nullish(),
+    })
+    .nullish(),
+  message: zod.string().optional(),
+});
+
+/**
+ * @summary Get AI betting tip accuracy statistics
+ */
+export const GetAiAccuracyResponse = zod.object({
+  reviewed: zod.number(),
+  hits: zod.number(),
+  misses: zod.number(),
+  partials: zod.number(),
+  hitRate: zod.number().nullish().describe("Hit percentage (0-100)"),
 });
 
 /**

@@ -17,11 +17,13 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AccuracyStatsResponse,
   AddUserBody,
   AdminStatsResponse,
   AdminUserResponse,
   AdminUsersResponse,
   AnalysisResponse,
+  BettingTipResponse,
   DeleteConfirmation,
   ExplainAlertBody,
   ExplainAlertResponse,
@@ -40,6 +42,7 @@ import type {
   OddsMarketsResponse,
   OddsResponse,
   PlayerProfileResponse,
+  PostReviewResponse,
   ReadConfirmation,
   SignalsResponse,
   StandingsResponse,
@@ -1893,34 +1896,37 @@ export function useGetTeamInjuries<
 }
 
 /**
- * @summary Get pre-match AI analysis for a fixture
+ * @summary Get AI betting tip for a fixture (pre-match intelligence)
  */
-export const getGetPreAnalysisUrl = (fixtureId: number) => {
-  return `/api/analysis/${fixtureId}/pre`;
+export const getGetBettingTipForFixtureUrl = (fixtureId: number) => {
+  return `/api/analysis/${fixtureId}/betting-tip`;
 };
 
-export const getPreAnalysis = async (
+export const getBettingTipForFixture = async (
   fixtureId: number,
   options?: RequestInit,
-): Promise<AnalysisResponse> => {
-  return customFetch<AnalysisResponse>(getGetPreAnalysisUrl(fixtureId), {
-    ...options,
-    method: "GET",
-  });
+): Promise<BettingTipResponse> => {
+  return customFetch<BettingTipResponse>(
+    getGetBettingTipForFixtureUrl(fixtureId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
-export const getGetPreAnalysisQueryKey = (fixtureId: number) => {
-  return [`/api/analysis/${fixtureId}/pre`] as const;
+export const getGetBettingTipForFixtureQueryKey = (fixtureId: number) => {
+  return [`/api/analysis/${fixtureId}/betting-tip`] as const;
 };
 
-export const getGetPreAnalysisQueryOptions = <
-  TData = Awaited<ReturnType<typeof getPreAnalysis>>,
+export const getGetBettingTipForFixtureQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBettingTipForFixture>>,
   TError = ErrorType<unknown>,
 >(
   fixtureId: number,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getPreAnalysis>>,
+      Awaited<ReturnType<typeof getBettingTipForFixture>>,
       TError,
       TData
     >;
@@ -1930,11 +1936,12 @@ export const getGetPreAnalysisQueryOptions = <
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ?? getGetPreAnalysisQueryKey(fixtureId);
+    queryOptions?.queryKey ?? getGetBettingTipForFixtureQueryKey(fixtureId);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPreAnalysis>>> = ({
-    signal,
-  }) => getPreAnalysis(fixtureId, { signal, ...requestOptions });
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBettingTipForFixture>>
+  > = ({ signal }) =>
+    getBettingTipForFixture(fixtureId, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -1942,36 +1949,39 @@ export const getGetPreAnalysisQueryOptions = <
     enabled: !!fixtureId,
     ...queryOptions,
   } as UseQueryOptions<
-    Awaited<ReturnType<typeof getPreAnalysis>>,
+    Awaited<ReturnType<typeof getBettingTipForFixture>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetPreAnalysisQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getPreAnalysis>>
+export type GetBettingTipForFixtureQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBettingTipForFixture>>
 >;
-export type GetPreAnalysisQueryError = ErrorType<unknown>;
+export type GetBettingTipForFixtureQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get pre-match AI analysis for a fixture
+ * @summary Get AI betting tip for a fixture (pre-match intelligence)
  */
 
-export function useGetPreAnalysis<
-  TData = Awaited<ReturnType<typeof getPreAnalysis>>,
+export function useGetBettingTipForFixture<
+  TData = Awaited<ReturnType<typeof getBettingTipForFixture>>,
   TError = ErrorType<unknown>,
 >(
   fixtureId: number,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getPreAnalysis>>,
+      Awaited<ReturnType<typeof getBettingTipForFixture>>,
       TError,
       TData
     >;
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetPreAnalysisQueryOptions(fixtureId, options);
+  const queryOptions = getGetBettingTipForFixtureQueryOptions(
+    fixtureId,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
@@ -2069,34 +2079,34 @@ export function useGetLiveAnalysis<
 }
 
 /**
- * @summary Get post-match AI analysis for a fixture
+ * @summary Get post-match AI prediction review (hit/miss grading)
  */
-export const getGetPostAnalysisUrl = (fixtureId: number) => {
-  return `/api/analysis/${fixtureId}/post`;
+export const getGetPostReviewUrl = (fixtureId: number) => {
+  return `/api/analysis/${fixtureId}/post-review`;
 };
 
-export const getPostAnalysis = async (
+export const getPostReview = async (
   fixtureId: number,
   options?: RequestInit,
-): Promise<AnalysisResponse> => {
-  return customFetch<AnalysisResponse>(getGetPostAnalysisUrl(fixtureId), {
+): Promise<PostReviewResponse> => {
+  return customFetch<PostReviewResponse>(getGetPostReviewUrl(fixtureId), {
     ...options,
     method: "GET",
   });
 };
 
-export const getGetPostAnalysisQueryKey = (fixtureId: number) => {
-  return [`/api/analysis/${fixtureId}/post`] as const;
+export const getGetPostReviewQueryKey = (fixtureId: number) => {
+  return [`/api/analysis/${fixtureId}/post-review`] as const;
 };
 
-export const getGetPostAnalysisQueryOptions = <
-  TData = Awaited<ReturnType<typeof getPostAnalysis>>,
+export const getGetPostReviewQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPostReview>>,
   TError = ErrorType<unknown>,
 >(
   fixtureId: number,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getPostAnalysis>>,
+      Awaited<ReturnType<typeof getPostReview>>,
       TError,
       TData
     >;
@@ -2106,11 +2116,11 @@ export const getGetPostAnalysisQueryOptions = <
   const { query: queryOptions, request: requestOptions } = options ?? {};
 
   const queryKey =
-    queryOptions?.queryKey ?? getGetPostAnalysisQueryKey(fixtureId);
+    queryOptions?.queryKey ?? getGetPostReviewQueryKey(fixtureId);
 
-  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPostAnalysis>>> = ({
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPostReview>>> = ({
     signal,
-  }) => getPostAnalysis(fixtureId, { signal, ...requestOptions });
+  }) => getPostReview(fixtureId, { signal, ...requestOptions });
 
   return {
     queryKey,
@@ -2118,36 +2128,111 @@ export const getGetPostAnalysisQueryOptions = <
     enabled: !!fixtureId,
     ...queryOptions,
   } as UseQueryOptions<
-    Awaited<ReturnType<typeof getPostAnalysis>>,
+    Awaited<ReturnType<typeof getPostReview>>,
     TError,
     TData
   > & { queryKey: QueryKey };
 };
 
-export type GetPostAnalysisQueryResult = NonNullable<
-  Awaited<ReturnType<typeof getPostAnalysis>>
+export type GetPostReviewQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPostReview>>
 >;
-export type GetPostAnalysisQueryError = ErrorType<unknown>;
+export type GetPostReviewQueryError = ErrorType<unknown>;
 
 /**
- * @summary Get post-match AI analysis for a fixture
+ * @summary Get post-match AI prediction review (hit/miss grading)
  */
 
-export function useGetPostAnalysis<
-  TData = Awaited<ReturnType<typeof getPostAnalysis>>,
+export function useGetPostReview<
+  TData = Awaited<ReturnType<typeof getPostReview>>,
   TError = ErrorType<unknown>,
 >(
   fixtureId: number,
   options?: {
     query?: UseQueryOptions<
-      Awaited<ReturnType<typeof getPostAnalysis>>,
+      Awaited<ReturnType<typeof getPostReview>>,
       TError,
       TData
     >;
     request?: SecondParameter<typeof customFetch>;
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
-  const queryOptions = getGetPostAnalysisQueryOptions(fixtureId, options);
+  const queryOptions = getGetPostReviewQueryOptions(fixtureId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get AI betting tip accuracy statistics
+ */
+export const getGetAiAccuracyUrl = () => {
+  return `/api/analysis/accuracy`;
+};
+
+export const getAiAccuracy = async (
+  options?: RequestInit,
+): Promise<AccuracyStatsResponse> => {
+  return customFetch<AccuracyStatsResponse>(getGetAiAccuracyUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetAiAccuracyQueryKey = () => {
+  return [`/api/analysis/accuracy`] as const;
+};
+
+export const getGetAiAccuracyQueryOptions = <
+  TData = Awaited<ReturnType<typeof getAiAccuracy>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiAccuracy>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetAiAccuracyQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getAiAccuracy>>> = ({
+    signal,
+  }) => getAiAccuracy({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getAiAccuracy>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetAiAccuracyQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getAiAccuracy>>
+>;
+export type GetAiAccuracyQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get AI betting tip accuracy statistics
+ */
+
+export function useGetAiAccuracy<
+  TData = Awaited<ReturnType<typeof getAiAccuracy>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getAiAccuracy>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetAiAccuracyQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

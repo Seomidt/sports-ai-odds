@@ -424,11 +424,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/InjuriesResponse"
 
-  /analysis/{fixtureId}/pre:
+  /analysis/{fixtureId}/betting-tip:
     get:
-      operationId: getPreAnalysis
+      operationId: getBettingTipForFixture
       tags: [analysis]
-      summary: Get pre-match AI analysis for a fixture
+      summary: Get AI betting tip for a fixture (pre-match intelligence)
       parameters:
         - name: fixtureId
           in: path
@@ -437,11 +437,11 @@ paths:
             type: integer
       responses:
         "200":
-          description: AI pre-match analysis
+          description: AI betting tip with trust score
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalysisResponse"
+                $ref: "#/components/schemas/BettingTipResponse"
 
   /analysis/{fixtureId}/live:
     get:
@@ -462,11 +462,11 @@ paths:
               schema:
                 $ref: "#/components/schemas/AnalysisResponse"
 
-  /analysis/{fixtureId}/post:
+  /analysis/{fixtureId}/post-review:
     get:
-      operationId: getPostAnalysis
+      operationId: getPostReview
       tags: [analysis]
-      summary: Get post-match AI analysis for a fixture
+      summary: Get post-match AI prediction review (hit/miss grading)
       parameters:
         - name: fixtureId
           in: path
@@ -475,11 +475,24 @@ paths:
             type: integer
       responses:
         "200":
-          description: AI post-match analysis
+          description: Post-match review with outcome grading
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AnalysisResponse"
+                $ref: "#/components/schemas/PostReviewResponse"
+
+  /analysis/accuracy:
+    get:
+      operationId: getAiAccuracy
+      tags: [analysis]
+      summary: Get AI betting tip accuracy statistics
+      responses:
+        "200":
+          description: AI accuracy stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AccuracyStatsResponse"
 
   /alerts/explain:
     post:
@@ -1432,6 +1445,101 @@ components:
       required:
         - liveOdds
 
+    AiBettingTip:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        homeTeam:
+          type: string
+          nullable: true
+        awayTeam:
+          type: string
+          nullable: true
+        recommendation:
+          type: string
+        betType:
+          type: string
+          description: "match_result | over_under | btts | no_bet"
+        betSide:
+          type: string
+          nullable: true
+        trustScore:
+          type: integer
+          description: "1-10 trust score"
+        reasoning:
+          type: string
+        marketOdds:
+          type: number
+          nullable: true
+        outcome:
+          type: string
+          nullable: true
+          description: "hit | miss | partial | null (pending)"
+        reviewHeadline:
+          type: string
+          nullable: true
+        reviewSummary:
+          type: string
+          nullable: true
+        accuracyNote:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+        reviewedAt:
+          type: string
+          nullable: true
+      required:
+        - id
+        - fixtureId
+        - recommendation
+        - betType
+        - trustScore
+        - reasoning
+        - createdAt
+
+    BettingTipResponse:
+      type: object
+      properties:
+        tip:
+          $ref: "#/components/schemas/AiBettingTip"
+          nullable: true
+        message:
+          type: string
+
+    PostReviewResponse:
+      type: object
+      properties:
+        review:
+          $ref: "#/components/schemas/AiBettingTip"
+          nullable: true
+        message:
+          type: string
+
+    AccuracyStatsResponse:
+      type: object
+      properties:
+        reviewed:
+          type: integer
+        hits:
+          type: integer
+        misses:
+          type: integer
+        partials:
+          type: integer
+        hitRate:
+          type: number
+          nullable: true
+          description: "Hit percentage (0-100)"
+      required:
+        - reviewed
+        - hits
+        - misses
+        - partials
+
     AnalysisResponse:
       type: object
       properties:
@@ -1445,24 +1553,12 @@ components:
           type: array
           items:
             type: string
-        favorite:
-          type: string
-          description: "home | away | even (pre-match only)"
-        confidence:
-          type: number
-          description: "0.0–1.0 (pre-match only)"
         momentum_verdict:
           type: string
           description: "Current momentum phrase (live only)"
         alert_worthy:
           type: boolean
           description: "Whether this match is alert-worthy right now (live only)"
-        deviation_note:
-          type: string
-          description: "Was result expected? (post-match only)"
-        man_of_match:
-          type: string
-          description: "Optional decisive player (post-match only)"
         cachedAt:
           type: string
         signals:

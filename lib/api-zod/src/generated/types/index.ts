@@ -6,14 +6,17 @@
  * OpenAPI spec version: 0.1.0
  */
 
+export * from "./accuracyStatsResponse";
 export * from "./addUserBody";
 export * from "./addUserBodyRole";
 export * from "./adminStatsResponse";
 export * from "./adminUserResponse";
 export * from "./adminUsersResponse";
+export * from "./aiBettingTip";
 export * from "./alert";
 export * from "./allowedUser";
 export * from "./analysisResponse";
+export * from "./bettingTipResponse";
 export * from "./deleteConfirmation";
 export * from "./explainAlertBody";
 export * from "./explainAlertResponse";
@@ -45,6 +48,7 @@ export * from "./oddsResponse";
 export * from "./oddsSnapshot";
 export * from "./playerProfileItem";
 export * from "./playerProfileResponse";
+export * from "./postReviewResponse";
 export * from "./readConfirmation";
 export * from "./recentRequest";
 export * from "./signal";

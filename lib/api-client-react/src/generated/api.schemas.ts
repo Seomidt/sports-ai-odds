@@ -350,23 +350,56 @@ export interface LiveOddsResponse {
   liveOdds: LiveOddsSnapshot[];
 }
 
+export interface AiBettingTip {
+  id: number;
+  fixtureId: number;
+  homeTeam?: string | null;
+  awayTeam?: string | null;
+  recommendation: string;
+  /** match_result | over_under | btts | no_bet */
+  betType: string;
+  betSide?: string | null;
+  /** 1-10 trust score */
+  trustScore: number;
+  reasoning: string;
+  marketOdds?: number | null;
+  /** hit | miss | partial | null (pending) */
+  outcome?: string | null;
+  reviewHeadline?: string | null;
+  reviewSummary?: string | null;
+  accuracyNote?: string | null;
+  createdAt: string;
+  reviewedAt?: string | null;
+}
+
+export interface BettingTipResponse {
+  tip?: AiBettingTip | null;
+  message?: string;
+}
+
+export interface PostReviewResponse {
+  review?: AiBettingTip | null;
+  message?: string;
+}
+
+export interface AccuracyStatsResponse {
+  reviewed: number;
+  hits: number;
+  misses: number;
+  partials: number;
+  /** Hit percentage (0-100) */
+  hitRate?: number | null;
+}
+
 export interface AnalysisResponse {
   phase: string;
   headline: string;
   narrative: string;
   key_factors?: string[];
-  /** home | away | even (pre-match only) */
-  favorite?: string;
-  /** 0.0–1.0 (pre-match only) */
-  confidence?: number;
   /** Current momentum phrase (live only) */
   momentum_verdict?: string;
   /** Whether this match is alert-worthy right now (live only) */
   alert_worthy?: boolean;
-  /** Was result expected? (post-match only) */
-  deviation_note?: string;
-  /** Optional decisive player (post-match only) */
-  man_of_match?: string;
   cachedAt?: string;
   signals?: Signal[];
 }

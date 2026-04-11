@@ -30,11 +30,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen w-full overflow-hidden text-foreground">
       <AlertPoller />
 
-      {/* ── Desktop Sidebar (hidden on mobile) ─────────────────────────── */}
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
         <div className="h-16 flex items-center px-6 border-b border-white/5">
-          <img src={appLogo} alt="Signal Terminal" className="w-8 h-8 mr-3 rounded-lg object-contain" />
-          <span className="font-mono font-bold tracking-tight text-lg">SIGNAL TERMINAL</span>
+          <img src={appLogo} alt="sports-ai-odds" className="w-8 h-8 mr-3 rounded-lg object-contain" />
+          <span className="font-mono font-bold tracking-tight text-lg">sports-ai-odds</span>
         </div>
 
         <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
@@ -77,7 +76,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* ── Mobile slide-out menu overlay ──────────────────────────────── */}
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div
@@ -87,8 +85,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <aside className="relative w-72 bg-[#0a0f1e] border-r border-white/5 flex flex-col z-10">
             <div className="h-16 flex items-center justify-between px-5 border-b border-white/5">
               <div className="flex items-center gap-3">
-                <img src={appLogo} alt="Signal Terminal" className="w-6 h-6 rounded-md object-contain" />
-                <span className="font-mono font-bold tracking-tight">SIGNAL TERMINAL</span>
+                <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
+                <span className="font-mono font-bold tracking-tight">sports-ai-odds</span>
               </div>
               <button onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-white">
                 <X className="w-5 h-5" />
@@ -139,13 +137,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      {/* ── Main Content ─────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Mobile top bar */}
         <header className="md:hidden flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-2">
-            <img src={appLogo} alt="Signal Terminal" className="w-6 h-6 rounded-md object-contain" />
-            <span className="font-mono font-bold text-sm tracking-tight">SIGNAL TERMINAL</span>
+            <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
+            <span className="font-mono font-bold text-sm tracking-tight">sports-ai-odds</span>
           </div>
           <button
             onClick={() => setMobileMenuOpen(true)}
@@ -161,7 +157,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
 
-        {/* Mobile bottom nav */}
         <nav className="md:hidden shrink-0 flex items-center justify-around border-t border-white/5 bg-black/40 backdrop-blur-xl pb-safe">
           {navItems.map((item) => {
             const isActive = location === item.href || location.startsWith(`${item.href}/`);

@@ -133,15 +133,21 @@ async function syncFixturesForDate(date: string) {
 }
 
 async function syncNearTermFixtures() {
-  // Yesterday + today + tomorrow: called frequently (every 3 min)
-  const today = new Date().toISOString().split("T")[0]!;
-  await syncFixturesForDate(getDateOffset(-1)); // yesterday — catches FT games for PostMatch
-  await syncFixturesForDate(today);
+  // Only today + tomorrow — for NS/scheduled status freshness.
+  // Live scores are handled by the adaptive live loop (15s sprint).
+  // Past results handled by syncRecentResults (every 2h).
+  await syncFixturesForDate(new Date().toISOString().split("T")[0]!);
   await syncFixturesForDate(getTomorrow());
 }
 
+async function syncRecentResults() {
+  // Yesterday + 2 days ago: FT results are stable, 2h refresh is plenty
+  await syncFixturesForDate(getDateOffset(-1));
+  await syncFixturesForDate(getDateOffset(-2));
+}
+
 async function syncTodayFixtures() {
-  // 3 days back + today + 7 days ahead: called every 2 hours
+  // Full window 3 days back + 7 days ahead: called every 2 hours
   for (let i = -3; i <= 6; i++) {
     await syncFixturesForDate(getDateOffset(i));
   }
@@ -1169,6 +1175,7 @@ export function startPoller() {
 
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncNearTermFixtures().catch(console.error);
+  syncRecentResults().catch(console.error); // Yesterday + day before at startup
   syncStandings().catch(console.error);
 
   // Staggered startup for full 7-day window + heavy syncs (avoids API burst)
@@ -1189,13 +1196,16 @@ export function startPoller() {
 
   // ── Recurring intervals ────────────────────────────────────────────────────
 
-  // Today + tomorrow fixtures: every 3 min (high-frequency freshness)
-  setInterval(() => syncNearTermFixtures().catch(console.error), 3 * 60 * 1000);
+  // Today + tomorrow fixtures: every 15 min — live scores handled by adaptiveLiveLoop
+  setInterval(() => syncNearTermFixtures().catch(console.error), 15 * 60 * 1000);
 
-  // Full 7-day fixture window: every 2 hours (future dates change rarely)
+  // Yesterday + day before (FT results): every 2 hours — finished games rarely change
+  setInterval(() => syncRecentResults().catch(console.error), 2 * 60 * 60 * 1000);
+
+  // Full window -3 to +7 days: every 2 hours
   setInterval(() => syncTodayFixtures().catch(console.error), 2 * 60 * 60 * 1000);
 
-  // Standings: every 2 hours (standings update after match ends, not mid-game)
+  // Standings: every 2 hours (updates after match ends, not mid-game)
   setInterval(() => syncStandings().catch(console.error), 2 * 60 * 60 * 1000);
 
   // Pre-match lineups + odds + predictions + injuries: every 5 min (Ultra budget allows it)

@@ -1,183 +1,115 @@
-import {
-  useGetTopPickFixtures,
-  useGetFixtureSignals,
-  getGetTopPickFixturesQueryKey,
-  getGetFixtureSignalsQueryKey,
-} from "@workspace/api-client-react";
-import type { TopPickFixture } from "@workspace/api-client-react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { format, isToday, isTomorrow } from "date-fns";
+import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, TrendingUp, Zap, Target, ChevronRight, Radio } from "lucide-react";
+import { Activity, TrendingUp, Zap, ChevronRight, Target } from "lucide-react";
 
-const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
-
-function isFixtureLive(f: TopPickFixture) {
-  return f.isLive === true || LIVE_STATUSES.has(f.statusShort ?? "");
+interface ValueTip {
+  id: number;
+  fixtureId: number;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  kickoff: string | null;
+  leagueName: string | null;
+  recommendation: string;
+  betType: string;
+  betSide: string | null;
+  trustScore: number;
+  reasoning: string;
+  marketOdds: number | null;
+  valueRating: string | null;
+  valueScore: number;
+  combinedScore: number;
+  createdAt: string;
 }
 
-function kickoffLabel(kickoff: string | null | undefined, statusShort: string | null | undefined): string {
-  if (LIVE_STATUSES.has(statusShort ?? "")) {
-    const labels: Record<string,string> = { "1H":"1. halvleg","HT":"Pause","2H":"2. halvleg","ET":"Forlænget","BT":"Pause ET","P":"Straffe","INT":"Pause","LIVE":"Live" };
-    return labels[statusShort ?? ""] ?? "Live";
-  }
-  if (!kickoff) return "--:--";
-  const d = new Date(kickoff);
-  const time = format(d, "HH:mm");
-  if (isToday(d)) return time;
-  if (isTomorrow(d)) return `i morgen ${time}`;
-  return format(d, "dd/MM HH:mm");
-}
-
-function ScorePill({ home, away }: { home: number | null | undefined; away: number | null | undefined }) {
-  if (home == null || away == null) return null;
-  const homeWin = home > away;
-  const awayWin = away > home;
+function ValueBadge({ rating }: { rating: string | null }) {
+  if (!rating) return null;
+  const config: Record<string, { label: string; color: string; bg: string; border: string }> = {
+    strong_value: { label: 'STRONG VALUE', color: 'text-teal-300', bg: 'bg-teal-400/10', border: 'border-teal-400/30' },
+    value: { label: 'VALUE', color: 'text-teal-400', bg: 'bg-teal-400/10', border: 'border-teal-400/20' },
+    fair: { label: 'FAIR PRICE', color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20' },
+    overpriced: { label: 'OVERPRICED', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20' },
+  };
+  const c = config[rating] ?? config.fair!;
   return (
-    <div className="flex items-center gap-1 font-mono font-bold text-sm">
-      <span className={homeWin ? "text-primary" : awayWin ? "text-destructive/70" : "text-white/60"}>{home}</span>
-      <span className="text-white/20">–</span>
-      <span className={awayWin ? "text-primary" : homeWin ? "text-destructive/70" : "text-white/60"}>{away}</span>
-    </div>
-  );
-}
-
-function SignalBadge({ count, compact = false }: { count: number; compact?: boolean }) {
-  if (count === 0) {
-    if (compact) return null;
-    return (
-      <span className="text-xs font-mono text-muted-foreground/30 bg-white/4 px-2 py-0.5 rounded">
-        ingen signaler
-      </span>
-    );
-  }
-  const color =
-    count >= 4
-      ? "text-primary bg-primary/10 border border-primary/20"
-      : count >= 2
-      ? "text-amber-400 bg-amber-400/10 border border-amber-400/20"
-      : "text-violet-400 bg-violet-400/10 border border-violet-400/20";
-  return (
-    <span className={`inline-flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${color}`}>
-      <Zap className="w-3 h-3" />
-      {count}
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${c.color} ${c.bg} border ${c.border}`}>
+      {c.label}
     </span>
   );
 }
 
-function TopPickCard({ fixture, rank }: { fixture: TopPickFixture; rank: number }) {
-  const live = isFixtureLive(fixture);
-  const { data: signalData } = useGetFixtureSignals(
-    fixture.fixtureId,
-    { phase: live ? "live" : "pre" },
-      { query: { queryKey: getGetFixtureSignalsQueryKey(fixture.fixtureId, { phase: live ? "live" : "pre" }), staleTime: live ? 30_000 : 3 * 60_000, gcTime: 10 * 60_000 } }
-  );
-  const count = fixture.signalCount;
+const betTypeLabel = (t: string) => {
+  if (t === 'match_result') return 'Match Result';
+  if (t === 'over_under') return 'Goals Market';
+  if (t === 'btts') return 'Both Teams to Score';
+  return t;
+};
 
-  const borderClass = live
-    ? "border-primary/30 shadow-[0_0_28px_rgba(0,255,200,0.09)]"
-    : count >= 4
-    ? "border-primary/40 shadow-[0_0_24px_rgba(0,255,200,0.07)]"
-    : count >= 2
-    ? "border-amber-400/30"
-    : "border-white/8";
-
-  const rankColor =
-    rank === 1 ? "text-primary" : rank === 2 ? "text-amber-400" : "text-violet-400";
+function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
+  const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
+  const borderClass = isTopValue
+    ? 'border-teal-400/30 shadow-[0_0_20px_rgba(0,255,200,0.06)]'
+    : 'border-white/8';
+  const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
 
   return (
-    <Link href={`/match/${fixture.fixtureId}`}>
+    <Link href={`/match/${tip.fixtureId}`}>
       <div className={`glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border ${borderClass} group`}>
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            {live ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-mono font-bold text-primary bg-primary/10 border border-primary/25 px-2 py-0.5 rounded">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                {kickoffLabel(fixture.kickoff, fixture.statusShort)}
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 text-xs font-mono text-amber-400 bg-amber-400/8 px-2 py-0.5 rounded">
-                <Clock className="w-3 h-3" />
-                {kickoffLabel(fixture.kickoff, fixture.statusShort)}
-              </span>
-            )}
-            {!live && <SignalBadge count={count} />}
+            <span className={`text-xs font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(tip.betType)}</span>
+            <ValueBadge rating={tip.valueRating} />
           </div>
-          <span className={`text-xs font-mono font-bold ${rankColor} opacity-40`}>#{rank}</span>
-        </div>
-
-        <div className="space-y-2 mb-4">
-          <div className="flex items-center gap-2">
-            {fixture.homeTeamLogo && <img src={fixture.homeTeamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />}
-            <span className="font-semibold text-white text-sm truncate flex-1">{fixture.homeTeamName}</span>
-            {live && <ScorePill home={fixture.homeGoals} away={null} />}
-          </div>
-          <div className="flex items-center gap-2">
-            {fixture.awayTeamLogo && <img src={fixture.awayTeamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />}
-            <span className="font-semibold text-white/50 text-sm truncate flex-1">{fixture.awayTeamName}</span>
-            {live && <ScorePill home={null} away={fixture.awayGoals} />}
-          </div>
-        </div>
-
-        {live && (
-          <div className="flex items-center gap-2 mb-3">
-            <ScorePill home={fixture.homeGoals} away={fixture.awayGoals} />
-            {count > 0 && <SignalBadge count={count} compact />}
-          </div>
-        )}
-
-        {signalData?.signals?.slice(0, 2).map((s, i) => (
-          <div key={i} className="text-[11px] text-muted-foreground/60 font-mono leading-relaxed line-clamp-1 mb-0.5">
-            · {s.signalLabel}
-          </div>
-        ))}
-
-        <div className="flex items-center justify-between mt-3 pt-2">
-          {fixture.leagueName && (
-            <div className="flex items-center gap-1.5">
-              {fixture.leagueLogo && <img src={fixture.leagueLogo} alt="" className="w-3.5 h-3.5 object-contain opacity-50" />}
-              <span className="text-[10px] text-muted-foreground/40 font-mono truncate">{fixture.leagueName}</span>
-            </div>
+          {tip.marketOdds != null && (
+            <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
           )}
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors ml-auto" />
         </div>
-      </div>
-    </Link>
-  );
-}
 
-function SmallPickCard({ fixture }: { fixture: TopPickFixture }) {
-  const live = isFixtureLive(fixture);
-  return (
-    <Link href={`/match/${fixture.fixtureId}`}>
-      <div className="glass-card p-4 rounded-xl cursor-pointer transition-all hover:bg-white/5 border border-white/5 group flex items-center gap-4">
-        <div className="shrink-0 w-16 text-center">
-          {live ? (
-            <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-primary">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              {fixture.statusShort}
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-lg font-bold text-white leading-tight">{tip.recommendation}</div>
+          <div className="flex items-center gap-1">
+            <span className={`text-xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
+              {tip.trustScore}
             </span>
-          ) : (
-            <div className="text-xs font-mono text-amber-400 font-medium leading-tight">
-              {kickoffLabel(fixture.kickoff, fixture.statusShort)}
-            </div>
-          )}
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            {fixture.homeTeamLogo && <img src={fixture.homeTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0" />}
-            <span className="text-sm font-medium text-white truncate">{fixture.homeTeamName}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {fixture.awayTeamLogo && <img src={fixture.awayTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0" />}
-            <span className="text-sm font-medium text-white/45 truncate">{fixture.awayTeamName}</span>
+            <span className="text-xs text-muted-foreground font-mono">/10</span>
           </div>
         </div>
-        <div className="shrink-0 flex items-center gap-3">
-          {live && fixture.homeGoals != null && fixture.awayGoals != null && (
-            <ScorePill home={fixture.homeGoals} away={fixture.awayGoals} />
-          )}
-          <SignalBadge count={fixture.signalCount} compact />
+
+        <div className="flex gap-0.5 mb-3">
+          {Array.from({ length: 10 }, (_, i) => (
+            <div
+              key={i}
+              className={`flex-1 h-1 rounded-sm ${
+                i < tip.trustScore
+                  ? (tip.trustScore >= 7 ? 'bg-teal-400' : tip.trustScore >= 5 ? 'bg-amber-400' : 'bg-white/30')
+                  : 'bg-white/10'
+              }`}
+            />
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 mb-3 text-sm text-white/60">
+          <span className="font-medium">{tip.homeTeam}</span>
+          <span className="text-white/20">vs</span>
+          <span className="font-medium">{tip.awayTeam}</span>
+        </div>
+
+        <p className="text-xs text-white/50 leading-relaxed line-clamp-2 mb-3">{tip.reasoning}</p>
+
+        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+          <div className="flex items-center gap-2">
+            {tip.leagueName && (
+              <span className="text-[10px] text-muted-foreground/40 font-mono truncate">{tip.leagueName}</span>
+            )}
+            {tip.kickoff && (
+              <>
+                <span className="text-white/10">·</span>
+                <span className="text-[10px] text-muted-foreground/40 font-mono">{format(new Date(tip.kickoff), 'MMM dd, HH:mm')}</span>
+              </>
+            )}
+          </div>
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
         </div>
       </div>
@@ -186,18 +118,34 @@ function SmallPickCard({ fixture }: { fixture: TopPickFixture }) {
 }
 
 export function Dashboard() {
-  const { data, isLoading } = useGetTopPickFixtures({
-    query: { queryKey: getGetTopPickFixturesQueryKey(), staleTime: 60_000, gcTime: 10 * 60_000, refetchInterval: 90_000 },
+  const { data, isLoading } = useQuery<{ tips: ValueTip[] }>({
+    queryKey: ['valueOdds'],
+    queryFn: async () => {
+      const res = await fetch('/api/analysis/value-odds');
+      if (!res.ok) throw new Error('Failed to fetch value odds');
+      return res.json();
+    },
+    staleTime: 60_000,
+    gcTime: 10 * 60_000,
+    refetchInterval: 90_000,
   });
 
-  const allFixtures = data?.fixtures ?? [];
-  const liveFixtures = allFixtures.filter(isFixtureLive);
-  const prematchFixtures = allFixtures.filter((f) => !isFixtureLive(f));
+  const { data: accData } = useQuery<{ hitRate: number | null; reviewed: number; hits: number }>({
+    queryKey: ['aiAccuracy'],
+    queryFn: async () => {
+      const res = await fetch('/api/analysis/accuracy');
+      if (!res.ok) throw new Error('Failed to fetch accuracy');
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
 
-  const topLive = liveFixtures.slice(0, 3);
-  const restLive = liveFixtures.slice(3);
-  const topPrematch = prematchFixtures.slice(0, 3);
-  const restPrematch = prematchFixtures.slice(3);
+  const tips = data?.tips ?? [];
+  const valueTips = tips.filter(t => t.valueRating === 'strong_value' || t.valueRating === 'value');
+  const fairTips = tips.filter(t => t.valueRating === 'fair');
+  const otherTips = tips.filter(t => t.valueRating !== 'strong_value' && t.valueRating !== 'value' && t.valueRating !== 'fair');
+
+  let globalRank = 0;
 
   return (
     <Layout>
@@ -205,95 +153,92 @@ export function Dashboard() {
         <header className="flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              <h1 className="text-3xl font-bold font-mono tracking-tight text-white">DASHBOARD</h1>
+              <Target className="w-5 h-5 text-primary" />
+              <h1 className="text-3xl font-bold font-mono tracking-tight text-white">VALUE ODDS</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              Kampe rangeret efter signal-styrke — live og kommende.
+              AI-ranked betting tips sorted by value and confidence.
             </p>
           </div>
-          {!isLoading && allFixtures.length > 0 && (
-            <div className="shrink-0 text-right">
-              <div className="text-2xl font-bold font-mono text-white">{allFixtures.length}</div>
-              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">kampe</div>
-            </div>
-          )}
+          <div className="shrink-0 flex items-center gap-4">
+            {accData && accData.reviewed > 0 && (
+              <div className="text-right">
+                <div className={`text-lg font-bold font-mono tabular-nums ${(accData.hitRate ?? 0) >= 55 ? 'text-teal-400' : 'text-amber-400'}`}>
+                  {accData.hitRate ?? '—'}%
+                </div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">hit rate</div>
+              </div>
+            )}
+            {!isLoading && tips.length > 0 && (
+              <div className="text-right">
+                <div className="text-lg font-bold font-mono text-white tabular-nums">{tips.length}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">tips</div>
+              </div>
+            )}
+          </div>
         </header>
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
             <Activity className="w-8 h-8 text-primary animate-pulse" />
           </div>
-        ) : allFixtures.length === 0 ? (
+        ) : tips.length === 0 ? (
           <div className="glass-card p-16 text-center rounded-xl flex flex-col items-center">
-            <TrendingUp className="w-12 h-12 text-muted-foreground mb-4 opacity-25" />
-            <h3 className="text-lg font-medium text-white mb-1">Ingen kampe at vise</h3>
+            <Target className="w-12 h-12 text-muted-foreground mb-4 opacity-25" />
+            <h3 className="text-lg font-medium text-white mb-1">No value odds available</h3>
             <p className="text-muted-foreground text-sm">
-              Ingen planlagte eller live kampe inden for de næste 3 dage.
+              AI tips will appear here once upcoming fixtures have odds and signal data.
             </p>
           </div>
         ) : (
           <div className="space-y-10">
-            {/* ── Live fixtures ── */}
-            {topLive.length > 0 && (
+            {valueTips.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <Radio className="w-4 h-4 text-primary" />
-                  <h2 className="text-sm font-mono font-bold text-primary tracking-widest uppercase flex items-center gap-2">
-                    Live Nu
-                    <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  <Zap className="w-4 h-4 text-teal-400" />
+                  <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">
+                    Best Value Picks
                   </h2>
-                  <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{liveFixtures.length} kampe i gang</span>
+                  <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{valueTips.length} tips</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {topLive.map((f, i) => (
-                    <TopPickCard key={f.fixtureId} fixture={f} rank={i + 1} />
-                  ))}
+                  {valueTips.map((t) => {
+                    globalRank++;
+                    return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />;
+                  })}
                 </div>
-                {restLive.length > 0 && (
-                  <div className="space-y-2">
-                    {restLive.map((f) => (
-                      <SmallPickCard key={f.fixtureId} fixture={f} />
-                    ))}
-                  </div>
-                )}
               </div>
             )}
 
-            {/* ── Prematch fixtures ── */}
-            {topPrematch.length > 0 && (
+            {fairTips.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <Target className="w-4 h-4 text-primary" />
-                  <h2 className="text-sm font-mono font-bold text-primary tracking-widest uppercase">
-                    Kommende Top Picks
+                  <TrendingUp className="w-4 h-4 text-violet-400" />
+                  <h2 className="text-sm font-mono font-bold text-violet-400 tracking-widest uppercase">
+                    Fair Price
                   </h2>
-                  <div className="flex items-center gap-3 ml-auto text-[10px] font-mono text-muted-foreground/50">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-primary/60" /> 4+ signaler
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-full bg-amber-400/60" /> 2–3
-                    </span>
-                  </div>
+                  <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{fairTips.length} tips</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {topPrematch.map((f, i) => (
-                    <TopPickCard key={f.fixtureId} fixture={f} rank={i + 1} />
-                  ))}
+                  {fairTips.map((t) => {
+                    globalRank++;
+                    return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />;
+                  })}
                 </div>
-                {restPrematch.length > 0 && (
-                  <div className="space-y-3">
-                    <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
-                      Øvrige kampe — {restPrematch.length}
-                    </h2>
-                    <div className="space-y-2">
-                      {restPrematch.map((f) => (
-                        <SmallPickCard key={f.fixtureId} fixture={f} />
-                      ))}
-                    </div>
-                  </div>
-                )}
+              </div>
+            )}
+
+            {otherTips.length > 0 && (
+              <div className="space-y-4">
+                <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
+                  Other Markets — {otherTips.length}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {otherTips.map((t) => {
+                    globalRank++;
+                    return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />;
+                  })}
+                </div>
               </div>
             )}
           </div>

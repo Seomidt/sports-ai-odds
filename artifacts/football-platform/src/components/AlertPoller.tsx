@@ -85,7 +85,7 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
   const matchLabel =
     alert.homeTeamName && alert.awayTeamName
       ? `${alert.homeTeamName} vs ${alert.awayTeamName}`
-      : `Kamp ${alert.fixtureId}`;
+      : `Match ${alert.fixtureId}`;
 
   return (
     <div
@@ -130,7 +130,7 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
           onClick={() => { dismiss(); navigate(`/match/${alert.fixtureId}`); }}
           className={`inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold tracking-wider uppercase transition-colors ${style.icon} hover:opacity-80`}
         >
-          Se kamp <ArrowRight className="w-3 h-3" />
+          View match <ArrowRight className="w-3 h-3" />
         </button>
       </div>
 

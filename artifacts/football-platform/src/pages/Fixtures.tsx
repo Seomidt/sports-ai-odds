@@ -139,7 +139,7 @@ function FixtureGrid({ fixtures }: { fixtures: Fixture[] }) {
               {league.leagueName ?? `League ${league.leagueId}`}
             </span>
             <span className="text-xs text-muted-foreground font-mono ml-auto">
-              {league.fixtures.length} {league.fixtures.length === 1 ? "kamp" : "kampe"}
+              {league.fixtures.length} {league.fixtures.length === 1 ? "match" : "matches"}
             </span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -164,14 +164,14 @@ interface TabDef {
 const TABS: TabDef[] = [
   { id: "live", label: "LIVE", Icon: Zap },
   { id: "prematch", label: "PREMATCH", Icon: Clock },
-  { id: "postmatch", label: "AFSLUTTET", Icon: CheckCircle2 },
+  { id: "postmatch", label: "FINISHED", Icon: CheckCircle2 },
 ];
 
 function EmptyState({ phase }: { phase: Tab }) {
   const messages: Record<Tab, { title: string; sub: string }> = {
-    live: { title: "Ingen live kampe", sub: "Der er ingen kampe i gang lige nu." },
-    prematch: { title: "Ingen kommende kampe", sub: "Ingen planlagte kampe i det nuværende vindue." },
-    postmatch: { title: "Ingen afsluttede kampe", sub: "Ingen kampe er afsluttet endnu i dag." },
+    live: { title: "No live matches", sub: "There are no matches in play right now." },
+    prematch: { title: "No upcoming fixtures", sub: "No scheduled fixtures in the current window." },
+    postmatch: { title: "No finished fixtures", sub: "No matches have been completed yet today." },
   };
   const msg = messages[phase];
   return (
@@ -205,8 +205,8 @@ export function Fixtures() {
     <Layout>
       <div className="space-y-6">
         <header>
-          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">KAMPOVERSIGT</h1>
-          <p className="text-muted-foreground text-sm">Prematch · Live · Afsluttet — opdateres automatisk.</p>
+          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">FIXTURES</h1>
+          <p className="text-muted-foreground text-sm">Pre-match · Live · Finished — updates automatically.</p>
         </header>
 
         {isLoading ? (

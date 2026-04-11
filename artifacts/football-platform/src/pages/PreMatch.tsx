@@ -17,8 +17,8 @@ function kickoffLabel(kickoff: string | null | undefined): string {
   if (!kickoff) return "--:--";
   const d = new Date(kickoff);
   const time = format(d, "HH:mm");
-  if (isToday(d)) return `i dag ${time}`;
-  if (isTomorrow(d)) return `i morgen ${time}`;
+  if (isToday(d)) return `Today ${time}`;
+  if (isTomorrow(d)) return `Tomorrow ${time}`;
   return format(d, "EE dd/MM HH:mm");
 }
 
@@ -60,11 +60,11 @@ function PreMatchCard({ fixture }: { fixture: Fixture }) {
                 : "text-violet-400 bg-violet-400/10 border border-violet-400/20"
             }`}>
               <Zap className="w-3 h-3" />
-              {signals.length} {signals.length === 1 ? "signal" : "signaler"}
+              {signals.length} {signals.length === 1 ? "signal" : "signals"}
             </span>
           ) : (
             <span className="text-xs font-mono text-muted-foreground/30 bg-white/3 px-2 py-0.5 rounded">
-              ingen signaler
+              no signals
             </span>
           )}
         </div>
@@ -98,7 +98,7 @@ function PreMatchCard({ fixture }: { fixture: Fixture }) {
             ))}
             {signals.length > 3 && (
               <div className="text-[11px] text-muted-foreground/40 font-mono">
-                +{signals.length - 3} flere...
+                +{signals.length - 3} more...
               </div>
             )}
           </div>
@@ -141,10 +141,10 @@ export function PreMatch() {
         <header>
           <div className="flex items-center gap-3 mb-1">
             <TrendingUp className="w-5 h-5 text-amber-400" />
-            <h1 className="text-3xl font-bold font-mono tracking-tight text-white">FØR KAMP</h1>
+            <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PRE-MATCH</h1>
           </div>
           <p className="text-muted-foreground text-sm">
-            Alle kommende kampe med pre-match analyse og signaler.
+            All upcoming fixtures with pre-match analysis and signals.
           </p>
         </header>
 
@@ -156,14 +156,14 @@ export function PreMatch() {
           <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center gap-4">
             <Clock className="w-10 h-10 text-muted-foreground opacity-30" />
             <div>
-              <h3 className="text-lg font-medium text-white mb-1">Ingen kommende kampe</h3>
+              <h3 className="text-lg font-medium text-white mb-1">No upcoming fixtures</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Kampe i de overvågede ligaer er enten live eller afsluttet.
+                Fixtures in tracked leagues are either live or finished.
               </p>
               <Link href="/live">
                 <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 text-sm font-mono font-semibold hover:bg-primary/20 transition-colors">
                   <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  Se live kampe
+                  View live matches
                 </button>
               </Link>
             </div>
@@ -177,10 +177,10 @@ export function PreMatch() {
                     <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain" />
                   )}
                   <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
-                    {league.leagueName ?? `Liga ${league.leagueId}`}
+                    {league.leagueName ?? `League ${league.leagueId}`}
                   </span>
                   <span className="text-xs text-muted-foreground font-mono ml-auto">
-                    {league.fixtures.length} {league.fixtures.length === 1 ? "kamp" : "kampe"}
+                    {league.fixtures.length} {league.fixtures.length === 1 ? "match" : "matches"}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

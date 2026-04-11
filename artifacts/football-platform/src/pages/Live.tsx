@@ -34,14 +34,14 @@ export function Live() {
             <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <h1 className="text-3xl font-bold font-mono tracking-tight text-white">LIVE</h1>
           </div>
-          <p className="text-muted-foreground">Kampe i gang akkurat nu.</p>
+          <p className="text-muted-foreground">Matches currently in play.</p>
         </header>
 
         {liveFixtures.length === 0 ? (
           <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center">
             <Activity className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium text-white mb-1">Ingen live kampe</h3>
-            <p className="text-muted-foreground">Der er ingen kampe i gang lige nu.</p>
+            <h3 className="text-lg font-medium text-white mb-1">No live matches</h3>
+            <p className="text-muted-foreground">There are no matches in play right now.</p>
           </div>
         ) : (
           <div className="space-y-10">

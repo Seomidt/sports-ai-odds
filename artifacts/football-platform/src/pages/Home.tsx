@@ -22,12 +22,12 @@ export function Home() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link href="/sign-up">
             <div className="h-12 px-8 flex items-center justify-center rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors cursor-pointer border border-transparent">
-              Kom i gang <ArrowRight className="ml-2 w-4 h-4" />
+              Get Started <ArrowRight className="ml-2 w-4 h-4" />
             </div>
           </Link>
           <Link href="/sign-in">
             <div className="h-12 px-8 flex items-center justify-center rounded-md glass-card text-white font-medium hover:bg-white/10 transition-colors cursor-pointer">
-              Log ind
+              Sign In
             </div>
           </Link>
         </div>

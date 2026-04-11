@@ -81,7 +81,28 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
   }
 });
 
-// GET /api/analysis/accuracy — AI track record (admin + display)
+router.get("/analysis/value-odds", async (_req, res) => {
+  try {
+    const tips = await db.query.aiBettingTips.findMany({
+      where: (t, { and: andFn, isNull }) => andFn(isNull(t.outcome)),
+    });
+
+    const ranked = tips
+      .filter(t => t.betType !== 'no_bet')
+      .map(t => {
+        const valueScore = t.valueRating === 'strong_value' ? 4 : t.valueRating === 'value' ? 3 : t.valueRating === 'fair' ? 2 : 1;
+        return { ...t, valueScore, combinedScore: valueScore * 10 + t.trustScore };
+      })
+      .sort((a, b) => b.combinedScore - a.combinedScore);
+
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    return res.json({ tips: ranked });
+  } catch (err) {
+    console.error("[analysis] value-odds error:", err);
+    return res.status(500).json({ error: "Failed to fetch value odds" });
+  }
+});
+
 router.get("/analysis/accuracy", async (_req, res) => {
   try {
     const stats = await getAiAccuracyStats();

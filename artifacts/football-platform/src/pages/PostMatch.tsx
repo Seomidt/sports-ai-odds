@@ -38,8 +38,8 @@ export function PostMatch() {
     <Layout>
       <div className="space-y-8">
         <header>
-          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-2">EFTER KAMP</h1>
-          <p className="text-muted-foreground">Afsluttede kampe — post-match analyse og signaler.</p>
+          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-2">POST-MATCH</h1>
+          <p className="text-muted-foreground">Finished fixtures — post-match analysis and signals.</p>
         </header>
 
         {isLoading ? (
@@ -50,15 +50,15 @@ export function PostMatch() {
           <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center gap-4">
             <CheckCircle2 className="w-10 h-10 text-muted-foreground opacity-30" />
             <div>
-              <h3 className="text-lg font-medium text-white mb-1">Ingen afsluttede kampe endnu</h3>
+              <h3 className="text-lg font-medium text-white mb-1">No finished fixtures yet</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Kampresultater fra dagens runde vises her, når kampene er færdige.
+                Results from today's matches will appear here once games are completed.
               </p>
               <Link href="/live">
                 <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 text-sm font-mono font-semibold hover:bg-primary/20 transition-colors">
                   <Radio className="w-3.5 h-3.5" />
                   <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  Følg live kampe
+                  Watch live matches
                 </button>
               </Link>
             </div>
@@ -75,7 +75,7 @@ export function PostMatch() {
                     {league.leagueName ?? `League ${league.leagueId}`}
                   </span>
                   <span className="text-xs text-muted-foreground font-mono ml-auto">
-                    {league.fixtures.length} {league.fixtures.length === 1 ? "kamp" : "kampe"}
+                    {league.fixtures.length} {league.fixtures.length === 1 ? "match" : "matches"}
                   </span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

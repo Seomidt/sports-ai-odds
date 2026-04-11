@@ -48,7 +48,7 @@ function StandingsTable({ leagueId, season }: { leagueId: number; season: number
     return (
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground font-mono gap-3">
         <div className="w-2 h-2 rounded-full bg-muted-foreground/30" />
-        <p className="text-sm">Stillinger endnu ikke synkroniseret</p>
+        <p className="text-sm">Standings not yet synchronized</p>
       </div>
     );
   }
@@ -59,13 +59,13 @@ function StandingsTable({ leagueId, season }: { leagueId: number; season: number
         <thead>
           <tr className="border-b border-white/6">
             <th className="text-left py-3 pl-4 pr-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">#</th>
-            <th className="text-left py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest">Hold</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">K</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">V</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">U</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">T</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">MF</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">MM</th>
+            <th className="text-left py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest">Team</th>
+            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">P</th>
+            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">W</th>
+            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">D</th>
+            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">L</th>
+            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">GF</th>
+            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">GA</th>
             <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-10">+/-</th>
             <th className="text-left py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest">Form</th>
             <th className="text-center py-3 pr-4 pl-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">Pts</th>
@@ -140,7 +140,7 @@ function StandingsTable({ leagueId, season }: { leagueId: number; season: number
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 font-mono">
           <div className="w-3 h-3 rounded-sm bg-destructive/20 border border-destructive/40" />
-          Nedrykning
+          Relegation
         </div>
       </div>
     </div>
@@ -155,9 +155,9 @@ export function Standings() {
       <div className="space-y-6">
         <header>
           <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">
-            STILLINGER
+            STANDINGS
           </h1>
-          <p className="text-muted-foreground text-sm">Live tabeller for overvågede turneringer · opdateres hvert 15. min</p>
+          <p className="text-muted-foreground text-sm">Live tables for tracked leagues · updates every 15 min</p>
         </header>
 
         <div className="flex flex-wrap gap-2">

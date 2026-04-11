@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Activity, ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, TrendingUp } from "lucide-react";
+import appLogo from "@assets/5F5DBC0C-3F81-4EDC-B8D7-46D1E3C7730F_1775925782296.png";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { AlertPoller } from "./AlertPoller";
@@ -32,7 +33,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Desktop Sidebar (hidden on mobile) ─────────────────────────── */}
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
         <div className="h-16 flex items-center px-6 border-b border-white/5">
-          <img src="/src/assets/signal-terminal-logo.png" alt="Signal Terminal" className="w-8 h-8 mr-3 rounded-lg" />
+          <img src={appLogo} alt="Signal Terminal" className="w-8 h-8 mr-3 rounded-lg object-contain" />
           <span className="font-mono font-bold tracking-tight text-lg">SIGNAL TERMINAL</span>
         </div>
 
@@ -86,7 +87,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <aside className="relative w-72 bg-[#0a0f1e] border-r border-white/5 flex flex-col z-10">
             <div className="h-16 flex items-center justify-between px-5 border-b border-white/5">
               <div className="flex items-center gap-3">
-                <img src="/src/assets/signal-terminal-logo.png" alt="Signal Terminal" className="w-6 h-6 rounded-md" />
+                <img src={appLogo} alt="Signal Terminal" className="w-6 h-6 rounded-md object-contain" />
                 <span className="font-mono font-bold tracking-tight">SIGNAL TERMINAL</span>
               </div>
               <button onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-white">
@@ -143,7 +144,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Mobile top bar */}
         <header className="md:hidden flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
           <div className="flex items-center gap-2">
-            <img src="/src/assets/signal-terminal-logo.png" alt="Signal Terminal" className="w-6 h-6 rounded-md" />
+            <img src={appLogo} alt="Signal Terminal" className="w-6 h-6 rounded-md object-contain" />
             <span className="font-mono font-bold text-sm tracking-tight">SIGNAL TERMINAL</span>
           </div>
           <button

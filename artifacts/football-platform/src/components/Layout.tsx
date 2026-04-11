@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Activity, LayoutDashboard, ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, CalendarDays } from "lucide-react";
+import { Activity, ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, TrendingUp } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { AlertPoller } from "./AlertPoller";
@@ -13,8 +13,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/fixtures", label: "Kampe", icon: CalendarDays },
+    { href: "/dashboard", label: "Dashboard", icon: TrendingUp },
+    { href: "/live", label: "Live", icon: Radio },
+    { href: "/pre-match", label: "Før kamp", icon: Clock },
+    { href: "/post-match", label: "Efter kamp", icon: CheckCircle2 },
     { href: "/standings", label: "Standings", icon: ListOrdered },
     { href: "/following", label: "Following", icon: Star },
   ];

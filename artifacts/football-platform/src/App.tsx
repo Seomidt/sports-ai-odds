@@ -9,8 +9,11 @@ import { useGetMe } from "@workspace/api-client-react";
 import { SessionProvider } from "./lib/session";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
-import { Fixtures } from "./pages/Fixtures";
+import { Live } from "./pages/Live";
+import { PreMatch } from "./pages/PreMatch";
+import { PostMatch } from "./pages/PostMatch";
 import { Match } from "./pages/Match";
+
 import { Standings } from "./pages/Standings";
 import { Following } from "./pages/Following";
 import { Admin } from "./pages/Admin";
@@ -141,7 +144,7 @@ function HomeRedirect() {
   return (
     <>
       <Show when="signed-in">
-        <Redirect to="/dashboard" />
+        <Redirect to="/live" />
       </Show>
       <Show when="signed-out">
         <Home />
@@ -202,7 +205,9 @@ function ClerkProviderWithRoutes() {
             <Route path="/sign-up/*?" component={SignUpPage} />
             
             <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
-            <Route path="/fixtures"><ProtectedRoute component={Fixtures} /></Route>
+            <Route path="/live"><ProtectedRoute component={Live} /></Route>
+            <Route path="/pre-match"><ProtectedRoute component={PreMatch} /></Route>
+            <Route path="/post-match"><ProtectedRoute component={PostMatch} /></Route>
             <Route path="/match/:id"><ProtectedRoute component={Match} /></Route>
             <Route path="/standings"><ProtectedRoute component={Standings} /></Route>
             <Route path="/following"><ProtectedRoute component={Following} /></Route>

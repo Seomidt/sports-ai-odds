@@ -573,62 +573,44 @@ export async function fetchFixturesBySeason(
   season: number
 ): Promise<ApiFixture[] | null> {
   if (!API_KEY) return null;
-
-  const all: ApiFixture[] = [];
-  let page = 1;
-
-  while (true) {
-    if (requestsToday >= MAX_REQUESTS_PER_DAY) {
-      console.warn("[api-football] Daily limit reached during season fetch");
-      break;
-    }
-
-    let done = false;
-    await serialiseRequest(async () => {
-      const url = new URL(`${BASE_URL}/fixtures`);
-      url.searchParams.set("league", String(leagueId));
-      url.searchParams.set("season", String(season));
-      url.searchParams.set("page", String(page));
-
-      try {
-        const res = await fetch(url.toString(), {
-          headers: { "x-apisports-key": API_KEY! },
-        });
-
-        requestsToday++;
-        requestLog.push({ timestamp: Date.now(), endpoint: "/fixtures[season]" });
-        if (requestLog.length > 200) requestLog = requestLog.slice(-200);
-
-        if (!res.ok) {
-          console.error(`[api-football] HTTP ${res.status} season fetch`);
-          done = true;
-          return;
-        }
-
-        const json = await res.json() as {
-          response: ApiFixture[];
-          errors: unknown;
-          paging: { current: number; total: number };
-        };
-
-        if (json.errors && Object.keys(json.errors as object).length > 0) {
-          console.error("[api-football] Season fetch API error:", JSON.stringify(json.errors));
-          done = true;
-          return;
-        }
-
-        all.push(...json.response);
-
-        if (json.paging.current >= json.paging.total) { done = true; return; }
-        page++;
-      } catch (err) {
-        console.error("[api-football] Season fetch error:", err);
-        done = true;
-      }
-    }); // end serialiseRequest
-
-    if (done) break;
+  if (requestsToday >= MAX_REQUESTS_PER_DAY) {
+    console.warn("[api-football] Daily limit reached during season fetch");
+    return null;
   }
 
-  return all.length > 0 ? all : null;
+  return serialiseRequest(async () => {
+    const url = new URL(`${BASE_URL}/fixtures`);
+    url.searchParams.set("league", String(leagueId));
+    url.searchParams.set("season", String(season));
+
+    try {
+      const res = await fetch(url.toString(), {
+        headers: { "x-apisports-key": API_KEY! },
+      });
+
+      requestsToday++;
+      requestLog.push({ timestamp: Date.now(), endpoint: "/fixtures[season]" });
+      if (requestLog.length > 200) requestLog = requestLog.slice(-200);
+
+      if (!res.ok) {
+        console.error(`[api-football] HTTP ${res.status} season fetch`);
+        return null;
+      }
+
+      const json = await res.json() as {
+        response: ApiFixture[];
+        errors: unknown;
+      };
+
+      if (json.errors && Object.keys(json.errors as object).length > 0) {
+        console.error("[api-football] Season fetch API error:", JSON.stringify(json.errors));
+        return null;
+      }
+
+      return json.response.length > 0 ? json.response : null;
+    } catch (err) {
+      console.error("[api-football] Season fetch error:", err);
+      return null;
+    }
+  });
 }

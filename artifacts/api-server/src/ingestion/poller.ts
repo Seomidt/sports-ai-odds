@@ -261,10 +261,10 @@ async function syncPreMatchData() {
 
 async function syncOdds() {
   const now = new Date();
-  const inSixHours = new Date(now.getTime() + 6 * 60 * 60 * 1000);
+  const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
   const upcoming = await db.query.fixtures.findMany({
-    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, inSixHours)),
+    where: (f, { and, gte, lte, eq }) => and(gte(f.kickoff, now), lte(f.kickoff, in48Hours), eq(f.statusShort, "NS")),
   });
 
   for (const fix of upcoming) {
@@ -1184,6 +1184,7 @@ export function startPoller() {
   setTimeout(() => syncCoachesForKnownTeams().catch(console.error), 60 * 1000);
   setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 90 * 1000);
   setTimeout(() => syncH2HForUpcomingFixtures().catch(console.error), 2 * 60 * 1000);
+  setTimeout(() => syncOdds().catch(console.error), 2.5 * 60 * 1000);
   setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 3 * 60 * 1000);
   setTimeout(() => syncTeamSeasonStats().catch(console.error), 4 * 60 * 1000);
   setTimeout(() => syncTopScorersAndAssists().catch(console.error), 5 * 60 * 1000);

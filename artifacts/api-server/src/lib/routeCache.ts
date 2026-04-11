@@ -19,6 +19,10 @@ export function cacheSet(key: string, body: unknown, ttlMs: number) {
   store.set(key, { body, expiresAt: Date.now() + ttlMs });
 }
 
+export function cacheDel(key: string) {
+  store.delete(key);
+}
+
 // Periodically purge expired entries
 setInterval(() => {
   const now = Date.now();

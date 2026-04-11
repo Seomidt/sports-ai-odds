@@ -2,6 +2,7 @@ import { Router } from "express";
 import { db, pool } from "@workspace/db";
 import { followedFixtures, alertLog } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
@@ -60,6 +61,15 @@ router.get("/alerts/unread", async (req, res): Promise<void> => {
     return;
   }
 
+  const cacheKey = `alerts:unread:${sessionId}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "private, max-age=15");
+    res.set("X-Cache", "HIT");
+    res.json(cached);
+    return;
+  }
+
   const { rows } = await pool.query(
     `SELECT
        a.id,
@@ -80,7 +90,11 @@ router.get("/alerts/unread", async (req, res): Promise<void> => {
     [sessionId],
   );
 
-  res.json({ alerts: rows });
+  const body = { alerts: rows };
+  cacheSet(cacheKey, body, TTL.S15);
+  res.set("Cache-Control", "private, max-age=15");
+  res.set("X-Cache", "MISS");
+  res.json(body);
 });
 
 // POST /api/alerts/:id/read
@@ -94,6 +108,9 @@ router.post("/alerts/:id/read", async (req, res) => {
     .update(alertLog)
     .set({ isRead: true })
     .where(and(eq(alertLog.id, id), eq(alertLog.sessionId, sessionId)));
+
+  // Invalidate so next poll sees updated state immediately
+  cacheDel(`alerts:unread:${sessionId}`);
 
   return res.json({ read: true });
 });

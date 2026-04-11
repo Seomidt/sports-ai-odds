@@ -7,9 +7,9 @@ if (!API_KEY) {
 }
 
 let requestsToday = 0;
-const MAX_REQUESTS_PER_DAY = 3000; // Pro plan: much higher daily limit
+const MAX_REQUESTS_PER_DAY = 75_000; // Ultra plan: 75,000 req/day
 let lastRequestAt = 0;
-const MIN_REQUEST_INTERVAL_MS = 700; // Pro plan: 100 req/min = 1 per 600ms, use 700ms to be safe
+const MIN_REQUEST_INTERVAL_MS = 200; // Ultra plan: 500 req/min = 120ms, use 200ms safety margin
 let requestLog: { timestamp: number; endpoint: string }[] = [];
 let dayResetAt = Date.now();
 
@@ -514,4 +514,46 @@ export async function fetchOddsAllMarkets(fixtureId: number): Promise<ApiOddsMar
     }
     return { bookmaker: "unknown", markets };
   });
+}
+
+// ─── Ultra plan additional endpoints ──────────────────────────────────────────
+
+export interface ApiSquadPlayer {
+  id: number;
+  name: string;
+  age: number | null;
+  number: number | null;
+  position: string | null;
+  photo: string | null;
+}
+
+export interface ApiSquad {
+  team: { id: number; name: string; logo: string };
+  players: ApiSquadPlayer[];
+}
+
+export async function fetchSquad(teamId: number): Promise<ApiSquad | null> {
+  const data = await apiFetch<ApiSquad[]>("/players/squads", { team: teamId });
+  return data?.[0] ?? null;
+}
+
+export interface ApiFixtureInjury {
+  player: { id: number; name: string; photo: string | null; type: string | null; reason: string | null };
+  team: { id: number; name: string; logo: string };
+}
+
+export async function fetchFixtureInjuries(fixtureId: number): Promise<ApiFixtureInjury[] | null> {
+  return apiFetch<ApiFixtureInjury[]>("/injuries", { fixture: fixtureId });
+}
+
+export async function fetchTopAppearances(leagueId: number, season: number): Promise<ApiTopScorer[] | null> {
+  return apiFetch<ApiTopScorer[]>("/players/topassists", { league: leagueId, season });
+}
+
+export interface ApiRound {
+  round: string;
+}
+
+export async function fetchRounds(leagueId: number, season: number): Promise<string[] | null> {
+  return apiFetch<string[]>("/fixtures/rounds", { league: leagueId, season });
 }

@@ -49,6 +49,8 @@ import {
   fetchTopYellowCards,
   fetchTopRedCards,
   fetchOddsAllMarkets,
+  fetchSquad,
+  fetchFixtureInjuries,
   type ApiFixture,
   type ApiStatItem,
   type ApiLineup,
@@ -130,12 +132,20 @@ async function syncFixturesForDate(date: string) {
   }
 }
 
-async function syncTodayFixtures() {
+async function syncNearTermFixtures() {
+  // Today + tomorrow: called frequently (every 3 min)
   const today = new Date().toISOString().split("T")[0]!;
   await syncFixturesForDate(today);
-  // Also sync tomorrow and day after
   await syncFixturesForDate(getTomorrow());
-  await syncFixturesForDate(getDateOffset(2));
+}
+
+async function syncTodayFixtures() {
+  // Full 7-day window: called every 2 hours for days 3-7
+  const today = new Date().toISOString().split("T")[0]!;
+  await syncFixturesForDate(today);
+  for (let i = 1; i <= 6; i++) {
+    await syncFixturesForDate(getDateOffset(i));
+  }
 }
 
 async function syncStandings() {
@@ -824,12 +834,80 @@ async function syncTrophiesForKnownTeams() {
   console.log(`[poller] Trophies synced for ${allTeams.length} teams`);
 }
 
+async function syncSquadsForUpcomingTeams() {
+  console.log("[poller] Syncing squads for upcoming teams");
+  const now = new Date();
+  const in7days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const upcomingFixtures = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(gte(f.kickoff, now), lte(f.kickoff, in7days), inArray(f.statusShort, ["NS", "TBD"])),
+    columns: { homeTeamId: true, awayTeamId: true },
+  });
+  if (upcomingFixtures.length === 0) { console.log("[poller] Squads: no upcoming fixtures — skipping"); return; }
+
+  const teamIds = new Set<number>();
+  for (const f of upcomingFixtures) { teamIds.add(f.homeTeamId); teamIds.add(f.awayTeamId); }
+
+  for (const teamId of teamIds) {
+    const squad = await fetchSquad(teamId);
+    if (!squad) continue;
+    for (const player of squad.players) {
+      await db
+        .insert(playerProfiles)
+        .values({
+          playerId: player.id,
+          name: player.name,
+          age: player.age,
+          photo: player.photo,
+          position: player.position,
+          teamId,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: playerProfiles.playerId,
+          set: { age: player.age, photo: player.photo, position: player.position, teamId, updatedAt: new Date() },
+        });
+    }
+  }
+  console.log(`[poller] Squads synced for ${teamIds.size} teams`);
+}
+
+async function syncFixtureInjuriesForUpcoming() {
+  console.log("[poller] Syncing injuries for upcoming fixtures");
+  const now = new Date();
+  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(gte(f.kickoff, now), lte(f.kickoff, in48h), inArray(f.statusShort, ["NS", "TBD"])),
+    columns: { fixtureId: true },
+  });
+
+  for (const fix of upcoming) {
+    const data = await fetchFixtureInjuries(fix.fixtureId);
+    if (!data || data.length === 0) continue;
+    for (const inj of data) {
+      await db
+        .insert(injuries)
+        .values({
+          fixtureId: fix.fixtureId,
+          playerId: inj.player.id,
+          playerName: inj.player.name,
+          teamId: inj.team.id,
+          type: inj.player.type,
+          reason: inj.player.reason,
+        })
+        .onConflictDoNothing();
+    }
+  }
+  console.log(`[poller] Fixture injuries synced for ${upcoming.length} fixtures`);
+}
+
 async function syncPlayerProfilesForTopPlayers() {
   console.log("[poller] Syncing player profiles");
   const topPlayers = await db.query.playerSeasonStats.findMany({
     columns: { playerId: true, leagueId: true, seasonYear: true },
     orderBy: (p, { desc: d }) => [d(p.goals)],
-    limit: 20,
+    limit: 50,
   });
 
   for (const entry of topPlayers) {
@@ -1088,58 +1166,75 @@ export function startPoller() {
   if (pollerStarted) return;
   pollerStarted = true;
 
-  console.log("[poller] Starting polling service (Pro plan — full Tier 1+2+3)");
+  console.log("[poller] Starting polling service (Ultra plan — 75k req/day, 500 req/min)");
 
   // ── Immediate startup syncs ────────────────────────────────────────────────
-  syncTodayFixtures().catch(console.error);
+  syncNearTermFixtures().catch(console.error);
   syncStandings().catch(console.error);
 
-  // Staggered startup for heavy syncs (avoids API burst)
-  setTimeout(() => syncCoachesForKnownTeams().catch(console.error), 20 * 1000);
-  setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 40 * 1000);
-  setTimeout(() => syncH2HForUpcomingFixtures().catch(console.error), 60 * 1000);
-  setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 90 * 1000);
-  setTimeout(() => syncTeamSeasonStats().catch(console.error), 3 * 60 * 1000);
+  // Staggered startup for full 7-day window + heavy syncs (avoids API burst)
+  setTimeout(() => syncTodayFixtures().catch(console.error), 30 * 1000);
+  setTimeout(() => syncCoachesForKnownTeams().catch(console.error), 60 * 1000);
+  setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 90 * 1000);
+  setTimeout(() => syncH2HForUpcomingFixtures().catch(console.error), 2 * 60 * 1000);
+  setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 3 * 60 * 1000);
+  setTimeout(() => syncTeamSeasonStats().catch(console.error), 4 * 60 * 1000);
   setTimeout(() => syncTopScorersAndAssists().catch(console.error), 5 * 60 * 1000);
-  setTimeout(() => syncTopDiscipline().catch(console.error), 7 * 60 * 1000);
-  setTimeout(() => syncTrophiesForKnownTeams().catch(console.error), 9 * 60 * 1000);
-  setTimeout(() => syncPlayerProfilesForTopPlayers().catch(console.error), 11 * 60 * 1000);
-  setTimeout(() => syncOddsAllMarketsForUpcoming().catch(console.error), 13 * 60 * 1000);
+  setTimeout(() => syncTopDiscipline().catch(console.error), 6 * 60 * 1000);
+  setTimeout(() => syncTrophiesForKnownTeams().catch(console.error), 7 * 60 * 1000);
+  setTimeout(() => syncPlayerProfilesForTopPlayers().catch(console.error), 8 * 60 * 1000);
+  setTimeout(() => syncOddsAllMarketsForUpcoming().catch(console.error), 9 * 60 * 1000);
+  setTimeout(() => syncSquadsForUpcomingTeams().catch(console.error), 10 * 60 * 1000);
+  setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
+  setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
 
   // ── Recurring intervals ────────────────────────────────────────────────────
 
-  // Fixtures schedule: every 5 min
-  setInterval(() => syncTodayFixtures().catch(console.error), 5 * 60 * 1000);
+  // Today + tomorrow fixtures: every 3 min (high-frequency freshness)
+  setInterval(() => syncNearTermFixtures().catch(console.error), 3 * 60 * 1000);
 
-  // Standings: every hour
-  setInterval(() => syncStandings().catch(console.error), 60 * 60 * 1000);
+  // Full 7-day fixture window: every 2 hours (future dates change rarely)
+  setInterval(() => syncTodayFixtures().catch(console.error), 2 * 60 * 60 * 1000);
 
-  // Pre-match lineups + odds + predictions + H2H: every 10 min
+  // Standings: every 2 hours (standings update after match ends, not mid-game)
+  setInterval(() => syncStandings().catch(console.error), 2 * 60 * 60 * 1000);
+
+  // Pre-match lineups + odds + predictions + injuries: every 5 min (Ultra budget allows it)
   setInterval(() => {
     syncPreMatchData().catch(console.error);
     syncOdds().catch(console.error);
-    syncH2HForUpcomingFixtures().catch(console.error);
     syncOddsAllMarketsForUpcoming().catch(console.error);
-  }, 10 * 60 * 1000);
+    syncFixtureInjuriesForUpcoming().catch(console.error);
+  }, 5 * 60 * 1000);
 
-  // Team season stats: every 6 hours
-  setInterval(() => syncTeamSeasonStats().catch(console.error), 6 * 60 * 60 * 1000);
+  // H2H: every 6 hours (changes only before a new fixture)
+  setInterval(() => syncH2HForUpcomingFixtures().catch(console.error), 6 * 60 * 60 * 1000);
 
-  // Top scorers + assists + discipline + sidelined: once per day
+  // Team season stats: every 2 hours (more frequent = fresher form indicators)
+  setInterval(() => syncTeamSeasonStats().catch(console.error), 2 * 60 * 60 * 1000);
+
+  // Top scorers + assists + discipline: every 6 hours
   setInterval(() => {
     syncTopScorersAndAssists().catch(console.error);
     syncTopDiscipline().catch(console.error);
-    syncSidelinedForRecentPlayers().catch(console.error);
-    syncPlayerProfilesForTopPlayers().catch(console.error);
-  }, 24 * 60 * 60 * 1000);
+  }, 6 * 60 * 60 * 1000);
 
-  // Coaches + transfers + venues + trophies: every 3 days
+  // Player profiles + sidelined: every 12 hours
+  setInterval(() => {
+    syncPlayerProfilesForTopPlayers().catch(console.error);
+    syncSidelinedForRecentPlayers().catch(console.error);
+  }, 12 * 60 * 60 * 1000);
+
+  // Squads: every 12 hours (squads change rarely mid-season)
+  setInterval(() => syncSquadsForUpcomingTeams().catch(console.error), 12 * 60 * 60 * 1000);
+
+  // Coaches + transfers + venues + trophies: once per day
   setInterval(() => {
     syncCoachesForKnownTeams().catch(console.error);
     syncTransfersForTrackedTeams().catch(console.error);
     syncVenuesAndInfoForKnownTeams().catch(console.error);
     syncTrophiesForKnownTeams().catch(console.error);
-  }, 3 * 24 * 60 * 60 * 1000);
+  }, 24 * 60 * 60 * 1000);
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);

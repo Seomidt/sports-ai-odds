@@ -20,7 +20,7 @@ router.get("/admin/ai-stats", requireAdmin, (_req, res) => {
 });
 
 // GET /api/admin/users — list all allowed users
-router.get("/admin/users", requireAdmin, async (_req, res) => {
+router.get("/admin/users", requireAdmin, async (_req, res): Promise<void> => {
   const users = await db.query.allowedUsers.findMany({
     orderBy: (u, { asc }) => [asc(u.createdAt)],
   });
@@ -28,9 +28,12 @@ router.get("/admin/users", requireAdmin, async (_req, res) => {
 });
 
 // POST /api/admin/users — add a user to the allowed list
-router.post("/admin/users", requireAdmin, async (req, res) => {
+router.post("/admin/users", requireAdmin, async (req, res): Promise<void> => {
   const { email, role } = req.body as { email?: string; role?: string };
-  if (!email) return res.status(400).json({ error: "Missing email" });
+  if (!email) {
+    res.status(400).json({ error: "Missing email" });
+    return;
+  }
 
   const safeRole = role === "admin" ? "admin" : "user";
 
@@ -47,19 +50,25 @@ router.post("/admin/users", requireAdmin, async (req, res) => {
 });
 
 // DELETE /api/admin/users/:id — remove a user
-router.delete("/admin/users/:id", requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id ?? "0");
-  if (!id) return res.status(400).json({ error: "Invalid id" });
+router.delete("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params["id"]), 10);
+  if (!id) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
 
   await db.delete(allowedUsers).where(eq(allowedUsers.id, id));
   res.json({ deleted: true });
 });
 
 // PATCH /api/admin/users/:id — update role
-router.patch("/admin/users/:id", requireAdmin, async (req, res) => {
-  const id = parseInt(req.params.id ?? "0");
+router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> => {
+  const id = parseInt(String(req.params["id"]), 10);
   const { role } = req.body as { role?: string };
-  if (!id || !role) return res.status(400).json({ error: "Invalid params" });
+  if (!id || !role) {
+    res.status(400).json({ error: "Invalid params" });
+    return;
+  }
 
   const safeRole = role === "admin" ? "admin" : "user";
   await db.update(allowedUsers).set({ role: safeRole }).where(eq(allowedUsers.id, id));

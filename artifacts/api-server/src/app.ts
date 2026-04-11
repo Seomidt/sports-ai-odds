@@ -32,7 +32,25 @@ app.use(
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
-app.use(cors({ credentials: true, origin: true }));
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
+  .split(",")
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    credentials: true,
+    origin: (origin, callback) => {
+      if (!origin) { callback(null, true); return; }
+      const host = process.env.REPLIT_DEV_DOMAIN;
+      const allowed =
+        origin.startsWith("http://localhost") ||
+        (host && origin.includes(host)) ||
+        ALLOWED_ORIGINS.includes(origin);
+      callback(allowed ? null : new Error("CORS: origin not allowed"), allowed);
+    },
+  }),
+);
 
 // Stripe webhook must be registered BEFORE express.json() so the raw buffer is preserved.
 // Only active when STRIPE_ENABLED=true.

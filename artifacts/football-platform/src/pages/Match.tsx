@@ -1,7 +1,6 @@
 import { 
   useGetFixture, 
-  useGetFixtureSignals, 
-  useGetLiveAnalysis,
+  useGetFixtureSignals,
   useGetFixtureOdds,
   useGetFixtureLiveOdds,
   useGetFixtureH2H,
@@ -352,15 +351,28 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
 
 // ─── Live Analysis Tab ────────────────────────────────────────────────────────
 
+interface LiveAnalysis {
+  phase: string;
+  headline: string;
+  narrative: string;
+  key_factors?: string[];
+  momentum_verdict?: string;
+  alert_worthy?: boolean;
+  cachedAt?: string;
+}
+
 function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
-  const { data: liveAnalysis, isLoading } = useGetLiveAnalysis(fixtureId, {
-    query: {
-      enabled: !!fixtureId,
-      queryKey: ['liveAnalysis', fixtureId],
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
-      refetchInterval: 30_000
-    } as any // eslint-disable-line @typescript-eslint/no-explicit-any
+  const { data: liveAnalysis, isLoading } = useQuery<LiveAnalysis | null>({
+    queryKey: ['liveAnalysis', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/analysis/${fixtureId}/live`);
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!fixtureId,
+    staleTime: 30_000,
+    gcTime: 5 * 60_000,
+    refetchInterval: 30_000,
   });
 
   return (

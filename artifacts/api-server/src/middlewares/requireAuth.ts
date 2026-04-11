@@ -3,7 +3,7 @@ import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { allowedUsers } from "@workspace/db/schema";
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "seomidt@gmail.com").toLowerCase().trim();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "").toLowerCase().trim();
 
 async function getUserEmail(userId: string): Promise<string> {
   try {
@@ -33,7 +33,7 @@ export async function requireAllowedUser(req: Request, res: Response, next: Next
 
   const email = await getUserEmail(auth.userId);
 
-  if (email === ADMIN_EMAIL) { next(); return; }
+  if (ADMIN_EMAIL && email === ADMIN_EMAIL) { next(); return; }
 
   const allowed = await db.query.allowedUsers.findFirst({
     where: (u, { eq: eqFn }) => eqFn(u.email, email),
@@ -56,7 +56,7 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
 
   const email = await getUserEmail(auth.userId);
 
-  if (email === ADMIN_EMAIL) { next(); return; }
+  if (ADMIN_EMAIL && email === ADMIN_EMAIL) { next(); return; }
 
   const allowed = await db.query.allowedUsers.findFirst({
     where: (u, { eq: eqFn }) => eqFn(u.email, email),

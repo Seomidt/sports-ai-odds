@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 
 const router = Router();
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "seomidt@gmail.com").toLowerCase().trim();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "").toLowerCase().trim();
 
 // GET /api/me — returns current user's access level
 router.get("/me", async (req, res) => {
@@ -22,7 +22,7 @@ router.get("/me", async (req, res) => {
     return res.json({ authenticated: true, userId: auth.userId, email: "", role: null, accessDenied: true });
   }
 
-  if (email === ADMIN_EMAIL) {
+  if (ADMIN_EMAIL && email === ADMIN_EMAIL) {
     return res.json({ authenticated: true, userId: auth.userId, email, role: "admin" });
   }
 

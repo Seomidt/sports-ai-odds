@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 
 const router = Router();
 
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "").toLowerCase().trim();
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "seomidt@gmail.com").toLowerCase().trim();
 
 // GET /api/me — returns current user's access level
 router.get("/me", async (req, res) => {

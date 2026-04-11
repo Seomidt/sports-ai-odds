@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Activity, ArrowRight, Shield, Zap, LineChart } from "lucide-react";
+import { ArrowRight, Shield, Zap, LineChart } from "lucide-react";
 
 export function Home() {
   return (
@@ -8,26 +8,26 @@ export function Home() {
       
       <div className="z-10 text-center max-w-3xl px-6">
         <div className="inline-flex items-center justify-center p-3 mb-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl">
-          <Activity className="w-12 h-12 text-primary" />
+          <img src="/logo.png" alt="sports-ai-odds" className="w-20 h-20 object-contain" />
         </div>
         
         <h1 className="text-5xl md:text-7xl font-bold tracking-tighter mb-6 font-mono">
-          SIGNAL <span className="text-primary">TERMINAL</span>
+          SPORTS <span className="text-primary">AI ODDS</span>
         </h1>
         
         <p className="text-xl text-muted-foreground mb-12 max-w-2xl mx-auto leading-relaxed">
-          Professional-grade AI football analysis platform. Track live signals, access predictive insights, and monitor market anomalies in real-time.
+          Professional-grade AI sports analysis platform. Track live signals, access predictive insights, and monitor market anomalies in real-time.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link href="/sign-up">
             <div className="h-12 px-8 flex items-center justify-center rounded-md bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors cursor-pointer border border-transparent">
-              Deploy Terminal <ArrowRight className="ml-2 w-4 h-4" />
+              Kom i gang <ArrowRight className="ml-2 w-4 h-4" />
             </div>
           </Link>
           <Link href="/sign-in">
             <div className="h-12 px-8 flex items-center justify-center rounded-md glass-card text-white font-medium hover:bg-white/10 transition-colors cursor-pointer">
-              Authenticate Session
+              Log ind
             </div>
           </Link>
         </div>

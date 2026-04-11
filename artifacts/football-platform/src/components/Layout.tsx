@@ -1,10 +1,11 @@
 import { Link, useLocation } from "wouter";
-import { Activity, ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, TrendingUp } from "lucide-react";
-import appLogo from "@assets/5F5DBC0C-3F81-4EDC-B8D7-46D1E3C7730F_1775925782296.png";
+import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, TrendingUp } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { AlertPoller } from "./AlertPoller";
 import { useState } from "react";
+
+const appLogo = "/logo.png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();

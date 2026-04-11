@@ -331,13 +331,18 @@ paths:
     post:
       operationId: markAlertRead
       tags: [alerts]
-      summary: Mark an alert as read
+      summary: Mark an alert as read (session-scoped)
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: integer
+        - name: x-session-id
+          in: header
+          required: true
+          schema:
+            type: string
       responses:
         "200":
           description: Read confirmation

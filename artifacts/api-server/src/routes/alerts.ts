@@ -70,12 +70,14 @@ router.get("/alerts/unread", async (req, res) => {
 // POST /api/alerts/:id/read
 router.post("/alerts/:id/read", async (req, res) => {
   const id = parseInt(req.params.id ?? "0");
+  const sessionId = req.headers["x-session-id"] as string | undefined;
   if (!id) return res.status(400).json({ error: "Invalid alert id" });
+  if (!sessionId) return res.status(400).json({ error: "Missing x-session-id header" });
 
   await db
     .update(alertLog)
     .set({ isRead: true })
-    .where(eq(alertLog.id, id));
+    .where(and(eq(alertLog.id, id), eq(alertLog.sessionId, sessionId)));
 
   return res.json({ read: true });
 });

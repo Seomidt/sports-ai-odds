@@ -1,7 +1,24 @@
 import { Router } from "express";
+import { db } from "@workspace/db";
+import { fixtureSignals } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { getPreAnalysis, getLiveAnalysis, getPostAnalysis, generateAlertText } from "../ai/analysisLayer.js";
 
 const router = Router();
+
+function buildText(result: { headline: string; narrative: string; key_factors?: string[] }): string {
+  const factors = result.key_factors?.length
+    ? "\n\nKey factors: " + result.key_factors.join(" · ")
+    : "";
+  return `${result.headline}\n\n${result.narrative}${factors}`;
+}
+
+async function getSignals(fixtureId: number, phase: string) {
+  return db.query.fixtureSignals.findMany({
+    where: (s, { and: andFn, eq: eqFn }) =>
+      andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, phase)),
+  });
+}
 
 // GET /api/analysis/:fixtureId/pre
 router.get("/analysis/:fixtureId/pre", async (req, res) => {
@@ -10,7 +27,13 @@ router.get("/analysis/:fixtureId/pre", async (req, res) => {
 
   try {
     const result = await getPreAnalysis(id);
-    return res.json(result);
+    const signals = await getSignals(id, "pre");
+    return res.json({
+      phase: "pre",
+      text: buildText(result),
+      cachedAt: new Date().toISOString(),
+      signals,
+    });
   } catch (err) {
     console.error("[analysis] pre error:", err);
     return res.status(500).json({ error: "Analysis failed" });
@@ -24,7 +47,13 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
 
   try {
     const result = await getLiveAnalysis(id);
-    return res.json(result);
+    const signals = await getSignals(id, "live");
+    return res.json({
+      phase: "live",
+      text: buildText(result),
+      cachedAt: new Date().toISOString(),
+      signals,
+    });
   } catch (err) {
     console.error("[analysis] live error:", err);
     return res.status(500).json({ error: "Analysis failed" });
@@ -38,7 +67,13 @@ router.get("/analysis/:fixtureId/post", async (req, res) => {
 
   try {
     const result = await getPostAnalysis(id);
-    return res.json(result);
+    const signals = await getSignals(id, "post");
+    return res.json({
+      phase: "post",
+      text: buildText(result),
+      cachedAt: new Date().toISOString(),
+      signals,
+    });
   } catch (err) {
     console.error("[analysis] post error:", err);
     return res.status(500).json({ error: "Analysis failed" });

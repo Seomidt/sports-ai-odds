@@ -1390,7 +1390,7 @@ export function useGetUnreadAlerts<
 }
 
 /**
- * @summary Mark an alert as read
+ * @summary Mark an alert as read (session-scoped)
  */
 export const getMarkAlertReadUrl = (id: number) => {
   return `/api/alerts/${id}/read`;
@@ -1451,7 +1451,7 @@ export type MarkAlertReadMutationResult = NonNullable<
 export type MarkAlertReadMutationError = ErrorType<unknown>;
 
 /**
- * @summary Mark an alert as read
+ * @summary Mark an alert as read (session-scoped)
  */
 export const useMarkAlertRead = <
   TError = ErrorType<unknown>,

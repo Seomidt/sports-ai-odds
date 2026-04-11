@@ -389,10 +389,14 @@ export const GetUnreadAlertsResponse = zod.object({
 });
 
 /**
- * @summary Mark an alert as read
+ * @summary Mark an alert as read (session-scoped)
  */
 export const MarkAlertReadParams = zod.object({
   id: zod.coerce.number(),
+});
+
+export const MarkAlertReadHeader = zod.object({
+  "x-session-id": zod.string(),
 });
 
 export const MarkAlertReadResponse = zod.object({

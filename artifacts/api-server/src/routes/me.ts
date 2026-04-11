@@ -1,10 +1,10 @@
 import { Router } from "express";
-import { getAuth } from "@clerk/express";
+import { getAuth, clerkClient } from "@clerk/express";
 import { db } from "@workspace/db";
 
 const router = Router();
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "seomidt@gmail.com";
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "seomidt@gmail.com").toLowerCase().trim();
 
 // GET /api/me — returns current user's access level
 router.get("/me", async (req, res) => {
@@ -13,7 +13,14 @@ router.get("/me", async (req, res) => {
     return res.json({ authenticated: false, role: null });
   }
 
-  const email = (auth.sessionClaims?.email as string | undefined) ?? "";
+  let email = "";
+  try {
+    const user = await clerkClient.users.getUser(auth.userId);
+    const primary = user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId);
+    email = (primary?.emailAddress ?? "").toLowerCase().trim();
+  } catch {
+    return res.json({ authenticated: true, userId: auth.userId, email: "", role: null, accessDenied: true });
+  }
 
   if (email === ADMIN_EMAIL) {
     return res.json({ authenticated: true, userId: auth.userId, email, role: "admin" });

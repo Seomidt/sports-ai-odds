@@ -1,10 +1,20 @@
-import { getAuth } from "@clerk/express";
+import { getAuth, clerkClient } from "@clerk/express";
 import type { Request, Response, NextFunction } from "express";
 import { db } from "@workspace/db";
 import { allowedUsers } from "@workspace/db/schema";
 import { eq } from "drizzle-orm";
 
-const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "seomidt@gmail.com";
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL ?? "seomidt@gmail.com").toLowerCase().trim();
+
+async function getUserEmail(userId: string): Promise<string> {
+  try {
+    const user = await clerkClient.users.getUser(userId);
+    const primary = user.emailAddresses.find((e) => e.id === user.primaryEmailAddressId);
+    return (primary?.emailAddress ?? "").toLowerCase().trim();
+  } catch {
+    return "";
+  }
+}
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const auth = getAuth(req);
@@ -20,7 +30,7 @@ export async function requireAllowedUser(req: Request, res: Response, next: Next
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const email = (auth.sessionClaims?.email as string | undefined) ?? "";
+  const email = await getUserEmail(auth.userId);
 
   if (email === ADMIN_EMAIL) return next();
 
@@ -41,15 +51,16 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const email = (auth.sessionClaims?.email as string | undefined) ?? "";
+  const email = await getUserEmail(auth.userId);
 
-  if (email !== ADMIN_EMAIL) {
-    const allowed = await db.query.allowedUsers.findFirst({
-      where: (u, { eq: eqFn }) => eqFn(u.email, email),
-    });
-    if (!allowed || allowed.role !== "admin") {
-      return res.status(403).json({ error: "Admin access required" });
-    }
+  if (email === ADMIN_EMAIL) return next();
+
+  const allowed = await db.query.allowedUsers.findFirst({
+    where: (u, { eq: eqFn }) => eqFn(u.email, email),
+  });
+
+  if (!allowed || allowed.role !== "admin") {
+    return res.status(403).json({ error: "Admin access required" });
   }
 
   next();

@@ -7,9 +7,9 @@ if (!API_KEY) {
 }
 
 let requestsToday = 0;
-const MAX_REQUESTS_PER_DAY = 90;
+const MAX_REQUESTS_PER_DAY = 3000; // Pro plan: much higher daily limit
 let lastRequestAt = 0;
-const MIN_REQUEST_INTERVAL_MS = 7000; // 10 req/min = 1 per 6s, use 7s to be safe
+const MIN_REQUEST_INTERVAL_MS = 700; // Pro plan: 100 req/min = 1 per 600ms, use 700ms to be safe
 let requestLog: { timestamp: number; endpoint: string }[] = [];
 let dayResetAt = Date.now();
 

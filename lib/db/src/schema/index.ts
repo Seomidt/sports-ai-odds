@@ -246,6 +246,22 @@ export const alertLog = pgTable(
   (t) => [index("alert_log_fixture_idx").on(t.fixtureId, t.sessionId)]
 );
 
+// ─── User access control ──────────────────────────────────────────────────────
+
+export const allowedUsers = pgTable(
+  "allowed_users",
+  {
+    id: serial("id").primaryKey(),
+    email: text("email").notNull(),
+    role: text("role").notNull().default("user"), // "admin" | "user"
+    addedBy: text("added_by"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [unique("allowed_users_email_unique").on(t.email)]
+);
+
+export type AllowedUser = typeof allowedUsers.$inferSelect;
+
 // ─── Zod schemas ──────────────────────────────────────────────────────────────
 
 export const insertFixtureSchema = createInsertSchema(fixtures);

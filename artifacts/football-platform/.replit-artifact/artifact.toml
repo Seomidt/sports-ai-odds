@@ -1,0 +1,30 @@
+kind = "web"
+previewPath = "/"
+title = "Signal Terminal"
+version = "1.0.0"
+id = "artifacts/football-platform"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 3000
+
+[services.development]
+run = "PORT=3000 BASE_PATH=/ node /home/runner/workspace/artifacts/football-platform/server.mjs"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/football-platform", "run", "build" ]
+publicDir = "artifacts/football-platform/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "3000"
+BASE_PATH = "/"

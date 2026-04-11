@@ -3,20 +3,33 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AI Football Analysis Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: fixtures
+    description: Football fixtures
+  - name: standings
+    description: League standings
+  - name: signals
+    description: AI signals and features
+  - name: analysis
+    description: AI analysis
+  - name: alerts
+    description: Alerts and following
+  - name: admin
+    description: Admin operations
+  - name: me
+    description: Current user
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +37,400 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /me:
+    get:
+      operationId: getMe
+      tags: [me]
+      summary: Get current user auth status
+      responses:
+        "200":
+          description: Current user info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+
+  /fixtures/today:
+    get:
+      operationId: getTodayFixtures
+      tags: [fixtures]
+      summary: Get fixtures for today and next 3 days grouped by league
+      responses:
+        "200":
+          description: Fixtures grouped by league
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayFixturesResponse"
+
+  /fixtures/followed:
+    get:
+      operationId: getFollowedFixtures
+      tags: [alerts]
+      summary: Get followed fixture IDs for the current session
+      parameters:
+        - name: x-session-id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of followed fixture IDs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowedFixturesResponse"
+
+  /fixtures/{id}:
+    get:
+      operationId: getFixture
+      tags: [fixtures]
+      summary: Get fixture details with events, lineups and stats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Fixture details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FixtureDetailResponse"
+        "404":
+          description: Not found
+
+  /fixtures/{id}/features:
+    get:
+      operationId: getFixtureFeatures
+      tags: [signals]
+      summary: Get computed features for a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Feature list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeaturesResponse"
+
+  /fixtures/{id}/signals:
+    get:
+      operationId: getFixtureSignals
+      tags: [signals]
+      summary: Get computed signals for a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: phase
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [pre, live, post]
+      responses:
+        "200":
+          description: Signal list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignalsResponse"
+
+  /fixtures/{id}/follow:
+    post:
+      operationId: followFixture
+      tags: [alerts]
+      summary: Follow a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: x-session-id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Follow result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
+    delete:
+      operationId: unfollowFixture
+      tags: [alerts]
+      summary: Unfollow a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: x-session-id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Unfollow result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FollowResponse"
+
+  /standings/{leagueId}:
+    get:
+      operationId: getStandings
+      tags: [standings]
+      summary: Get standings for a league
+      parameters:
+        - name: leagueId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Standings list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StandingsResponse"
+
+  /teams/{id}/injuries:
+    get:
+      operationId: getTeamInjuries
+      tags: [fixtures]
+      summary: Get injury list for a team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Injury list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InjuriesResponse"
+
+  /analysis/{fixtureId}/pre:
+    get:
+      operationId: getPreAnalysis
+      tags: [analysis]
+      summary: Get pre-match AI analysis for a fixture
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: AI pre-match analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResponse"
+
+  /analysis/{fixtureId}/live:
+    get:
+      operationId: getLiveAnalysis
+      tags: [analysis]
+      summary: Get live AI analysis for a fixture
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: AI live analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResponse"
+
+  /analysis/{fixtureId}/post:
+    get:
+      operationId: getPostAnalysis
+      tags: [analysis]
+      summary: Get post-match AI analysis for a fixture
+      parameters:
+        - name: fixtureId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: AI post-match analysis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResponse"
+
+  /alerts/explain:
+    post:
+      operationId: explainAlert
+      tags: [alerts]
+      summary: Generate AI explanation for a signal alert
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExplainAlertBody"
+      responses:
+        "200":
+          description: Alert explanation text
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExplainAlertResponse"
+
+  /alerts/unread:
+    get:
+      operationId: getUnreadAlerts
+      tags: [alerts]
+      summary: Get unread alerts for the current session
+      parameters:
+        - name: x-session-id
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Unread alerts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnreadAlertsResponse"
+
+  /alerts/{id}/read:
+    post:
+      operationId: markAlertRead
+      tags: [alerts]
+      summary: Mark an alert as read
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Read confirmation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadConfirmation"
+
+  /admin/stats:
+    get:
+      operationId: getAdminStats
+      tags: [admin]
+      summary: Get API-Football usage stats (admin only)
+      responses:
+        "200":
+          description: API usage statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStatsResponse"
+
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [admin]
+      summary: List all allowed users
+      responses:
+        "200":
+          description: Allowed users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsersResponse"
+    post:
+      operationId: addAdminUser
+      tags: [admin]
+      summary: Add a user to the allowed list
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddUserBody"
+      responses:
+        "200":
+          description: Added user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+
+  /admin/users/{id}:
+    delete:
+      operationId: deleteAdminUser
+      tags: [admin]
+      summary: Remove a user from the allowed list
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteConfirmation"
+    patch:
+      operationId: updateAdminUser
+      tags: [admin]
+      summary: Update user role
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserBody"
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +441,608 @@ components:
       required:
         - status
 
+    MeResponse:
+      type: object
+      properties:
+        authenticated:
+          type: boolean
+        userId:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        accessDenied:
+          type: boolean
+          nullable: true
+      required:
+        - authenticated
+
+    Fixture:
+      type: object
+      properties:
+        fixtureId:
+          type: integer
+        leagueId:
+          type: integer
+        leagueName:
+          type: string
+          nullable: true
+        leagueLogo:
+          type: string
+          nullable: true
+        seasonYear:
+          type: integer
+        homeTeamId:
+          type: integer
+        awayTeamId:
+          type: integer
+        homeTeamName:
+          type: string
+          nullable: true
+        awayTeamName:
+          type: string
+          nullable: true
+        homeTeamLogo:
+          type: string
+          nullable: true
+        awayTeamLogo:
+          type: string
+          nullable: true
+        kickoff:
+          type: string
+          nullable: true
+        statusShort:
+          type: string
+          nullable: true
+        statusElapsed:
+          type: integer
+          nullable: true
+        homeGoals:
+          type: integer
+          nullable: true
+        awayGoals:
+          type: integer
+          nullable: true
+        venue:
+          type: string
+          nullable: true
+        referee:
+          type: string
+          nullable: true
+      required:
+        - fixtureId
+        - leagueId
+        - seasonYear
+        - homeTeamId
+        - awayTeamId
+
+    LeagueGroup:
+      type: object
+      properties:
+        leagueId:
+          type: integer
+        leagueName:
+          type: string
+        leagueLogo:
+          type: string
+          nullable: true
+        fixtures:
+          type: array
+          items:
+            $ref: "#/components/schemas/Fixture"
+      required:
+        - leagueId
+        - leagueName
+        - fixtures
+
+    TodayFixturesResponse:
+      type: object
+      properties:
+        leagues:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeagueGroup"
+      required:
+        - leagues
+
+    FixtureEvent:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        minute:
+          type: integer
+          nullable: true
+        extraMinute:
+          type: integer
+          nullable: true
+        teamId:
+          type: integer
+          nullable: true
+        playerId:
+          type: integer
+          nullable: true
+        playerName:
+          type: string
+          nullable: true
+        assistId:
+          type: integer
+          nullable: true
+        assistName:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        detail:
+          type: string
+          nullable: true
+      required:
+        - id
+        - fixtureId
+
+    FixtureStats:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        teamId:
+          type: integer
+        shotsOnGoal:
+          type: integer
+          nullable: true
+        shotsOffGoal:
+          type: integer
+          nullable: true
+        totalShots:
+          type: integer
+          nullable: true
+        cornerKicks:
+          type: integer
+          nullable: true
+        fouls:
+          type: integer
+          nullable: true
+        yellowCards:
+          type: integer
+          nullable: true
+        redCards:
+          type: integer
+          nullable: true
+        ballPossession:
+          type: integer
+          nullable: true
+        passAccuracy:
+          type: integer
+          nullable: true
+        expectedGoals:
+          type: number
+          nullable: true
+      required:
+        - id
+        - fixtureId
+        - teamId
+
+    FixtureLineup:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        teamId:
+          type: integer
+        formation:
+          type: string
+          nullable: true
+        startingXI:
+          nullable: true
+        substitutes:
+          nullable: true
+      required:
+        - id
+        - fixtureId
+        - teamId
+
+    FixtureDetailResponse:
+      type: object
+      properties:
+        fixture:
+          $ref: "#/components/schemas/Fixture"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/FixtureEvent"
+        stats:
+          type: array
+          items:
+            $ref: "#/components/schemas/FixtureStats"
+        lineups:
+          type: array
+          items:
+            $ref: "#/components/schemas/FixtureLineup"
+      required:
+        - fixture
+        - events
+        - stats
+        - lineups
+
+    TeamFeature:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        teamId:
+          type: integer
+        phase:
+          type: string
+        featureKey:
+          type: string
+        featureValue:
+          type: number
+          nullable: true
+        computedAt:
+          type: string
+      required:
+        - id
+        - fixtureId
+        - teamId
+        - phase
+        - featureKey
+
+    FeaturesResponse:
+      type: object
+      properties:
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamFeature"
+      required:
+        - features
+
+    Signal:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        phase:
+          type: string
+        signalKey:
+          type: string
+        signalLabel:
+          type: string
+        signalValue:
+          type: number
+          nullable: true
+        signalBool:
+          type: boolean
+          nullable: true
+        triggeredAt:
+          type: string
+      required:
+        - id
+        - fixtureId
+        - phase
+        - signalKey
+        - signalLabel
+
+    SignalsResponse:
+      type: object
+      properties:
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Signal"
+      required:
+        - signals
+
+    StandingRow:
+      type: object
+      properties:
+        id:
+          type: integer
+        leagueId:
+          type: integer
+        seasonYear:
+          type: integer
+        teamId:
+          type: integer
+        rank:
+          type: integer
+          nullable: true
+        points:
+          type: integer
+          nullable: true
+        played:
+          type: integer
+          nullable: true
+        won:
+          type: integer
+          nullable: true
+        drawn:
+          type: integer
+          nullable: true
+        lost:
+          type: integer
+          nullable: true
+        goalsFor:
+          type: integer
+          nullable: true
+        goalsAgainst:
+          type: integer
+          nullable: true
+        goalsDiff:
+          type: integer
+          nullable: true
+        form:
+          type: string
+          nullable: true
+      required:
+        - id
+        - leagueId
+        - seasonYear
+        - teamId
+
+    StandingsResponse:
+      type: object
+      properties:
+        standings:
+          type: array
+          items:
+            $ref: "#/components/schemas/StandingRow"
+      required:
+        - standings
+
+    Injury:
+      type: object
+      properties:
+        id:
+          type: integer
+        teamId:
+          type: integer
+        playerId:
+          type: integer
+        playerName:
+          type: string
+          nullable: true
+        type:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        fixtureId:
+          type: integer
+          nullable: true
+      required:
+        - id
+        - teamId
+        - playerId
+
+    InjuriesResponse:
+      type: object
+      properties:
+        injuries:
+          type: array
+          items:
+            $ref: "#/components/schemas/Injury"
+      required:
+        - injuries
+
+    AnalysisResponse:
+      type: object
+      properties:
+        phase:
+          type: string
+        text:
+          type: string
+        cachedAt:
+          type: string
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Signal"
+      required:
+        - phase
+        - text
+
+    ExplainAlertBody:
+      type: object
+      properties:
+        signalKey:
+          type: string
+        signalLabel:
+          type: string
+        matchName:
+          type: string
+      required:
+        - signalKey
+        - signalLabel
+        - matchName
+
+    ExplainAlertResponse:
+      type: object
+      properties:
+        alertText:
+          type: string
+      required:
+        - alertText
+
+    Alert:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        sessionId:
+          type: string
+          nullable: true
+        signalKey:
+          type: string
+        alertText:
+          type: string
+        isRead:
+          type: boolean
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - fixtureId
+        - signalKey
+        - alertText
+
+    UnreadAlertsResponse:
+      type: object
+      properties:
+        alerts:
+          type: array
+          items:
+            $ref: "#/components/schemas/Alert"
+      required:
+        - alerts
+
+    ReadConfirmation:
+      type: object
+      properties:
+        read:
+          type: boolean
+      required:
+        - read
+
+    FollowedFixturesResponse:
+      type: object
+      properties:
+        fixtureIds:
+          type: array
+          items:
+            type: integer
+      required:
+        - fixtureIds
+
+    FollowResponse:
+      type: object
+      properties:
+        followed:
+          type: boolean
+        unfollowed:
+          type: boolean
+        fixtureId:
+          type: integer
+      required:
+        - fixtureId
+
+    RecentRequest:
+      type: object
+      properties:
+        endpoint:
+          type: string
+        time:
+          type: string
+      required:
+        - endpoint
+        - time
+
+    AdminStatsResponse:
+      type: object
+      properties:
+        requestsToday:
+          type: integer
+        maxPerDay:
+          type: integer
+        remaining:
+          type: integer
+        requestsThisHour:
+          type: integer
+        dayResetAt:
+          type: string
+        recentRequests:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentRequest"
+      required:
+        - requestsToday
+        - maxPerDay
+        - remaining
+        - requestsThisHour
+        - dayResetAt
+        - recentRequests
+
+    AllowedUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        role:
+          type: string
+        addedBy:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - email
+        - role
+        - createdAt
+
+    AdminUsersResponse:
+      type: object
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AllowedUser"
+      required:
+        - users
+
+    AdminUserResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/AllowedUser"
+      required:
+        - user
+
+    AddUserBody:
+      type: object
+      properties:
+        email:
+          type: string
+        role:
+          type: string
+          enum: [user, admin]
+      required:
+        - email
+
+    UpdateUserBody:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [user, admin]
+      required:
+        - role
+
+    DeleteConfirmation:
+      type: object
+      properties:
+        deleted:
+          type: boolean
+      required:
+        - deleted

@@ -10,6 +10,8 @@ let requestsToday = 0;
 const MAX_REQUESTS_PER_DAY = 90;
 let lastRequestAt = 0;
 const MIN_REQUEST_INTERVAL_MS = 7000; // 10 req/min = 1 per 6s, use 7s to be safe
+let requestLog: { timestamp: number; endpoint: string }[] = [];
+let dayResetAt = Date.now();
 
 async function apiFetch<T>(endpoint: string, params: Record<string, string | number> = {}): Promise<T | null> {
   if (!API_KEY) return null;
@@ -39,6 +41,9 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
     });
 
     requestsToday++;
+    requestLog.push({ timestamp: Date.now(), endpoint });
+    // Keep only last 200 entries in memory
+    if (requestLog.length > 200) requestLog = requestLog.slice(-200);
 
     if (!res.ok) {
       console.error(`[api-football] HTTP ${res.status} for ${endpoint}`);
@@ -62,8 +67,28 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
 // Reset counter daily
 setInterval(() => {
   requestsToday = 0;
+  requestLog = [];
+  dayResetAt = Date.now();
   console.log("[api-football] Daily request counter reset");
 }, 24 * 60 * 60 * 1000);
+
+export function getApiStats() {
+  const now = Date.now();
+  const oneHourAgo = now - 60 * 60 * 1000;
+  const requestsThisHour = requestLog.filter((r) => r.timestamp > oneHourAgo).length;
+  const recentRequests = requestLog.slice(-20).reverse().map((r) => ({
+    endpoint: r.endpoint,
+    time: new Date(r.timestamp).toISOString(),
+  }));
+  return {
+    requestsToday,
+    maxPerDay: MAX_REQUESTS_PER_DAY,
+    remaining: MAX_REQUESTS_PER_DAY - requestsToday,
+    requestsThisHour,
+    dayResetAt: new Date(dayResetAt).toISOString(),
+    recentRequests,
+  };
+}
 
 export const TRACKED_LEAGUES = [
   { id: 39, name: "Premier League", season: 2024 },

@@ -15,6 +15,12 @@ import {
   coaches,
   sidelinedPlayers,
   transfers,
+  h2hFixtures,
+  teamSeasonStats,
+  playerProfiles,
+  venues,
+  trophies,
+  oddsMarkets,
 } from "@workspace/db/schema";
 import { eq, inArray } from "drizzle-orm";
 import {
@@ -35,6 +41,14 @@ import {
   fetchCoach,
   fetchSidelined,
   fetchTransfers,
+  fetchH2H,
+  fetchTeamStatistics,
+  fetchTeamInfo,
+  fetchPlayer,
+  fetchTrophies,
+  fetchTopYellowCards,
+  fetchTopRedCards,
+  fetchOddsAllMarkets,
   type ApiFixture,
   type ApiStatItem,
   type ApiLineup,
@@ -543,6 +557,335 @@ async function syncTransfersForTrackedTeams() {
   console.log(`[poller] Transfers synced for ${teamIds.size} teams`);
 }
 
+// ── New comprehensive sync functions ──────────────────────────────────────────
+
+async function syncH2HForUpcomingFixtures() {
+  const now = new Date();
+  const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray: inArr }) =>
+      and(gte(f.kickoff, now), lte(f.kickoff, in48h), inArr(f.statusShort, ["NS", "TBD"])),
+    limit: 20,
+  });
+
+  for (const fix of upcoming) {
+    const data = await fetchH2H(fix.homeTeamId, fix.awayTeamId, 10);
+    if (!data) continue;
+
+    for (const entry of data) {
+      if (!["FT", "AET", "PEN"].includes(entry.fixture.status.short)) continue;
+      await db
+        .insert(h2hFixtures)
+        .values({
+          fixtureId: entry.fixture.id,
+          leagueId: entry.league.id,
+          leagueName: entry.league.name,
+          seasonYear: entry.league.season,
+          homeTeamId: entry.teams.home.id,
+          homeTeamName: entry.teams.home.name,
+          homeTeamLogo: entry.teams.home.logo,
+          awayTeamId: entry.teams.away.id,
+          awayTeamName: entry.teams.away.name,
+          awayTeamLogo: entry.teams.away.logo,
+          homeGoals: entry.goals.home,
+          awayGoals: entry.goals.away,
+          kickoff: entry.fixture.date ? new Date(entry.fixture.date) : null,
+          statusShort: entry.fixture.status.short,
+          forTeam1Id: fix.homeTeamId,
+          forTeam2Id: fix.awayTeamId,
+        })
+        .onConflictDoNothing();
+    }
+  }
+  console.log(`[poller] H2H synced for ${upcoming.length} upcoming fixtures`);
+}
+
+async function syncTeamSeasonStats() {
+  console.log("[poller] Syncing team season stats");
+  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+
+  for (const team of allTeams) {
+    for (const league of TRACKED_LEAGUES) {
+      const data = await fetchTeamStatistics(team.teamId, league.id, league.season);
+      if (!data) continue;
+
+      const f = data.fixtures;
+      const g = data.goals;
+      const parseAvg = (s: string | null | undefined) => s ? parseFloat(s) || null : null;
+
+      await db
+        .insert(teamSeasonStats)
+        .values({
+          teamId: team.teamId,
+          leagueId: league.id,
+          seasonYear: league.season,
+          form: data.form,
+          playedHome: f.played.home,
+          playedAway: f.played.away,
+          playedTotal: f.played.total,
+          winsHome: f.wins.home,
+          winsAway: f.wins.away,
+          winsTotal: f.wins.total,
+          drawsHome: f.draws.home,
+          drawsAway: f.draws.away,
+          drawsTotal: f.draws.total,
+          lossesHome: f.loses.home,
+          lossesAway: f.loses.away,
+          lossesTotal: f.loses.total,
+          goalsForHome: g.for.total.home,
+          goalsForAway: g.for.total.away,
+          goalsForTotal: g.for.total.total,
+          goalsForAvgHome: parseAvg(g.for.average.home),
+          goalsForAvgAway: parseAvg(g.for.average.away),
+          goalsForAvgTotal: parseAvg(g.for.average.total),
+          goalsAgainstHome: g.against.total.home,
+          goalsAgainstAway: g.against.total.away,
+          goalsAgainstTotal: g.against.total.total,
+          goalsAgainstAvgHome: parseAvg(g.against.average.home),
+          goalsAgainstAvgAway: parseAvg(g.against.average.away),
+          goalsAgainstAvgTotal: parseAvg(g.against.average.total),
+          cleanSheetsHome: data.clean_sheet.home,
+          cleanSheetsAway: data.clean_sheet.away,
+          cleanSheetsTotal: data.clean_sheet.total,
+          failedToScoreHome: data.failed_to_score.home,
+          failedToScoreAway: data.failed_to_score.away,
+          failedToScoreTotal: data.failed_to_score.total,
+          penaltyScoredTotal: data.penalty.scored.total,
+          penaltyMissedTotal: data.penalty.missed.total,
+          biggestWinStreak: data.biggest.streak.wins,
+          biggestLossStreak: data.biggest.streak.loses,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [teamSeasonStats.teamId, teamSeasonStats.leagueId, teamSeasonStats.seasonYear],
+          set: {
+            form: data.form,
+            playedTotal: f.played.total,
+            winsTotal: f.wins.total,
+            drawsTotal: f.draws.total,
+            lossesTotal: f.loses.total,
+            goalsForTotal: g.for.total.total,
+            goalsForAvgTotal: parseAvg(g.for.average.total),
+            goalsAgainstTotal: g.against.total.total,
+            goalsAgainstAvgTotal: parseAvg(g.against.average.total),
+            cleanSheetsTotal: data.clean_sheet.total,
+            failedToScoreTotal: data.failed_to_score.total,
+            biggestWinStreak: data.biggest.streak.wins,
+            biggestLossStreak: data.biggest.streak.loses,
+            updatedAt: new Date(),
+          },
+        });
+    }
+  }
+  console.log(`[poller] Team season stats synced for ${allTeams.length} teams`);
+}
+
+async function syncVenuesAndInfoForKnownTeams() {
+  console.log("[poller] Syncing team info + venues");
+  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+
+  for (const team of allTeams) {
+    const info = await fetchTeamInfo(team.teamId);
+    if (!info) continue;
+
+    const v = info.venue;
+    if (v.name) {
+      await db
+        .insert(venues)
+        .values({
+          venueId: v.id ?? null,
+          name: v.name,
+          address: v.address,
+          city: v.city,
+          country: v.country,
+          capacity: v.capacity,
+          surface: v.surface,
+          imageUrl: v.image,
+          teamId: team.teamId,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: venues.teamId,
+          set: {
+            name: v.name,
+            city: v.city,
+            capacity: v.capacity,
+            surface: v.surface,
+            imageUrl: v.image,
+            updatedAt: new Date(),
+          },
+        });
+    }
+
+    // Update team with country info
+    await db
+      .update(teams)
+      .set({ country: info.team.country ?? null, updatedAt: new Date() })
+      .where(eq(teams.teamId, team.teamId));
+  }
+  console.log(`[poller] Venues synced for ${allTeams.length} teams`);
+}
+
+async function syncTrophiesForKnownTeams() {
+  console.log("[poller] Syncing trophies");
+  const allTeams = await db.query.teams.findMany({ columns: { teamId: true } });
+
+  for (const team of allTeams) {
+    const data = await fetchTrophies(team.teamId);
+    if (!data) continue;
+
+    for (const trophy of data) {
+      if (!trophy.place || !trophy.season) continue;
+      await db
+        .insert(trophies)
+        .values({
+          teamId: team.teamId,
+          leagueName: trophy.league.name,
+          leagueType: trophy.league.type,
+          place: trophy.place,
+          season: trophy.season,
+        })
+        .onConflictDoNothing();
+    }
+  }
+  console.log(`[poller] Trophies synced for ${allTeams.length} teams`);
+}
+
+async function syncPlayerProfilesForTopPlayers() {
+  console.log("[poller] Syncing player profiles");
+  const topPlayers = await db.query.playerSeasonStats.findMany({
+    columns: { playerId: true, leagueId: true, seasonYear: true },
+    orderBy: (p, { desc: d }) => [d(p.goals)],
+    limit: 100,
+  });
+
+  for (const entry of topPlayers) {
+    const data = await fetchPlayer(entry.playerId, entry.seasonYear);
+    if (!data) continue;
+
+    const pl = data.player;
+    const stats = data.statistics[0];
+    const cards = stats?.cards;
+    const rating = stats?.games.rating ? parseFloat(stats.games.rating) : null;
+
+    await db
+      .insert(playerProfiles)
+      .values({
+        playerId: pl.id,
+        name: pl.name,
+        firstName: pl.firstname,
+        lastName: pl.lastname,
+        age: pl.age,
+        nationality: pl.nationality,
+        height: pl.height,
+        weight: pl.weight,
+        photo: pl.photo,
+        position: stats?.games.position ?? null,
+        teamId: stats?.team.id ?? null,
+        teamName: stats?.team.name ?? null,
+        yellowCards: cards?.yellow ?? null,
+        redCards: cards?.red ?? null,
+        appearances: stats?.games.appearances ?? null,
+        goals: stats?.goals.total ?? null,
+        assists: stats?.goals.assists ?? null,
+        minutesPlayed: stats?.games.minutes ?? null,
+        rating: rating !== null && !isNaN(rating) ? rating : null,
+        leagueId: stats?.league.id ?? null,
+        seasonYear: stats?.league.season ?? null,
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: playerProfiles.playerId,
+        set: {
+          age: pl.age,
+          teamId: stats?.team.id ?? null,
+          teamName: stats?.team.name ?? null,
+          yellowCards: cards?.yellow ?? null,
+          redCards: cards?.red ?? null,
+          appearances: stats?.games.appearances ?? null,
+          goals: stats?.goals.total ?? null,
+          assists: stats?.goals.assists ?? null,
+          minutesPlayed: stats?.games.minutes ?? null,
+          rating: rating !== null && !isNaN(rating) ? rating : null,
+          updatedAt: new Date(),
+        },
+      });
+  }
+  console.log(`[poller] Player profiles synced for ${topPlayers.length} players`);
+}
+
+async function syncTopDiscipline() {
+  console.log("[poller] Syncing top yellow/red cards");
+  for (const league of TRACKED_LEAGUES) {
+    const [yellows, reds] = await Promise.all([
+      fetchTopYellowCards(league.id, league.season),
+      fetchTopRedCards(league.id, league.season),
+    ]);
+
+    const all = [...(yellows ?? []), ...(reds ?? [])];
+    for (const entry of all) {
+      const s = entry.statistics[0];
+      if (!s) continue;
+      const rating = s.games.rating ? parseFloat(s.games.rating) : null;
+
+      await db
+        .insert(playerSeasonStats)
+        .values({
+          playerId: entry.player.id,
+          playerName: entry.player.name,
+          teamId: s.team.id,
+          leagueId: s.league.id,
+          seasonYear: s.league.season,
+          position: s.games.position,
+          goals: s.goals.total,
+          assists: s.goals.assists,
+          appearances: s.games.appearances,
+          minutesPlayed: s.games.minutes,
+          rating: isNaN(rating ?? NaN) ? null : rating,
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [playerSeasonStats.playerId, playerSeasonStats.leagueId, playerSeasonStats.seasonYear],
+          set: {
+            goals: s.goals.total,
+            assists: s.goals.assists,
+            appearances: s.games.appearances,
+            minutesPlayed: s.games.minutes,
+            rating: isNaN(rating ?? NaN) ? null : rating,
+            updatedAt: new Date(),
+          },
+        });
+    }
+    console.log(`[poller] Discipline leaders synced for ${league.name}`);
+  }
+}
+
+async function syncOddsAllMarketsForUpcoming() {
+  const now = new Date();
+  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, in24h)),
+    limit: 30,
+  });
+
+  for (const fix of upcoming) {
+    const markets = await fetchOddsAllMarkets(fix.fixtureId);
+    if (!markets || markets.length === 0) continue;
+
+    for (const m of markets) {
+      await db.insert(oddsMarkets).values({
+        fixtureId: fix.fixtureId,
+        bookmaker: m.bookmaker,
+        markets: m.markets as Record<string, unknown>,
+        snappedAt: new Date(),
+      });
+    }
+  }
+  console.log(`[poller] Full odds markets synced for ${upcoming.length} upcoming fixtures`);
+}
+
 // Track fixtures that have already had post-match processing to avoid duplicates
 const postMatchProcessed = new Set<number>();
 
@@ -678,9 +1021,18 @@ export function startPoller() {
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncTodayFixtures().catch(console.error);
   syncStandings().catch(console.error);
-  // Pro: coaches + transfers on startup (low urgency, runs once)
-  setTimeout(() => syncCoachesForKnownTeams().catch(console.error), 30 * 1000);
-  setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 60 * 1000);
+
+  // Staggered startup for heavy syncs (avoids API burst)
+  setTimeout(() => syncCoachesForKnownTeams().catch(console.error), 20 * 1000);
+  setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 40 * 1000);
+  setTimeout(() => syncH2HForUpcomingFixtures().catch(console.error), 60 * 1000);
+  setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 90 * 1000);
+  setTimeout(() => syncTeamSeasonStats().catch(console.error), 3 * 60 * 1000);
+  setTimeout(() => syncTopScorersAndAssists().catch(console.error), 5 * 60 * 1000);
+  setTimeout(() => syncTopDiscipline().catch(console.error), 7 * 60 * 1000);
+  setTimeout(() => syncTrophiesForKnownTeams().catch(console.error), 9 * 60 * 1000);
+  setTimeout(() => syncPlayerProfilesForTopPlayers().catch(console.error), 11 * 60 * 1000);
+  setTimeout(() => syncOddsAllMarketsForUpcoming().catch(console.error), 13 * 60 * 1000);
 
   // ── Recurring intervals ────────────────────────────────────────────────────
 
@@ -690,22 +1042,31 @@ export function startPoller() {
   // Standings: every hour
   setInterval(() => syncStandings().catch(console.error), 60 * 60 * 1000);
 
-  // Pre-match lineups + odds + predictions: every 10 min
+  // Pre-match lineups + odds + predictions + H2H: every 10 min
   setInterval(() => {
     syncPreMatchData().catch(console.error);
     syncOdds().catch(console.error);
+    syncH2HForUpcomingFixtures().catch(console.error);
+    syncOddsAllMarketsForUpcoming().catch(console.error);
   }, 10 * 60 * 1000);
 
-  // Pro: Top scorers + assists + sidelined: once per day
+  // Team season stats: every 6 hours
+  setInterval(() => syncTeamSeasonStats().catch(console.error), 6 * 60 * 60 * 1000);
+
+  // Top scorers + assists + discipline + sidelined: once per day
   setInterval(() => {
     syncTopScorersAndAssists().catch(console.error);
+    syncTopDiscipline().catch(console.error);
     syncSidelinedForRecentPlayers().catch(console.error);
+    syncPlayerProfilesForTopPlayers().catch(console.error);
   }, 24 * 60 * 60 * 1000);
 
-  // Pro: Coaches + transfers refresh: every 3 days
+  // Coaches + transfers + venues + trophies: every 3 days
   setInterval(() => {
     syncCoachesForKnownTeams().catch(console.error);
     syncTransfersForTrackedTeams().catch(console.error);
+    syncVenuesAndInfoForKnownTeams().catch(console.error);
+    syncTrophiesForKnownTeams().catch(console.error);
   }, 3 * 24 * 60 * 60 * 1000);
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min

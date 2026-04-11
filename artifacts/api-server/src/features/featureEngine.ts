@@ -8,8 +8,10 @@ import {
   predictions,
   playerStats,
   liveOddsSnapshots,
+  h2hFixtures,
+  teamSeasonStats,
 } from "@workspace/db/schema";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, or } from "drizzle-orm";
 
 async function upsertFeature(fixtureId: number, teamId: number, phase: string, featureKey: string, featureValue: number | null) {
   await db
@@ -145,6 +147,99 @@ export async function runPreMatchFeatures(fixtureId: number, homeTeamId: number,
         const avgRating = rated.reduce((acc, p) => acc + (p.rating ?? 0), 0) / rated.length;
         await upsertFeature(fixtureId, teamId, "pre", "avg_player_rating", avgRating);
       }
+    }
+  }
+
+  // ── H2H features ──────────────────────────────────────────────────────────
+  const h2hRows = await db.query.h2hFixtures.findMany({
+    where: (h, { or: orFn, and: andFn, eq: eqFn }) =>
+      orFn(
+        andFn(eqFn(h.forTeam1Id, homeTeamId), eqFn(h.forTeam2Id, awayTeamId)),
+        andFn(eqFn(h.forTeam1Id, awayTeamId), eqFn(h.forTeam2Id, homeTeamId))
+      ),
+    orderBy: (h, { desc: d }) => [d(h.kickoff)],
+    limit: 10,
+  });
+
+  if (h2hRows.length >= 3) {
+    const last10 = h2hRows.slice(0, 10);
+    let homeWins = 0, draws = 0, awayWins = 0, totalGoals = 0;
+
+    for (const match of last10) {
+      const hg = match.homeGoals ?? 0;
+      const ag = match.awayGoals ?? 0;
+      totalGoals += hg + ag;
+      // "home" perspective: the actual home team in the H2H match
+      const isHomeMatchingOurHome = match.homeTeamId === homeTeamId;
+      if (hg > ag) { isHomeMatchingOurHome ? homeWins++ : awayWins++; }
+      else if (hg < ag) { isHomeMatchingOurHome ? awayWins++ : homeWins++; }
+      else draws++;
+    }
+
+    const n = last10.length;
+    await upsertFeature(fixtureId, homeTeamId, "pre", "h2h_win_rate", homeWins / n);
+    await upsertFeature(fixtureId, awayTeamId, "pre", "h2h_win_rate", awayWins / n);
+    await upsertFeature(fixtureId, homeTeamId, "pre", "h2h_draw_rate", draws / n);
+    await upsertFeature(fixtureId, homeTeamId, "pre", "h2h_avg_goals", totalGoals / n);
+    await upsertFeature(fixtureId, awayTeamId, "pre", "h2h_avg_goals", totalGoals / n);
+    console.log(`[feature-engine] H2H features from ${n} meetings`);
+  }
+
+  // ── Team season stats features ────────────────────────────────────────────
+  for (const [teamId, isHome] of [[homeTeamId, true], [awayTeamId, false]] as const) {
+    // Find best matching season stats (try each tracked league)
+    const seasonStats = await db.query.teamSeasonStats.findFirst({
+      where: (ts, { eq: eqFn }) => eqFn(ts.teamId, teamId),
+      orderBy: (ts, { desc: d }) => [d(ts.updatedAt)],
+    });
+
+    if (!seasonStats) continue;
+
+    const played = seasonStats.playedTotal ?? 0;
+    if (played === 0) continue;
+
+    // Win rate (season)
+    const seasonWinRate = (seasonStats.winsTotal ?? 0) / played;
+    await upsertFeature(fixtureId, teamId, "pre", "season_win_rate", seasonWinRate);
+
+    // Home/away specific win rate
+    if (isHome) {
+      const homePlayed = seasonStats.playedHome ?? 0;
+      if (homePlayed > 0) {
+        const homeWinRate = (seasonStats.winsHome ?? 0) / homePlayed;
+        await upsertFeature(fixtureId, teamId, "pre", "home_win_rate_season", homeWinRate);
+      }
+    } else {
+      const awayPlayed = seasonStats.playedAway ?? 0;
+      if (awayPlayed > 0) {
+        const awayWinRate = (seasonStats.winsAway ?? 0) / awayPlayed;
+        await upsertFeature(fixtureId, teamId, "pre", "away_win_rate_season", awayWinRate);
+      }
+    }
+
+    // Season average goals scored/conceded
+    if (seasonStats.goalsForAvgTotal != null) {
+      await upsertFeature(fixtureId, teamId, "pre", "season_avg_goals_scored", seasonStats.goalsForAvgTotal);
+    }
+    if (seasonStats.goalsAgainstAvgTotal != null) {
+      await upsertFeature(fixtureId, teamId, "pre", "season_avg_goals_conceded", seasonStats.goalsAgainstAvgTotal);
+    }
+
+    // Season clean sheet rate
+    if (seasonStats.cleanSheetsTotal != null) {
+      await upsertFeature(fixtureId, teamId, "pre", "season_clean_sheet_rate", seasonStats.cleanSheetsTotal / played);
+    }
+
+    // Season failed to score rate (scoring blank rate)
+    if (seasonStats.failedToScoreTotal != null) {
+      await upsertFeature(fixtureId, teamId, "pre", "season_blank_rate", seasonStats.failedToScoreTotal / played);
+    }
+
+    // Recent form from season stats form string (e.g. "WWLDW")
+    if (seasonStats.form && seasonStats.form.length >= 3) {
+      const recent5 = seasonStats.form.slice(-5);
+      const formPts = [...recent5].reduce((acc, c) => acc + (c === "W" ? 3 : c === "D" ? 1 : 0), 0);
+      await upsertFeature(fixtureId, teamId, "pre", "season_form_last5", formPts / 15);
     }
   }
 

@@ -361,3 +361,157 @@ export async function fetchSidelined(playerId: number): Promise<ApiSidelined[] |
 export async function fetchTransfers(teamId: number): Promise<ApiTransfer[] | null> {
   return apiFetch<ApiTransfer[]>("/transfers", { team: teamId });
 }
+
+// ─── New comprehensive endpoints ───────────────────────────────────────────────
+
+export interface ApiH2HEntry {
+  fixture: {
+    id: number;
+    date: string;
+    status: { short: string };
+  };
+  league: { id: number; name: string; season: number };
+  teams: {
+    home: { id: number; name: string; logo: string };
+    away: { id: number; name: string; logo: string };
+  };
+  goals: { home: number | null; away: number | null };
+}
+
+export async function fetchH2H(team1Id: number, team2Id: number, last = 10): Promise<ApiH2HEntry[] | null> {
+  return apiFetch<ApiH2HEntry[]>("/fixtures/headtohead", { h2h: `${team1Id}-${team2Id}`, last });
+}
+
+export interface ApiTeamStatistics {
+  team: { id: number; name: string };
+  league: { id: number; season: number };
+  form: string | null;
+  fixtures: {
+    played: { home: number; away: number; total: number };
+    wins: { home: number; away: number; total: number };
+    draws: { home: number; away: number; total: number };
+    loses: { home: number; away: number; total: number };
+  };
+  goals: {
+    for: {
+      total: { home: number; away: number; total: number };
+      average: { home: string; away: string; total: string };
+    };
+    against: {
+      total: { home: number; away: number; total: number };
+      average: { home: string; away: string; total: string };
+    };
+  };
+  biggest: {
+    streak: { wins: number; draws: number; loses: number };
+    goals: { for: { home: number; away: number }; against: { home: number; away: number } };
+  };
+  clean_sheet: { home: number; away: number; total: number };
+  failed_to_score: { home: number; away: number; total: number };
+  penalty: {
+    scored: { total: number };
+    missed: { total: number };
+  };
+}
+
+export async function fetchTeamStatistics(teamId: number, leagueId: number, season: number): Promise<ApiTeamStatistics | null> {
+  const data = await apiFetch<ApiTeamStatistics>("/teams/statistics", { team: teamId, league: leagueId, season });
+  return data ?? null;
+}
+
+export interface ApiTeamInfo {
+  team: {
+    id: number;
+    name: string;
+    code: string | null;
+    country: string | null;
+    founded: number | null;
+    national: boolean;
+    logo: string | null;
+  };
+  venue: {
+    id: number | null;
+    name: string | null;
+    address: string | null;
+    city: string | null;
+    country: string | null;
+    capacity: number | null;
+    surface: string | null;
+    image: string | null;
+  };
+}
+
+export async function fetchTeamInfo(teamId: number): Promise<ApiTeamInfo | null> {
+  const data = await apiFetch<ApiTeamInfo[]>("/teams", { id: teamId });
+  return data?.[0] ?? null;
+}
+
+export interface ApiPlayerProfile {
+  player: {
+    id: number;
+    name: string;
+    firstname: string | null;
+    lastname: string | null;
+    age: number | null;
+    nationality: string | null;
+    height: string | null;
+    weight: string | null;
+    photo: string | null;
+  };
+  statistics: Array<{
+    team: { id: number; name: string };
+    league: { id: number; season: number };
+    games: {
+      appearances: number | null;
+      minutes: number | null;
+      position: string | null;
+      rating: string | null;
+    };
+    goals: { total: number | null; assists: number | null };
+    cards: { yellow: number | null; yellowred: number | null; red: number | null };
+  }>;
+}
+
+export async function fetchPlayer(playerId: number, season: number): Promise<ApiPlayerProfile | null> {
+  const data = await apiFetch<ApiPlayerProfile[]>("/players", { id: playerId, season });
+  return data?.[0] ?? null;
+}
+
+export interface ApiTrophy {
+  league: { id: number | null; name: string | null; type: string | null; logo: string | null };
+  place: string | null;
+  season: string | null;
+}
+
+export async function fetchTrophies(teamId: number): Promise<ApiTrophy[] | null> {
+  return apiFetch<ApiTrophy[]>("/trophies", { team: teamId });
+}
+
+export async function fetchTopYellowCards(leagueId: number, season: number): Promise<ApiTopScorer[] | null> {
+  return apiFetch<ApiTopScorer[]>("/players/topyellowcards", { league: leagueId, season });
+}
+
+export async function fetchTopRedCards(leagueId: number, season: number): Promise<ApiTopScorer[] | null> {
+  return apiFetch<ApiTopScorer[]>("/players/topredcards", { league: leagueId, season });
+}
+
+export interface ApiOddsMarket {
+  bookmaker: string;
+  markets: Record<string, Array<{ value: string; odd: string }>>;
+}
+
+export async function fetchOddsAllMarkets(fixtureId: number): Promise<ApiOddsMarket[] | null> {
+  const data = await apiFetch<ApiOdds[]>("/odds", { fixture: fixtureId });
+  if (!data || data.length === 0) return null;
+
+  return data.map((entry) => {
+    const markets: Record<string, Array<{ value: string; odd: string }>> = {};
+    for (const bm of entry.bookmakers) {
+      for (const bet of bm.bets) {
+        markets[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
+      }
+      return { bookmaker: bm.name, markets };
+    }
+    return { bookmaker: "unknown", markets };
+  });
+}

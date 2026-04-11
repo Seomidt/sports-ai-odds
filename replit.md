@@ -37,6 +37,7 @@ A 5-layer deterministic AI football analysis platform using the API-Football API
 - `fixtures`, `teams`, `standings` — raw league data
 - `fixture_events`, `fixture_lineups`, `fixture_stats`, `player_stats` — match detail
 - `injuries`, `odds_snapshots` (with btts/overUnder/handicap) — injury & multi-market odds
+- `odds_markets` — full odds: ALL bookmakers + ALL markets as JSONB per fixture
 - `team_features` — computed features per team/fixture/phase (pre/live/post)
 - `fixture_signals` — named signals with label + value/bool
 - `followed_fixtures`, `alert_log` — alerting system
@@ -46,6 +47,11 @@ A 5-layer deterministic AI football analysis platform using the API-Football API
 - **Pro**: `coaches` — current coach per team
 - **Pro**: `sidelined_players` — long-term injured players
 - **Pro**: `transfers` — recent transfers per team
+- **Pro**: `h2h_fixtures` — historical head-to-head results per team pair (last 10)
+- **Pro**: `team_season_stats` — full season stats per team per league (form, wins, goals avg, clean sheets, etc.)
+- **Pro**: `player_profiles` — biographical data + season stats (age, nationality, cards, ratings)
+- **Pro**: `venues` — stadium info (name, city, capacity, surface)
+- **Pro**: `trophies` — team trophy history (winner/runner-up per competition)
 
 ## Key Commands
 

@@ -213,6 +213,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/OddsResponse"
 
+  /fixtures/{id}/h2h:
+    get:
+      operationId: getFixtureH2H
+      tags: [fixtures]
+      summary: Head-to-head history for a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: H2H results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/H2HResponse"
+
+  /fixtures/{id}/odds-markets:
+    get:
+      operationId: getFixtureOddsMarkets
+      tags: [fixtures]
+      summary: All bookmakers and all market odds for a fixture
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Full odds markets
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OddsMarketsResponse"
+
   /fixtures/{id}/live-odds:
     get:
       operationId: getFixtureLiveOdds
@@ -231,6 +269,109 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LiveOddsResponse"
+
+  /teams/{id}/statistics:
+    get:
+      operationId: getTeamStatistics
+      tags: [fixtures]
+      summary: Season statistics for a team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: season
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Team season stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamStatisticsResponse"
+
+  /teams/{id}/venue:
+    get:
+      operationId: getTeamVenue
+      tags: [fixtures]
+      summary: Venue/stadium info for a team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Venue info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VenueResponse"
+
+  /teams/{id}/trophies:
+    get:
+      operationId: getTeamTrophies
+      tags: [fixtures]
+      summary: Trophy history for a team
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Trophy list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrophiesResponse"
+
+  /players/{id}:
+    get:
+      operationId: getPlayer
+      tags: [fixtures]
+      summary: Player profile with season stats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Player profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlayerProfileResponse"
+
+  /leagues/{leagueId}/topdiscipline:
+    get:
+      operationId: getTopDiscipline
+      tags: [fixtures]
+      summary: Top disciplinary players in a league
+      parameters:
+        - name: leagueId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: season
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Discipline leaders
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopDisciplineResponse"
 
   /standings/{leagueId}:
     get:
@@ -883,6 +1024,266 @@ components:
             $ref: "#/components/schemas/Injury"
       required:
         - injuries
+
+    H2HFixture:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        leagueId:
+          type: integer
+        leagueName:
+          type: string
+        seasonYear:
+          type: integer
+        homeTeamId:
+          type: integer
+        homeTeamName:
+          type: string
+        homeTeamLogo:
+          type: string
+        awayTeamId:
+          type: integer
+        awayTeamName:
+          type: string
+        awayTeamLogo:
+          type: string
+        homeGoals:
+          type: integer
+        awayGoals:
+          type: integer
+        kickoff:
+          type: string
+        statusShort:
+          type: string
+
+    H2HResponse:
+      type: object
+      properties:
+        h2h:
+          type: array
+          items:
+            $ref: "#/components/schemas/H2HFixture"
+      required:
+        - h2h
+
+    OddsMarketItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        fixtureId:
+          type: integer
+        bookmaker:
+          type: string
+        markets:
+          type: object
+        snappedAt:
+          type: string
+
+    OddsMarketsResponse:
+      type: object
+      properties:
+        oddsMarkets:
+          type: array
+          items:
+            $ref: "#/components/schemas/OddsMarketItem"
+      required:
+        - oddsMarkets
+
+    TeamSeasonStatsItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        teamId:
+          type: integer
+        leagueId:
+          type: integer
+        seasonYear:
+          type: integer
+        form:
+          type: string
+        playedTotal:
+          type: integer
+        winsTotal:
+          type: integer
+        drawsTotal:
+          type: integer
+        lossesTotal:
+          type: integer
+        goalsForTotal:
+          type: integer
+        goalsForAvgTotal:
+          type: number
+        goalsAgainstTotal:
+          type: integer
+        goalsAgainstAvgTotal:
+          type: number
+        cleanSheetsTotal:
+          type: integer
+        failedToScoreTotal:
+          type: integer
+        winsHome:
+          type: integer
+        winsAway:
+          type: integer
+        goalsForAvgHome:
+          type: number
+        goalsForAvgAway:
+          type: number
+        goalsAgainstAvgHome:
+          type: number
+        goalsAgainstAvgAway:
+          type: number
+        cleanSheetsHome:
+          type: integer
+        cleanSheetsAway:
+          type: integer
+        penaltyScoredTotal:
+          type: integer
+        biggestWinStreak:
+          type: integer
+        updatedAt:
+          type: string
+
+    TeamStatisticsResponse:
+      type: object
+      properties:
+        statistics:
+          type: array
+          items:
+            $ref: "#/components/schemas/TeamSeasonStatsItem"
+      required:
+        - statistics
+
+    VenueItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        venueId:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        capacity:
+          type: integer
+        surface:
+          type: string
+        imageUrl:
+          type: string
+        teamId:
+          type: integer
+
+    VenueResponse:
+      type: object
+      properties:
+        venue:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/VenueItem"
+      required:
+        - venue
+
+    TrophyItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        teamId:
+          type: integer
+        leagueName:
+          type: string
+        leagueType:
+          type: string
+        place:
+          type: string
+        season:
+          type: string
+
+    TrophiesResponse:
+      type: object
+      properties:
+        trophies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrophyItem"
+      required:
+        - trophies
+
+    PlayerProfileItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        playerId:
+          type: integer
+        name:
+          type: string
+        firstName:
+          type: string
+        lastName:
+          type: string
+        age:
+          type: integer
+        nationality:
+          type: string
+        height:
+          type: string
+        weight:
+          type: string
+        photo:
+          type: string
+        position:
+          type: string
+        teamId:
+          type: integer
+        teamName:
+          type: string
+        yellowCards:
+          type: integer
+        redCards:
+          type: integer
+        appearances:
+          type: integer
+        goals:
+          type: integer
+        assists:
+          type: integer
+        minutesPlayed:
+          type: integer
+        rating:
+          type: number
+        leagueId:
+          type: integer
+        seasonYear:
+          type: integer
+
+    PlayerProfileResponse:
+      type: object
+      properties:
+        player:
+          $ref: "#/components/schemas/PlayerProfileItem"
+      required:
+        - player
+
+    TopDisciplineResponse:
+      type: object
+      properties:
+        players:
+          type: array
+          items:
+            type: object
+      required:
+        - players
 
     OddsSnapshot:
       type: object

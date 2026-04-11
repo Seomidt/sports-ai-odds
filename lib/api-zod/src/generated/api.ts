@@ -249,6 +249,54 @@ export const GetFixtureOddsResponse = zod.object({
 });
 
 /**
+ * @summary Head-to-head history for a fixture
+ */
+export const GetFixtureH2HParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetFixtureH2HResponse = zod.object({
+  h2h: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      fixtureId: zod.number().optional(),
+      leagueId: zod.number().optional(),
+      leagueName: zod.string().optional(),
+      seasonYear: zod.number().optional(),
+      homeTeamId: zod.number().optional(),
+      homeTeamName: zod.string().optional(),
+      homeTeamLogo: zod.string().optional(),
+      awayTeamId: zod.number().optional(),
+      awayTeamName: zod.string().optional(),
+      awayTeamLogo: zod.string().optional(),
+      homeGoals: zod.number().optional(),
+      awayGoals: zod.number().optional(),
+      kickoff: zod.string().optional(),
+      statusShort: zod.string().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary All bookmakers and all market odds for a fixture
+ */
+export const GetFixtureOddsMarketsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetFixtureOddsMarketsResponse = zod.object({
+  oddsMarkets: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      fixtureId: zod.number().optional(),
+      bookmaker: zod.string().optional(),
+      markets: zod.object({}).passthrough().optional(),
+      snappedAt: zod.string().optional(),
+    }),
+  ),
+});
+
+/**
  * @summary Get live odds snapshots timeline for a fixture
  */
 export const GetFixtureLiveOddsParams = zod.object({
@@ -267,6 +315,143 @@ export const GetFixtureLiveOddsResponse = zod.object({
       snappedAt: zod.string().optional(),
     }),
   ),
+});
+
+/**
+ * @summary Season statistics for a team
+ */
+export const GetTeamStatisticsParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetTeamStatisticsQueryParams = zod.object({
+  season: zod.coerce.number().optional(),
+});
+
+export const GetTeamStatisticsResponse = zod.object({
+  statistics: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      teamId: zod.number().optional(),
+      leagueId: zod.number().optional(),
+      seasonYear: zod.number().optional(),
+      form: zod.string().optional(),
+      playedTotal: zod.number().optional(),
+      winsTotal: zod.number().optional(),
+      drawsTotal: zod.number().optional(),
+      lossesTotal: zod.number().optional(),
+      goalsForTotal: zod.number().optional(),
+      goalsForAvgTotal: zod.number().optional(),
+      goalsAgainstTotal: zod.number().optional(),
+      goalsAgainstAvgTotal: zod.number().optional(),
+      cleanSheetsTotal: zod.number().optional(),
+      failedToScoreTotal: zod.number().optional(),
+      winsHome: zod.number().optional(),
+      winsAway: zod.number().optional(),
+      goalsForAvgHome: zod.number().optional(),
+      goalsForAvgAway: zod.number().optional(),
+      goalsAgainstAvgHome: zod.number().optional(),
+      goalsAgainstAvgAway: zod.number().optional(),
+      cleanSheetsHome: zod.number().optional(),
+      cleanSheetsAway: zod.number().optional(),
+      penaltyScoredTotal: zod.number().optional(),
+      biggestWinStreak: zod.number().optional(),
+      updatedAt: zod.string().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Venue/stadium info for a team
+ */
+export const GetTeamVenueParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetTeamVenueResponse = zod.object({
+  venue: zod
+    .object({
+      id: zod.number().optional(),
+      venueId: zod.number().optional(),
+      name: zod.string().optional(),
+      address: zod.string().optional(),
+      city: zod.string().optional(),
+      country: zod.string().optional(),
+      capacity: zod.number().optional(),
+      surface: zod.string().optional(),
+      imageUrl: zod.string().optional(),
+      teamId: zod.number().optional(),
+    })
+    .nullable(),
+});
+
+/**
+ * @summary Trophy history for a team
+ */
+export const GetTeamTrophiesParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetTeamTrophiesResponse = zod.object({
+  trophies: zod.array(
+    zod.object({
+      id: zod.number().optional(),
+      teamId: zod.number().optional(),
+      leagueName: zod.string().optional(),
+      leagueType: zod.string().optional(),
+      place: zod.string().optional(),
+      season: zod.string().optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Player profile with season stats
+ */
+export const GetPlayerParams = zod.object({
+  id: zod.coerce.number(),
+});
+
+export const GetPlayerResponse = zod.object({
+  player: zod.object({
+    id: zod.number().optional(),
+    playerId: zod.number().optional(),
+    name: zod.string().optional(),
+    firstName: zod.string().optional(),
+    lastName: zod.string().optional(),
+    age: zod.number().optional(),
+    nationality: zod.string().optional(),
+    height: zod.string().optional(),
+    weight: zod.string().optional(),
+    photo: zod.string().optional(),
+    position: zod.string().optional(),
+    teamId: zod.number().optional(),
+    teamName: zod.string().optional(),
+    yellowCards: zod.number().optional(),
+    redCards: zod.number().optional(),
+    appearances: zod.number().optional(),
+    goals: zod.number().optional(),
+    assists: zod.number().optional(),
+    minutesPlayed: zod.number().optional(),
+    rating: zod.number().optional(),
+    leagueId: zod.number().optional(),
+    seasonYear: zod.number().optional(),
+  }),
+});
+
+/**
+ * @summary Top disciplinary players in a league
+ */
+export const GetTopDisciplineParams = zod.object({
+  leagueId: zod.coerce.number(),
+});
+
+export const GetTopDisciplineQueryParams = zod.object({
+  season: zod.coerce.number().optional(),
+});
+
+export const GetTopDisciplineResponse = zod.object({
+  players: zod.array(zod.object({}).passthrough()),
 });
 
 /**

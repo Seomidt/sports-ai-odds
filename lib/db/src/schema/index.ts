@@ -401,3 +401,160 @@ export type PlayerSeasonStat = typeof playerSeasonStats.$inferSelect;
 export type Coach = typeof coaches.$inferSelect;
 export type SidelinedPlayer = typeof sidelinedPlayers.$inferSelect;
 export type Transfer = typeof transfers.$inferSelect;
+
+// ─── Extended Pro data tables ─────────────────────────────────────────────────
+
+export const h2hFixtures = pgTable(
+  "h2h_fixtures",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull(),
+    leagueId: integer("league_id"),
+    leagueName: text("league_name"),
+    seasonYear: integer("season_year"),
+    homeTeamId: integer("home_team_id").notNull(),
+    homeTeamName: text("home_team_name"),
+    homeTeamLogo: text("home_team_logo"),
+    awayTeamId: integer("away_team_id").notNull(),
+    awayTeamName: text("away_team_name"),
+    awayTeamLogo: text("away_team_logo"),
+    homeGoals: integer("home_goals"),
+    awayGoals: integer("away_goals"),
+    kickoff: timestamp("kickoff"),
+    statusShort: text("status_short"),
+    forTeam1Id: integer("for_team1_id").notNull(),
+    forTeam2Id: integer("for_team2_id").notNull(),
+  },
+  (t) => [
+    unique("h2h_fixtures_unique").on(t.fixtureId, t.forTeam1Id, t.forTeam2Id),
+    index("h2h_teams_idx").on(t.forTeam1Id, t.forTeam2Id),
+  ]
+);
+
+export const teamSeasonStats = pgTable(
+  "team_season_stats",
+  {
+    id: serial("id").primaryKey(),
+    teamId: integer("team_id").notNull(),
+    leagueId: integer("league_id").notNull(),
+    seasonYear: integer("season_year").notNull(),
+    form: text("form"),
+    playedHome: integer("played_home"),
+    playedAway: integer("played_away"),
+    playedTotal: integer("played_total"),
+    winsHome: integer("wins_home"),
+    winsAway: integer("wins_away"),
+    winsTotal: integer("wins_total"),
+    drawsHome: integer("draws_home"),
+    drawsAway: integer("draws_away"),
+    drawsTotal: integer("draws_total"),
+    lossesHome: integer("losses_home"),
+    lossesAway: integer("losses_away"),
+    lossesTotal: integer("losses_total"),
+    goalsForHome: integer("goals_for_home"),
+    goalsForAway: integer("goals_for_away"),
+    goalsForTotal: integer("goals_for_total"),
+    goalsForAvgHome: real("goals_for_avg_home"),
+    goalsForAvgAway: real("goals_for_avg_away"),
+    goalsForAvgTotal: real("goals_for_avg_total"),
+    goalsAgainstHome: integer("goals_against_home"),
+    goalsAgainstAway: integer("goals_against_away"),
+    goalsAgainstTotal: integer("goals_against_total"),
+    goalsAgainstAvgHome: real("goals_against_avg_home"),
+    goalsAgainstAvgAway: real("goals_against_avg_away"),
+    goalsAgainstAvgTotal: real("goals_against_avg_total"),
+    cleanSheetsHome: integer("clean_sheets_home"),
+    cleanSheetsAway: integer("clean_sheets_away"),
+    cleanSheetsTotal: integer("clean_sheets_total"),
+    failedToScoreHome: integer("failed_to_score_home"),
+    failedToScoreAway: integer("failed_to_score_away"),
+    failedToScoreTotal: integer("failed_to_score_total"),
+    penaltyScoredTotal: integer("penalty_scored_total"),
+    penaltyMissedTotal: integer("penalty_missed_total"),
+    biggestWinStreak: integer("biggest_win_streak"),
+    biggestLossStreak: integer("biggest_loss_streak"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("team_season_stats_unique").on(t.teamId, t.leagueId, t.seasonYear)]
+);
+
+export const playerProfiles = pgTable(
+  "player_profiles",
+  {
+    id: serial("id").primaryKey(),
+    playerId: integer("player_id").notNull().unique(),
+    name: text("name"),
+    firstName: text("first_name"),
+    lastName: text("last_name"),
+    age: integer("age"),
+    nationality: text("nationality"),
+    height: text("height"),
+    weight: text("weight"),
+    photo: text("photo"),
+    position: text("position"),
+    teamId: integer("team_id"),
+    teamName: text("team_name"),
+    yellowCards: integer("yellow_cards"),
+    redCards: integer("red_cards"),
+    appearances: integer("appearances"),
+    goals: integer("goals"),
+    assists: integer("assists"),
+    minutesPlayed: integer("minutes_played"),
+    rating: real("rating"),
+    leagueId: integer("league_id"),
+    seasonYear: integer("season_year"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }
+);
+
+export const venues = pgTable(
+  "venues",
+  {
+    id: serial("id").primaryKey(),
+    venueId: integer("venue_id"),
+    name: text("name"),
+    address: text("address"),
+    city: text("city"),
+    country: text("country"),
+    capacity: integer("capacity"),
+    surface: text("surface"),
+    imageUrl: text("image_url"),
+    teamId: integer("team_id").notNull().unique(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  }
+);
+
+export const trophies = pgTable(
+  "trophies",
+  {
+    id: serial("id").primaryKey(),
+    teamId: integer("team_id").notNull(),
+    leagueName: text("league_name"),
+    leagueType: text("league_type"),
+    place: text("place"),
+    season: text("season"),
+  },
+  (t) => [
+    index("trophies_team_idx").on(t.teamId),
+    unique("trophies_unique").on(t.teamId, t.leagueName, t.season, t.place),
+  ]
+);
+
+export const oddsMarkets = pgTable(
+  "odds_markets",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull(),
+    bookmaker: text("bookmaker"),
+    markets: jsonb("markets"),
+    snappedAt: timestamp("snapped_at").defaultNow().notNull(),
+  },
+  (t) => [index("odds_markets_fixture_idx").on(t.fixtureId)]
+);
+
+export type H2HFixture = typeof h2hFixtures.$inferSelect;
+export type TeamSeasonStats = typeof teamSeasonStats.$inferSelect;
+export type PlayerProfile = typeof playerProfiles.$inferSelect;
+export type Venue = typeof venues.$inferSelect;
+export type Trophy = typeof trophies.$inferSelect;
+export type OddsMarket = typeof oddsMarkets.$inferSelect;

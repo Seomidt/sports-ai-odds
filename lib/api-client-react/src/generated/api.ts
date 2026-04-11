@@ -30,17 +30,26 @@ import type {
   FollowResponse,
   FollowedFixturesResponse,
   GetFixtureSignalsParams,
+  GetTeamStatisticsParams,
+  GetTopDisciplineParams,
+  H2HResponse,
   HealthStatus,
   InjuriesResponse,
   LiveOddsResponse,
   MeResponse,
+  OddsMarketsResponse,
   OddsResponse,
+  PlayerProfileResponse,
   ReadConfirmation,
   SignalsResponse,
   StandingsResponse,
+  TeamStatisticsResponse,
   TodayFixturesResponse,
+  TopDisciplineResponse,
+  TrophiesResponse,
   UnreadAlertsResponse,
   UpdateUserBody,
+  VenueResponse,
 } from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
@@ -880,6 +889,181 @@ export function useGetFixtureOdds<
 }
 
 /**
+ * @summary Head-to-head history for a fixture
+ */
+export const getGetFixtureH2HUrl = (id: number) => {
+  return `/api/fixtures/${id}/h2h`;
+};
+
+export const getFixtureH2H = async (
+  id: number,
+  options?: RequestInit,
+): Promise<H2HResponse> => {
+  return customFetch<H2HResponse>(getGetFixtureH2HUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFixtureH2HQueryKey = (id: number) => {
+  return [`/api/fixtures/${id}/h2h`] as const;
+};
+
+export const getGetFixtureH2HQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFixtureH2H>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureH2H>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetFixtureH2HQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getFixtureH2H>>> = ({
+    signal,
+  }) => getFixtureH2H(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFixtureH2H>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFixtureH2HQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFixtureH2H>>
+>;
+export type GetFixtureH2HQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Head-to-head history for a fixture
+ */
+
+export function useGetFixtureH2H<
+  TData = Awaited<ReturnType<typeof getFixtureH2H>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureH2H>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFixtureH2HQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary All bookmakers and all market odds for a fixture
+ */
+export const getGetFixtureOddsMarketsUrl = (id: number) => {
+  return `/api/fixtures/${id}/odds-markets`;
+};
+
+export const getFixtureOddsMarkets = async (
+  id: number,
+  options?: RequestInit,
+): Promise<OddsMarketsResponse> => {
+  return customFetch<OddsMarketsResponse>(getGetFixtureOddsMarketsUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetFixtureOddsMarketsQueryKey = (id: number) => {
+  return [`/api/fixtures/${id}/odds-markets`] as const;
+};
+
+export const getGetFixtureOddsMarketsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getFixtureOddsMarkets>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureOddsMarkets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetFixtureOddsMarketsQueryKey(id);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getFixtureOddsMarkets>>
+  > = ({ signal }) => getFixtureOddsMarkets(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getFixtureOddsMarkets>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetFixtureOddsMarketsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getFixtureOddsMarkets>>
+>;
+export type GetFixtureOddsMarketsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary All bookmakers and all market odds for a fixture
+ */
+
+export function useGetFixtureOddsMarkets<
+  TData = Awaited<ReturnType<typeof getFixtureOddsMarkets>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getFixtureOddsMarkets>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetFixtureOddsMarketsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
  * @summary Get live odds snapshots timeline for a fixture
  */
 export const getGetFixtureLiveOddsUrl = (id: number) => {
@@ -958,6 +1142,498 @@ export function useGetFixtureLiveOdds<
   },
 ): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetFixtureLiveOddsQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Season statistics for a team
+ */
+export const getGetTeamStatisticsUrl = (
+  id: number,
+  params?: GetTeamStatisticsParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/teams/${id}/statistics?${stringifiedParams}`
+    : `/api/teams/${id}/statistics`;
+};
+
+export const getTeamStatistics = async (
+  id: number,
+  params?: GetTeamStatisticsParams,
+  options?: RequestInit,
+): Promise<TeamStatisticsResponse> => {
+  return customFetch<TeamStatisticsResponse>(
+    getGetTeamStatisticsUrl(id, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetTeamStatisticsQueryKey = (
+  id: number,
+  params?: GetTeamStatisticsParams,
+) => {
+  return [`/api/teams/${id}/statistics`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetTeamStatisticsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTeamStatistics>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: GetTeamStatisticsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTeamStatistics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTeamStatisticsQueryKey(id, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTeamStatistics>>
+  > = ({ signal }) =>
+    getTeamStatistics(id, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTeamStatistics>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTeamStatisticsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTeamStatistics>>
+>;
+export type GetTeamStatisticsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Season statistics for a team
+ */
+
+export function useGetTeamStatistics<
+  TData = Awaited<ReturnType<typeof getTeamStatistics>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  params?: GetTeamStatisticsParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTeamStatistics>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTeamStatisticsQueryOptions(id, params, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Venue/stadium info for a team
+ */
+export const getGetTeamVenueUrl = (id: number) => {
+  return `/api/teams/${id}/venue`;
+};
+
+export const getTeamVenue = async (
+  id: number,
+  options?: RequestInit,
+): Promise<VenueResponse> => {
+  return customFetch<VenueResponse>(getGetTeamVenueUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTeamVenueQueryKey = (id: number) => {
+  return [`/api/teams/${id}/venue`] as const;
+};
+
+export const getGetTeamVenueQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTeamVenue>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTeamVenue>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTeamVenueQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeamVenue>>> = ({
+    signal,
+  }) => getTeamVenue(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTeamVenue>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTeamVenueQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTeamVenue>>
+>;
+export type GetTeamVenueQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Venue/stadium info for a team
+ */
+
+export function useGetTeamVenue<
+  TData = Awaited<ReturnType<typeof getTeamVenue>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTeamVenue>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTeamVenueQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trophy history for a team
+ */
+export const getGetTeamTrophiesUrl = (id: number) => {
+  return `/api/teams/${id}/trophies`;
+};
+
+export const getTeamTrophies = async (
+  id: number,
+  options?: RequestInit,
+): Promise<TrophiesResponse> => {
+  return customFetch<TrophiesResponse>(getGetTeamTrophiesUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetTeamTrophiesQueryKey = (id: number) => {
+  return [`/api/teams/${id}/trophies`] as const;
+};
+
+export const getGetTeamTrophiesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTeamTrophies>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTeamTrophies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetTeamTrophiesQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getTeamTrophies>>> = ({
+    signal,
+  }) => getTeamTrophies(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTeamTrophies>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTeamTrophiesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTeamTrophies>>
+>;
+export type GetTeamTrophiesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Trophy history for a team
+ */
+
+export function useGetTeamTrophies<
+  TData = Awaited<ReturnType<typeof getTeamTrophies>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTeamTrophies>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTeamTrophiesQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Player profile with season stats
+ */
+export const getGetPlayerUrl = (id: number) => {
+  return `/api/players/${id}`;
+};
+
+export const getPlayer = async (
+  id: number,
+  options?: RequestInit,
+): Promise<PlayerProfileResponse> => {
+  return customFetch<PlayerProfileResponse>(getGetPlayerUrl(id), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetPlayerQueryKey = (id: number) => {
+  return [`/api/players/${id}`] as const;
+};
+
+export const getGetPlayerQueryOptions = <
+  TData = Awaited<ReturnType<typeof getPlayer>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPlayer>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetPlayerQueryKey(id);
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getPlayer>>> = ({
+    signal,
+  }) => getPlayer(id, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!id,
+    ...queryOptions,
+  } as UseQueryOptions<Awaited<ReturnType<typeof getPlayer>>, TError, TData> & {
+    queryKey: QueryKey;
+  };
+};
+
+export type GetPlayerQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getPlayer>>
+>;
+export type GetPlayerQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Player profile with season stats
+ */
+
+export function useGetPlayer<
+  TData = Awaited<ReturnType<typeof getPlayer>>,
+  TError = ErrorType<unknown>,
+>(
+  id: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getPlayer>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetPlayerQueryOptions(id, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Top disciplinary players in a league
+ */
+export const getGetTopDisciplineUrl = (
+  leagueId: number,
+  params?: GetTopDisciplineParams,
+) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? "null" : value.toString());
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0
+    ? `/api/leagues/${leagueId}/topdiscipline?${stringifiedParams}`
+    : `/api/leagues/${leagueId}/topdiscipline`;
+};
+
+export const getTopDiscipline = async (
+  leagueId: number,
+  params?: GetTopDisciplineParams,
+  options?: RequestInit,
+): Promise<TopDisciplineResponse> => {
+  return customFetch<TopDisciplineResponse>(
+    getGetTopDisciplineUrl(leagueId, params),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetTopDisciplineQueryKey = (
+  leagueId: number,
+  params?: GetTopDisciplineParams,
+) => {
+  return [
+    `/api/leagues/${leagueId}/topdiscipline`,
+    ...(params ? [params] : []),
+  ] as const;
+};
+
+export const getGetTopDisciplineQueryOptions = <
+  TData = Awaited<ReturnType<typeof getTopDiscipline>>,
+  TError = ErrorType<unknown>,
+>(
+  leagueId: number,
+  params?: GetTopDisciplineParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTopDiscipline>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetTopDisciplineQueryKey(leagueId, params);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getTopDiscipline>>
+  > = ({ signal }) =>
+    getTopDiscipline(leagueId, params, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!leagueId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getTopDiscipline>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetTopDisciplineQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getTopDiscipline>>
+>;
+export type GetTopDisciplineQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Top disciplinary players in a league
+ */
+
+export function useGetTopDiscipline<
+  TData = Awaited<ReturnType<typeof getTopDiscipline>>,
+  TError = ErrorType<unknown>,
+>(
+  leagueId: number,
+  params?: GetTopDisciplineParams,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getTopDiscipline>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetTopDisciplineQueryOptions(
+    leagueId,
+    params,
+    options,
+  );
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

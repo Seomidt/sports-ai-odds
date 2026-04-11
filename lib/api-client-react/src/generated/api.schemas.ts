@@ -159,6 +159,140 @@ export interface InjuriesResponse {
   injuries: Injury[];
 }
 
+export interface H2HFixture {
+  id?: number;
+  fixtureId?: number;
+  leagueId?: number;
+  leagueName?: string;
+  seasonYear?: number;
+  homeTeamId?: number;
+  homeTeamName?: string;
+  homeTeamLogo?: string;
+  awayTeamId?: number;
+  awayTeamName?: string;
+  awayTeamLogo?: string;
+  homeGoals?: number;
+  awayGoals?: number;
+  kickoff?: string;
+  statusShort?: string;
+}
+
+export interface H2HResponse {
+  h2h: H2HFixture[];
+}
+
+export type OddsMarketItemMarkets = { [key: string]: unknown };
+
+export interface OddsMarketItem {
+  id?: number;
+  fixtureId?: number;
+  bookmaker?: string;
+  markets?: OddsMarketItemMarkets;
+  snappedAt?: string;
+}
+
+export interface OddsMarketsResponse {
+  oddsMarkets: OddsMarketItem[];
+}
+
+export interface TeamSeasonStatsItem {
+  id?: number;
+  teamId?: number;
+  leagueId?: number;
+  seasonYear?: number;
+  form?: string;
+  playedTotal?: number;
+  winsTotal?: number;
+  drawsTotal?: number;
+  lossesTotal?: number;
+  goalsForTotal?: number;
+  goalsForAvgTotal?: number;
+  goalsAgainstTotal?: number;
+  goalsAgainstAvgTotal?: number;
+  cleanSheetsTotal?: number;
+  failedToScoreTotal?: number;
+  winsHome?: number;
+  winsAway?: number;
+  goalsForAvgHome?: number;
+  goalsForAvgAway?: number;
+  goalsAgainstAvgHome?: number;
+  goalsAgainstAvgAway?: number;
+  cleanSheetsHome?: number;
+  cleanSheetsAway?: number;
+  penaltyScoredTotal?: number;
+  biggestWinStreak?: number;
+  updatedAt?: string;
+}
+
+export interface TeamStatisticsResponse {
+  statistics: TeamSeasonStatsItem[];
+}
+
+export interface VenueItem {
+  id?: number;
+  venueId?: number;
+  name?: string;
+  address?: string;
+  city?: string;
+  country?: string;
+  capacity?: number;
+  surface?: string;
+  imageUrl?: string;
+  teamId?: number;
+}
+
+export interface VenueResponse {
+  venue: VenueItem | null;
+}
+
+export interface TrophyItem {
+  id?: number;
+  teamId?: number;
+  leagueName?: string;
+  leagueType?: string;
+  place?: string;
+  season?: string;
+}
+
+export interface TrophiesResponse {
+  trophies: TrophyItem[];
+}
+
+export interface PlayerProfileItem {
+  id?: number;
+  playerId?: number;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  age?: number;
+  nationality?: string;
+  height?: string;
+  weight?: string;
+  photo?: string;
+  position?: string;
+  teamId?: number;
+  teamName?: string;
+  yellowCards?: number;
+  redCards?: number;
+  appearances?: number;
+  goals?: number;
+  assists?: number;
+  minutesPlayed?: number;
+  rating?: number;
+  leagueId?: number;
+  seasonYear?: number;
+}
+
+export interface PlayerProfileResponse {
+  player: PlayerProfileItem;
+}
+
+export type TopDisciplineResponsePlayersItem = { [key: string]: unknown };
+
+export interface TopDisciplineResponse {
+  players: TopDisciplineResponsePlayersItem[];
+}
+
 export interface OddsSnapshot {
   id?: number;
   fixtureId?: number;
@@ -320,3 +454,11 @@ export const GetFixtureSignalsPhase = {
   live: "live",
   post: "post",
 } as const;
+
+export type GetTeamStatisticsParams = {
+  season?: number;
+};
+
+export type GetTopDisciplineParams = {
+  season?: number;
+};

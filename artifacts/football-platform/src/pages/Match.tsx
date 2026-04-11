@@ -6,6 +6,9 @@ import {
   useGetPostAnalysis,
   useGetFixtureOdds,
   useGetFixtureLiveOdds,
+  useGetFixtureH2H,
+  useGetTeamStatistics,
+  useGetFixtureOddsMarkets,
   useFollowFixture,
   useUnfollowFixture,
   useGetFollowedFixtures
@@ -133,11 +136,12 @@ export function Match() {
         {/* Tabs section for Analysis + Odds */}
         <div className="mt-8">
           <Tabs defaultValue={isLive ? "live" : fixture.statusShort === "FT" ? "post" : "pre"} className="w-full">
-            <TabsList className="bg-black/40 border border-white/10 p-1">
+            <TabsList className="bg-black/40 border border-white/10 p-1 flex-wrap h-auto gap-1">
               <TabsTrigger value="pre" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">PRE-MATCH</TabsTrigger>
               <TabsTrigger value="live" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">IN-PLAY</TabsTrigger>
               <TabsTrigger value="post" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">POST-MATCH</TabsTrigger>
               <TabsTrigger value="odds" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">ODDS</TabsTrigger>
+              <TabsTrigger value="h2h" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">H2H</TabsTrigger>
             </TabsList>
             
             <TabsContent value="pre" className="mt-4">
@@ -151,6 +155,9 @@ export function Match() {
             </TabsContent>
             <TabsContent value="odds" className="mt-4">
               <OddsTab fixtureId={id} isLive={isLive} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
+            </TabsContent>
+            <TabsContent value="h2h" className="mt-4">
+              <H2HTab fixtureId={id} homeTeamId={fixture.homeTeamId!} awayTeamId={fixture.awayTeamId!} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
             </TabsContent>
           </Tabs>
         </div>
@@ -332,6 +339,253 @@ function AnalysisTab({ fixtureId, phase }: { fixtureId: number, phase: 'pre' | '
                     <div className="text-[10px] uppercase tracking-wider mt-1.5 opacity-50 font-mono">
                       {format(new Date(signal.triggeredAt || Date.now()), 'HH:mm:ss')}
                     </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── OddsTab ──────────────────────────────────────────────────────────────────
+
+function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number; isLive: boolean; homeTeam: string; awayTeam: string }) {
+  const { data: preData } = useGetFixtureOdds(fixtureId);
+  const { data: liveData } = useGetFixtureLiveOdds(fixtureId);
+  const { data: marketsData } = useGetFixtureOddsMarkets(fixtureId);
+
+  const snap = preData?.odds ?? null;
+  const liveOdds = liveData?.liveOdds ?? [];
+  const latestLive = liveOdds[0] ?? null;
+  const markets = marketsData?.oddsMarkets?.[0]?.markets as Record<string, Array<{ value: string; odd: string }>> | null | undefined;
+
+  const oddsCell = (val: number | null | undefined) => {
+    if (val == null) return <span className="text-muted-foreground font-mono text-sm">—</span>;
+    return <span className="font-mono text-sm text-teal-400 font-bold tabular-nums">{val.toFixed(2)}</span>;
+  };
+
+  const renderMarket = (name: string, values: Array<{ value: string; odd: string }>) => (
+    <div key={name} className="glass-card p-4 rounded-xl">
+      <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">{name}</div>
+      <div className="flex flex-wrap gap-2">
+        {values.map((v, i) => (
+          <div key={i} className="flex flex-col items-center bg-white/5 rounded-lg px-3 py-2 min-w-[70px]">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase truncate max-w-[80px]">{v.value}</span>
+            <span className="font-mono text-sm text-teal-400 font-bold">{v.odd}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (!snap && !latestLive && !markets) {
+    return (
+      <div className="glass-card p-8 rounded-xl text-center">
+        <p className="text-muted-foreground text-sm">Odds not yet available — data syncs 6 hours before kickoff.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 1X2 Pre-match */}
+      {snap && (
+        <div className="glass-card p-5 rounded-xl">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">
+            Match Winner — {snap.bookmaker ?? "Pre-match"}
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-white/5 rounded-xl p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{homeTeam}</div>
+              {oddsCell(snap.homeWin)}
+            </div>
+            <div className="bg-white/5 rounded-xl p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">Draw</div>
+              {oddsCell(snap.draw)}
+            </div>
+            <div className="bg-white/5 rounded-xl p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{awayTeam}</div>
+              {oddsCell(snap.awayWin)}
+            </div>
+          </div>
+
+          {/* Additional markets */}
+          {(snap.btts != null || snap.overUnder25 != null || snap.handicapHome != null) && (
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              {snap.btts != null && (
+                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] font-mono text-violet-400 uppercase mb-1">BTTS</div>
+                  <span className="font-mono text-sm font-bold text-violet-400">{snap.btts.toFixed(2)}</span>
+                </div>
+              )}
+              {snap.overUnder25 != null && (
+                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] font-mono text-violet-400 uppercase mb-1">Over 2.5</div>
+                  <span className="font-mono text-sm font-bold text-violet-400">{snap.overUnder25.toFixed(2)}</span>
+                </div>
+              )}
+              {snap.handicapHome != null && (
+                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-2.5 text-center">
+                  <div className="text-[10px] font-mono text-violet-400 uppercase mb-1">Handicap H</div>
+                  <span className="font-mono text-sm font-bold text-violet-400">{snap.handicapHome.toFixed(2)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Live odds */}
+      {isLive && latestLive && (
+        <div className="glass-card p-5 rounded-xl border border-amber-400/20">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-xs font-mono text-amber-400 uppercase tracking-wider">Live Odds — {latestLive.bookmaker}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="bg-amber-400/5 border border-amber-400/10 rounded-xl p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{homeTeam}</div>
+              <span className="font-mono text-sm text-amber-400 font-bold tabular-nums">{latestLive.homeWin?.toFixed(2) ?? "—"}</span>
+            </div>
+            <div className="bg-amber-400/5 border border-amber-400/10 rounded-xl p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">Draw</div>
+              <span className="font-mono text-sm text-amber-400 font-bold tabular-nums">{latestLive.draw?.toFixed(2) ?? "—"}</span>
+            </div>
+            <div className="bg-amber-400/5 border border-amber-400/10 rounded-xl p-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{awayTeam}</div>
+              <span className="font-mono text-sm text-amber-400 font-bold tabular-nums">{latestLive.awayWin?.toFixed(2) ?? "—"}</span>
+            </div>
+          </div>
+          {liveOdds.length > 1 && (
+            <div className="mt-3 text-xs font-mono text-muted-foreground text-center">
+              {liveOdds.length} snapshots captured since kickoff
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* All markets */}
+      {markets && Object.keys(markets).length > 0 && (
+        <div>
+          <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3">All Markets</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {Object.entries(markets).map(([name, values]) => renderMarket(name, values))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── H2HTab ───────────────────────────────────────────────────────────────────
+
+function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
+  fixtureId: number;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeam: string;
+  awayTeam: string;
+}) {
+  const { data: h2hData, isLoading } = useGetFixtureH2H(fixtureId);
+  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2024 });
+  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2024 });
+
+  const h2hRows = h2hData?.h2h ?? [];
+  const homeSeasonStats = homeStats?.statistics?.[0] ?? null;
+  const awaySeasonStats = awayStats?.statistics?.[0] ?? null;
+
+  const resultBadge = (hg: number | null | undefined, ag: number | null | undefined, isHomeTeam: boolean) => {
+    if (hg == null || ag == null) return null;
+    const homeWon = hg > ag;
+    const draw = hg === ag;
+    if (draw) return <span className="text-[10px] font-mono font-bold text-violet-400 bg-violet-400/10 border border-violet-400/20 px-1.5 py-0.5 rounded">D</span>;
+    if (isHomeTeam ? homeWon : !homeWon) return <span className="text-[10px] font-mono font-bold text-teal-400 bg-teal-400/10 border border-teal-400/20 px-1.5 py-0.5 rounded">W</span>;
+    return <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded">L</span>;
+  };
+
+  const statRow = (label: string, homeVal: string | number | null | undefined, awayVal: string | number | null | undefined) => (
+    <div className="grid grid-cols-3 gap-2 text-center py-2 border-b border-white/5 last:border-0">
+      <div className="text-sm font-mono font-bold text-teal-400">{homeVal ?? "—"}</div>
+      <div className="text-[10px] font-mono text-muted-foreground uppercase self-center">{label}</div>
+      <div className="text-sm font-mono font-bold text-teal-400">{awayVal ?? "—"}</div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Season stats comparison */}
+      {(homeSeasonStats || awaySeasonStats) && (
+        <div className="glass-card p-5 rounded-xl">
+          <div className="grid grid-cols-3 gap-2 text-center mb-4 pb-3 border-b border-white/5">
+            <div className="text-xs font-mono font-bold text-white truncate">{homeTeam}</div>
+            <div className="text-[10px] font-mono text-muted-foreground uppercase">2024/25 Season</div>
+            <div className="text-xs font-mono font-bold text-white truncate">{awayTeam}</div>
+          </div>
+          {statRow("Played", homeSeasonStats?.playedTotal, awaySeasonStats?.playedTotal)}
+          {statRow("Wins", homeSeasonStats?.winsTotal, awaySeasonStats?.winsTotal)}
+          {statRow("Goals For", homeSeasonStats?.goalsForTotal, awaySeasonStats?.goalsForTotal)}
+          {statRow("Goals Against", homeSeasonStats?.goalsAgainstTotal, awaySeasonStats?.goalsAgainstTotal)}
+          {statRow("Avg Scored", homeSeasonStats?.goalsForAvgTotal?.toFixed(2), awaySeasonStats?.goalsForAvgTotal?.toFixed(2))}
+          {statRow("Avg Conceded", homeSeasonStats?.goalsAgainstAvgTotal?.toFixed(2), awaySeasonStats?.goalsAgainstAvgTotal?.toFixed(2))}
+          {statRow("Clean Sheets", homeSeasonStats?.cleanSheetsTotal, awaySeasonStats?.cleanSheetsTotal)}
+          {statRow("Win Streak", homeSeasonStats?.biggestWinStreak, awaySeasonStats?.biggestWinStreak)}
+          {homeSeasonStats?.form && (
+            <div className="grid grid-cols-3 gap-2 text-center pt-3">
+              <div className="flex gap-0.5 justify-center">
+                {[...((homeSeasonStats.form ?? "").slice(-5))].map((c, i) => (
+                  <span key={i} className={`text-[9px] font-mono font-bold w-4 h-4 rounded flex items-center justify-center ${c === "W" ? "bg-teal-400/20 text-teal-400" : c === "D" ? "bg-violet-400/20 text-violet-400" : "bg-amber-400/20 text-amber-400"}`}>{c}</span>
+                ))}
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase self-center">Form</div>
+              <div className="flex gap-0.5 justify-center">
+                {[...((awaySeasonStats?.form ?? "").slice(-5))].map((c, i) => (
+                  <span key={i} className={`text-[9px] font-mono font-bold w-4 h-4 rounded flex items-center justify-center ${c === "W" ? "bg-teal-400/20 text-teal-400" : c === "D" ? "bg-violet-400/20 text-violet-400" : "bg-amber-400/20 text-amber-400"}`}>{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* H2H historical results */}
+      <div>
+        <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3">
+          Head-to-Head History
+        </h3>
+        {isLoading ? (
+          <div className="glass-card p-8 rounded-xl text-center">
+            <Activity className="w-5 h-5 text-primary animate-pulse mx-auto" />
+          </div>
+        ) : h2hRows.length === 0 ? (
+          <div className="glass-card p-8 rounded-xl text-center">
+            <p className="text-muted-foreground text-sm">No H2H data yet — syncs automatically for upcoming fixtures.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {h2hRows.map((match) => {
+              const hg = match.homeGoals;
+              const ag = match.awayGoals;
+              const ourHomeTeamIsActualHome = match.homeTeamId === homeTeamId;
+              return (
+                <div key={match.id} className="glass-card p-4 rounded-xl flex items-center gap-3">
+                  <div className="text-[10px] font-mono text-muted-foreground w-16 shrink-0">
+                    {match.kickoff ? format(new Date(match.kickoff), 'dd MMM yy') : '—'}
+                  </div>
+                  <div className="flex-1 grid grid-cols-3 gap-2 text-center min-w-0">
+                    <div className="text-xs font-mono text-white truncate">{match.homeTeamName}</div>
+                    <div className="font-mono text-sm font-bold text-white">
+                      {hg ?? "?"} — {ag ?? "?"}
+                    </div>
+                    <div className="text-xs font-mono text-white truncate">{match.awayTeamName}</div>
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {resultBadge(hg, ag, ourHomeTeamIsActualHome)}
+                  </div>
+                  <div className="text-[9px] font-mono text-muted-foreground w-20 text-right shrink-0 truncate">
+                    {match.leagueName ?? ""}
                   </div>
                 </div>
               );

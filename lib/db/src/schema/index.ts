@@ -58,6 +58,8 @@ export const standings = pgTable(
     leagueId: integer("league_id").notNull(),
     seasonYear: integer("season_year").notNull(),
     teamId: integer("team_id").notNull(),
+    teamName: text("team_name"),
+    teamLogo: text("team_logo"),
     rank: integer("rank"),
     points: integer("points"),
     played: integer("played"),

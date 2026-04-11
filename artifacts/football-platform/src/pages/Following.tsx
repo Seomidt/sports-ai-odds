@@ -66,7 +66,11 @@ export function Following() {
   const queryClient = useQueryClient();
 
   const { data: followedData, isLoading: isLoadingFollowed } = useGetFollowedFixtures({
-    request: { headers: { 'x-session-id': sessionId } }
+    request: { headers: { 'x-session-id': sessionId } },
+    query: {
+      queryKey: ['followedFixtures', sessionId],
+      enabled: !!sessionId,
+    }
   });
 
   const { data: alertsData } = useGetUnreadAlerts({

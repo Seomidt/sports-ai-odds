@@ -104,8 +104,8 @@ router.get("/standings/:leagueId", async (req, res) => {
        s.won, s.drawn, s.lost,
        s.goals_for AS "goalsFor", s.goals_against AS "goalsAgainst",
        s.goals_diff AS "goalsDiff", s.form,
-       COALESCE(t.name, s.team_id::text) AS "teamName",
-       t.logo AS "teamLogo"
+       COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
+       COALESCE(s.team_logo, t.logo) AS "teamLogo"
      FROM standings s
      LEFT JOIN teams t ON t.team_id = s.team_id
      WHERE s.league_id = $1

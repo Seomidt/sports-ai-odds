@@ -15,11 +15,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { format } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
 
 export function Match() {
   const [, params] = useRoute("/match/:id");
   const id = Number(params?.id);
   const { sessionId } = useSession();
+  const queryClient = useQueryClient();
 
   const { data: fixtureData, isLoading: isLoadingFixture } = useGetFixture(id, { 
     query: { enabled: !!id, queryKey: ['fixture', id] } 
@@ -27,7 +29,10 @@ export function Match() {
   
   const { data: followedData } = useGetFollowedFixtures({
     request: { headers: { 'x-session-id': sessionId } },
-    query: { queryKey: ['followedFixtures'] }
+    query: {
+      queryKey: ['followedFixtures', sessionId],
+      enabled: !!sessionId,
+    }
   });
 
   const isFollowed = followedData?.fixtureIds?.includes(id);
@@ -35,10 +40,14 @@ export function Match() {
   const unfollowMutation = useUnfollowFixture({ request: { headers: { 'x-session-id': sessionId } }});
 
   const toggleFollow = async () => {
-    if (isFollowed) {
-      await unfollowMutation.mutateAsync({ id });
-    } else {
-      await followMutation.mutateAsync({ id });
+    try {
+      if (isFollowed) {
+        await unfollowMutation.mutateAsync({ id });
+      } else {
+        await followMutation.mutateAsync({ id });
+      }
+      await queryClient.invalidateQueries({ queryKey: ['followedFixtures', sessionId] });
+    } catch {
     }
   };
 

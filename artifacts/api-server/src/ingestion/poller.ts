@@ -217,6 +217,8 @@ async function syncStandings() {
             leagueId: league.id,
             seasonYear: league.season,
             teamId: s.team.id,
+            teamName: s.team.name ?? null,
+            teamLogo: s.team.logo ?? null,
             rank: s.rank,
             points: s.points,
             played: s.all.played,
@@ -232,6 +234,8 @@ async function syncStandings() {
           .onConflictDoUpdate({
             target: [standings.leagueId, standings.seasonYear, standings.teamId],
             set: {
+              teamName: s.team.name ?? null,
+              teamLogo: s.team.logo ?? null,
               rank: s.rank,
               points: s.points,
               played: s.all.played,

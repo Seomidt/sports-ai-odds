@@ -161,10 +161,34 @@ function ClerkProviderWithRoutes() {
       appearance={{
         variables: {
           colorPrimary: 'hsl(180, 100%, 40%)',
-          colorBackground: 'hsl(213, 50%, 12%)',
-          colorText: 'white',
-          colorInputBackground: 'hsl(215, 30%, 20%)',
+          colorBackground: 'hsl(213, 45%, 17%)',
+          colorText: 'hsl(220, 20%, 95%)',
+          colorTextSecondary: 'hsl(220, 15%, 65%)',
+          colorInputBackground: 'hsl(215, 35%, 22%)',
           colorInputText: 'white',
+          colorNeutral: 'hsl(220, 20%, 50%)',
+        },
+        elements: {
+          card: {
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.6)',
+            backdropFilter: 'blur(12px)',
+          },
+          headerTitle: {
+            color: 'white',
+            fontFamily: 'monospace',
+            letterSpacing: '0.05em',
+          },
+          headerSubtitle: { color: 'rgba(255,255,255,0.55)' },
+          formFieldLabel: { color: 'rgba(255,255,255,0.75)', fontSize: '0.8rem' },
+          socialButtonsBlockButton: {
+            border: '1px solid rgba(255,255,255,0.12)',
+            color: 'rgba(255,255,255,0.85)',
+            backgroundColor: 'rgba(255,255,255,0.05)',
+          },
+          dividerText: { color: 'rgba(255,255,255,0.35)' },
+          footerActionText: { color: 'rgba(255,255,255,0.45)' },
+          footerActionLink: { color: 'hsl(180, 100%, 45%)' },
         }
       }}
     >

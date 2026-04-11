@@ -1,5 +1,5 @@
 import { useGetTodayFixtures } from "@workspace/api-client-react";
-import type { FixtureItem } from "@workspace/api-client-react";
+import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
@@ -10,12 +10,6 @@ const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]
 const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
 
 type Phase = "live" | "prematch" | "postmatch";
-
-interface FlatFixture extends FixtureItem {
-  leagueId: number;
-  leagueName: string | null | undefined;
-  leagueLogo: string | null | undefined;
-}
 
 function getPhase(statusShort: string | null | undefined): Phase {
   if (!statusShort || statusShort === "NS" || statusShort === "TBD") return "prematch";
@@ -51,7 +45,7 @@ function PostMatchBadge({ statusShort }: { statusShort?: string | null }) {
   );
 }
 
-function FixtureCard({ fixture }: { fixture: FlatFixture }) {
+function FixtureCard({ fixture }: { fixture: Fixture }) {
   const phase = getPhase(fixture.statusShort);
 
   return (
@@ -66,10 +60,8 @@ function FixtureCard({ fixture }: { fixture: FlatFixture }) {
         }`}
       >
         <div className="flex justify-between items-center mb-4">
-          <div className="flex items-center gap-2">
-            {phase === "live" && (
-              <LiveBadge elapsed={fixture.statusElapsed} />
-            )}
+          <div>
+            {phase === "live" && <LiveBadge elapsed={fixture.statusElapsed} />}
             {phase === "prematch" && <PrematchBadge kickoff={fixture.kickoff} />}
             {phase === "postmatch" && <PostMatchBadge statusShort={fixture.statusShort} />}
           </div>
@@ -114,17 +106,15 @@ function FixtureCard({ fixture }: { fixture: FlatFixture }) {
   );
 }
 
-interface GroupedLeague {
+interface LeagueSection {
   leagueId: number;
   leagueName: string | null | undefined;
   leagueLogo: string | null | undefined;
-  fixtures: FlatFixture[];
+  fixtures: Fixture[];
 }
 
-function FixtureGrid({ fixtures }: { fixtures: FlatFixture[] }) {
-  if (fixtures.length === 0) return null;
-
-  const byLeague = new Map<number, GroupedLeague>();
+function FixtureGrid({ fixtures }: { fixtures: Fixture[] }) {
+  const byLeague = new Map<number, LeagueSection>();
   for (const f of fixtures) {
     if (!byLeague.has(f.leagueId)) {
       byLeague.set(f.leagueId, {
@@ -141,7 +131,7 @@ function FixtureGrid({ fixtures }: { fixtures: FlatFixture[] }) {
     <div className="space-y-8">
       {Array.from(byLeague.values()).map((league) => (
         <div key={league.leagueId}>
-          <div className="flex items-center gap-2.5 mb-4 pb-2 border-b border-white/8">
+          <div className="flex items-center gap-2.5 mb-4 pb-2 border-b border-white/10">
             {league.leagueLogo && (
               <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain" />
             )}
@@ -165,10 +155,16 @@ function FixtureGrid({ fixtures }: { fixtures: FlatFixture[] }) {
 
 type Tab = "live" | "prematch" | "postmatch";
 
-const TABS: { id: Tab; label: string; icon: typeof Zap }[] = [
-  { id: "live", label: "Live", icon: Zap },
-  { id: "prematch", label: "Prematch", icon: Clock },
-  { id: "postmatch", label: "Afsluttet", icon: CheckCircle2 },
+interface TabDef {
+  id: Tab;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+}
+
+const TABS: TabDef[] = [
+  { id: "live", label: "LIVE", Icon: Zap },
+  { id: "prematch", label: "PREMATCH", Icon: Clock },
+  { id: "postmatch", label: "AFSLUTTET", Icon: CheckCircle2 },
 ];
 
 function EmptyState({ phase }: { phase: Tab }) {
@@ -188,53 +184,21 @@ function EmptyState({ phase }: { phase: Tab }) {
 }
 
 export function Fixtures() {
-  const { data, isLoading } = useGetTodayFixtures({
-    query: { refetchInterval: 30_000 },
-  });
-
+  const { data, isLoading } = useGetTodayFixtures();
   const [activeTab, setActiveTab] = useState<Tab>("live");
 
-  const allFlat: FlatFixture[] = [];
-  for (const league of data?.leagues ?? []) {
-    for (const fixture of league.fixtures) {
-      allFlat.push({
-        ...fixture,
-        leagueId: league.leagueId,
-        leagueName: league.leagueName,
-        leagueLogo: league.leagueLogo,
-      });
-    }
-  }
+  const allFixtures: Fixture[] = (data?.leagues ?? []).flatMap((league) => league.fixtures);
 
-  const sorted = [...allFlat].sort((a, b) => {
+  const sorted = [...allFixtures].sort((a, b) => {
     const ta = a.kickoff ? new Date(a.kickoff).getTime() : 0;
     const tb = b.kickoff ? new Date(b.kickoff).getTime() : 0;
     return ta - tb;
   });
 
-  const byPhase: Record<Tab, FlatFixture[]> = {
+  const byPhase: Record<Tab, Fixture[]> = {
     live: sorted.filter((f) => getPhase(f.statusShort) === "live"),
     prematch: sorted.filter((f) => getPhase(f.statusShort) === "prematch"),
     postmatch: sorted.filter((f) => getPhase(f.statusShort) === "postmatch"),
-  };
-
-  const tabStyle = (id: Tab) => {
-    const isActive = activeTab === id;
-    const count = byPhase[id].length;
-    const accent =
-      id === "live"
-        ? isActive
-          ? "text-primary border-primary"
-          : "text-primary/50 border-transparent hover:border-primary/30"
-        : id === "prematch"
-        ? isActive
-          ? "text-amber-400 border-amber-400"
-          : "text-amber-400/50 border-transparent hover:border-amber-400/30"
-        : isActive
-        ? "text-white border-white/60"
-        : "text-muted-foreground border-transparent hover:border-white/20";
-
-    return { isActive, count, accent };
   };
 
   return (
@@ -252,20 +216,35 @@ export function Fixtures() {
         ) : (
           <>
             <div className="flex gap-0 border-b border-white/10">
-              {TABS.map(({ id, label, icon: Icon }) => {
-                const { isActive, count, accent } = tabStyle(id);
+              {TABS.map(({ id, label, Icon }) => {
+                const isActive = activeTab === id;
+                const count = byPhase[id].length;
+
+                const accentClass =
+                  id === "live"
+                    ? isActive
+                      ? "text-primary border-primary"
+                      : "text-primary/50 border-transparent hover:border-primary/30"
+                    : id === "prematch"
+                    ? isActive
+                      ? "text-amber-400 border-amber-400"
+                      : "text-amber-400/50 border-transparent hover:border-amber-400/30"
+                    : isActive
+                    ? "text-white border-white/60"
+                    : "text-muted-foreground border-transparent hover:border-white/20";
+
                 return (
                   <button
                     key={id}
                     onClick={() => setActiveTab(id)}
-                    className={`flex items-center gap-2 px-5 py-3 text-sm font-mono font-medium border-b-2 transition-colors ${accent}`}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-mono font-medium border-b-2 transition-colors ${accentClass}`}
                   >
                     {id === "live" && count > 0 ? (
                       <span className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />
                     ) : (
                       <Icon className="w-3.5 h-3.5 shrink-0" />
                     )}
-                    {label.toUpperCase()}
+                    {label}
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded font-mono ${
                         isActive ? "bg-white/10 text-white" : "bg-white/5 text-muted-foreground"

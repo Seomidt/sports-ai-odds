@@ -1,5 +1,5 @@
-import React from "react";
-import { Home, Flame, Star, BarChart2, Settings, Clock, Activity, ArrowUpRight, TrendingDown } from "lucide-react";
+import React, { useState } from "react";
+import { Home, Flame, Star, BarChart2, Settings, Clock, Activity, ArrowUpRight, TrendingDown, Bell } from "lucide-react";
 
 const leagues = [
   {
@@ -27,99 +27,120 @@ const leagues = [
 ];
 
 const navItems = [
-  { icon: Home, label: "Home", active: true },
-  { icon: Flame, label: "Matches", active: false },
-  { icon: Star, label: "Following", active: false },
-  { icon: BarChart2, label: "Standings", active: false },
-  { icon: Settings, label: "Settings", active: false },
+  { icon: Home, label: "Home", id: "home" },
+  { icon: Flame, label: "Live", id: "live" },
+  { icon: Star, label: "Following", id: "following" },
+  { icon: BarChart2, label: "Standings", id: "standings" },
+  { icon: Settings, label: "Settings", id: "settings" },
 ];
 
 export function Dashboard() {
+  const [activeNav, setActiveNav] = useState("home");
+
   return (
     <div
-      className="min-h-screen flex font-sans"
-      style={{ background: "linear-gradient(135deg, #0a0f1e 0%, #0d1a2a 60%, #0a1520 100%)" }}
+      className="w-screen h-screen flex flex-col font-sans overflow-hidden"
+      style={{ background: "linear-gradient(160deg, #0a0f1e 0%, #0d1a2a 60%, #0a1520 100%)" }}
     >
-      {/* Sidebar */}
-      <aside className="w-52 shrink-0 flex flex-col py-6 px-3 border-r border-white/5">
-        <div className="mb-8 px-3">
-          <span className="text-xs font-mono text-teal-400 tracking-widest uppercase">Signal</span>
-          <div className="text-lg font-bold text-white tracking-tight">Terminal</div>
+      {/* Header */}
+      <header className="shrink-0 flex items-center justify-between px-4 pt-12 pb-3">
+        <div>
+          <p className="text-[10px] font-mono text-teal-400 tracking-widest uppercase leading-none">Signal</p>
+          <h1 className="text-lg font-bold text-white tracking-tight leading-tight">Terminal</h1>
         </div>
-        <nav className="space-y-1 flex-1">
-          {navItems.map(({ icon: Icon, label, active }) => (
-            <button
-              key={label}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                active
-                  ? "bg-teal-500/10 text-teal-400 border border-teal-500/20 shadow-[0_0_12px_rgba(20,184,166,0.15)]"
-                  : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="px-3 mt-auto space-y-3">
-          <div
-            className="p-3 rounded-lg border text-xs"
-            style={{ borderColor: "rgba(20,184,166,0.15)", background: "rgba(20,184,166,0.05)" }}
+        <div className="flex items-center gap-2">
+          <span
+            className="text-[10px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1.5"
+            style={{ color: "#14b8a6", borderColor: "rgba(20,184,166,0.3)", background: "rgba(20,184,166,0.08)" }}
           >
-            <div className="text-slate-500 font-mono text-[10px] uppercase tracking-wider mb-1">Signals today</div>
-            <div className="text-2xl font-bold text-white font-mono">14</div>
-            <div className="text-teal-400 text-[10px] font-mono">9 positive · 5 risk</div>
-          </div>
-          <div>
-            <div className="text-[10px] text-slate-600 uppercase tracking-wider">API-Football · Live</div>
-            <div className="flex items-center gap-1.5 mt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-              <span className="text-xs text-teal-400 font-mono">ACTIVE</span>
-            </div>
-          </div>
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+            2 LIVE
+          </span>
+          <button
+            className="relative w-8 h-8 rounded-full flex items-center justify-center border"
+            style={{ borderColor: "rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)" }}
+          >
+            <Bell className="w-4 h-4 text-slate-400" />
+            <span
+              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full"
+              style={{ background: "#14b8a6" }}
+            />
+          </button>
         </div>
-      </aside>
+      </header>
 
-      {/* Main */}
-      <main className="flex-1 overflow-auto p-6">
-        <header className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-tight">Today's Matches</h1>
-            <p className="text-xs text-slate-500 mt-0.5 font-mono">April 10, 2026 · 3 leagues · 7 fixtures</p>
+      {/* Stats strip */}
+      <div className="shrink-0 flex gap-2 px-4 py-2">
+        <div
+          className="flex-1 rounded-xl px-3 py-2 border"
+          style={{ borderColor: "rgba(20,184,166,0.12)", background: "rgba(20,184,166,0.06)" }}
+        >
+          <p className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">Signals today</p>
+          <p className="text-xl font-bold text-white font-mono leading-tight">14</p>
+          <p className="text-[10px] text-teal-400 font-mono">9 pos · 5 risk</p>
+        </div>
+        <div
+          className="flex-1 rounded-xl px-3 py-2 border"
+          style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}
+        >
+          <p className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">Fixtures</p>
+          <p className="text-xl font-bold text-white font-mono leading-tight">7</p>
+          <p className="text-[10px] text-slate-500 font-mono">3 leagues</p>
+        </div>
+        <div
+          className="flex-1 rounded-xl px-3 py-2 border"
+          style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.02)" }}
+        >
+          <p className="text-[9px] font-mono text-slate-500 uppercase tracking-wider">API</p>
+          <div className="flex items-center gap-1 mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
+            <span className="text-[10px] text-teal-400 font-mono">ACTIVE</span>
           </div>
-          <div className="flex items-center gap-2">
-            <span
-              className="text-[10px] font-mono px-2.5 py-1 rounded-full border flex items-center gap-1.5"
-              style={{ color: "#14b8a6", borderColor: "rgba(20,184,166,0.3)", background: "rgba(20,184,166,0.08)" }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-400 animate-pulse" />
-              2 LIVE
-            </span>
-            <span
-              className="text-[10px] font-mono px-2.5 py-1 rounded-full border"
-              style={{ color: "#94a3b8", borderColor: "rgba(148,163,184,0.2)", background: "rgba(148,163,184,0.05)" }}
-            >
-              5 UPCOMING
-            </span>
-          </div>
-        </header>
+          <p className="text-[10px] text-slate-500 font-mono">Live</p>
+        </div>
+      </div>
 
-        <div className="space-y-6">
+      {/* Section label */}
+      <div className="shrink-0 flex items-center justify-between px-4 pt-2 pb-1">
+        <h2 className="text-xs font-semibold text-white tracking-tight">Today's Matches</h2>
+        <span className="text-[10px] font-mono text-slate-500">Apr 11, 2026</span>
+      </div>
+
+      {/* Scrollable match list */}
+      <div className="flex-1 overflow-y-auto px-3 pb-2" style={{ WebkitOverflowScrolling: "touch" }}>
+        <div className="space-y-4 pb-2">
           {leagues.map((league) => (
             <div key={league.name}>
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-0.5 h-4 rounded-full bg-teal-400" />
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-400">{league.name}</h2>
+              <div className="flex items-center gap-2 mb-2 px-1">
+                <div className="w-0.5 h-3.5 rounded-full bg-teal-400" />
+                <h3 className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">{league.name}</h3>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {league.matches.map((match) => (
                   <div
                     key={match.id}
-                    className="flex items-center justify-between px-4 py-3 rounded-xl border cursor-pointer transition-all hover:border-teal-500/20 hover:bg-teal-500/[0.02] group"
+                    className="rounded-2xl border px-3 py-3"
                     style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.07)" }}
                   >
-                    {/* Status */}
-                    <div className="w-28 shrink-0">
+                    {/* Top row: teams + score */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="flex-1 text-sm font-semibold text-white text-right truncate">{match.home}</span>
+                      <span
+                        className="font-mono text-sm font-bold px-2.5 py-0.5 rounded-lg border text-center shrink-0"
+                        style={{
+                          borderColor: "rgba(255,255,255,0.1)",
+                          background: "rgba(0,0,0,0.3)",
+                          color: match.isLive ? "#14b8a6" : "#64748b",
+                          minWidth: "52px",
+                        }}
+                      >
+                        {match.score}
+                      </span>
+                      <span className="flex-1 text-sm font-semibold text-white truncate">{match.away}</span>
+                    </div>
+
+                    {/* Bottom row: status + signal */}
+                    <div className="flex items-center justify-between">
                       {match.isLive ? (
                         <span
                           className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono font-medium border"
@@ -134,42 +155,24 @@ export function Dashboard() {
                           {match.status}
                         </span>
                       )}
-                    </div>
 
-                    {/* Teams + score */}
-                    <div className="flex items-center gap-3 flex-1 justify-center">
-                      <span className="text-sm font-semibold text-white text-right w-28 truncate">{match.home}</span>
-                      <span
-                        className="font-mono text-sm font-bold px-3 py-1 rounded-lg border min-w-[60px] text-center"
-                        style={{ borderColor: "rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.3)", color: match.isLive ? "#14b8a6" : "#64748b" }}
-                      >
-                        {match.score}
-                      </span>
-                      <span className="text-sm font-semibold text-white w-28 truncate">{match.away}</span>
-                    </div>
-
-                    {/* Signal */}
-                    <div className="flex items-center gap-3 w-56 justify-end shrink-0">
-                      <div className="flex items-center gap-2">
-                        {match.signalType === "positive" && <ArrowUpRight className="w-3.5 h-3.5 text-teal-400" />}
-                        {match.signalType === "negative" && <TrendingDown className="w-3.5 h-3.5 text-amber-400" />}
-                        {match.signalType === "neutral" && <Activity className="w-3.5 h-3.5 text-slate-500" />}
-                        <span className="text-xs text-slate-400">{match.signal}</span>
+                      <div className="flex items-center gap-1.5">
+                        {match.signalType === "positive" && <ArrowUpRight className="w-3 h-3 text-teal-400" />}
+                        {match.signalType === "negative" && <TrendingDown className="w-3 h-3 text-amber-400" />}
+                        {match.signalType === "neutral" && <Activity className="w-3 h-3 text-slate-500" />}
+                        <span className="text-[11px] text-slate-400 truncate max-w-[110px]">{match.signal}</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border shrink-0 ${
+                            match.signalType === "positive"
+                              ? "text-teal-400 border-teal-400/20 bg-teal-400/10"
+                              : match.signalType === "negative"
+                              ? "text-amber-400 border-amber-400/20 bg-amber-400/10"
+                              : "text-slate-400 border-slate-600/30 bg-slate-700/20"
+                          }`}
+                        >
+                          {match.signalValue}
+                        </span>
                       </div>
-                      <span
-                        className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
-                          match.signalType === "positive"
-                            ? "text-teal-400 border-teal-400/20 bg-teal-400/10"
-                            : match.signalType === "negative"
-                            ? "text-amber-400 border-amber-400/20 bg-amber-400/10"
-                            : "text-slate-400 border-slate-600/30 bg-slate-700/20"
-                        }`}
-                      >
-                        {match.signalValue}
-                      </span>
-                      <button className="text-slate-600 hover:text-teal-400 transition-colors p-1 opacity-0 group-hover:opacity-100">
-                        <Star className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -177,7 +180,42 @@ export function Dashboard() {
             </div>
           ))}
         </div>
-      </main>
+      </div>
+
+      {/* Bottom navigation */}
+      <nav
+        className="shrink-0 flex items-center justify-around px-2 pb-6 pt-2 border-t"
+        style={{ borderColor: "rgba(255,255,255,0.06)", background: "rgba(10,15,30,0.95)", backdropFilter: "blur(12px)" }}
+      >
+        {navItems.map(({ icon: Icon, label, id }) => (
+          <button
+            key={id}
+            onClick={() => setActiveNav(id)}
+            className="flex flex-col items-center gap-1 px-3 py-1"
+          >
+            <div
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all ${
+                activeNav === id
+                  ? "bg-teal-500/15 shadow-[0_0_16px_rgba(20,184,166,0.2)]"
+                  : ""
+              }`}
+            >
+              <Icon
+                className={`w-5 h-5 transition-colors ${
+                  activeNav === id ? "text-teal-400" : "text-slate-600"
+                }`}
+              />
+            </div>
+            <span
+              className={`text-[9px] font-mono tracking-wider transition-colors ${
+                activeNav === id ? "text-teal-400" : "text-slate-600"
+              }`}
+            >
+              {label.toUpperCase()}
+            </span>
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }

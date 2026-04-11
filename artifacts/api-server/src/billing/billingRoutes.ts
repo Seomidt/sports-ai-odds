@@ -1,8 +1,6 @@
 import { Router } from "express";
 import { getAuth } from "@clerk/express";
-import { db } from "@workspace/db";
-import { allowedUsers } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { pool } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { STRIPE_ENABLED, getStripeClient } from "./stripeClient.js";
 
@@ -121,13 +119,13 @@ billingRouter.post("/billing/portal", requireAuth, async (req, res) => {
     return res.status(401).json({ error: "Could not determine authenticated user email." });
   }
 
-  const [user] = await db
-    .select()
-    .from(allowedUsers)
-    .where(eq(allowedUsers.email, email))
-    .limit(1);
+  const result = await pool.query<{ stripe_customer_id: string | null }>(
+    "SELECT stripe_customer_id FROM allowed_users WHERE email = $1 LIMIT 1",
+    [email]
+  );
+  const user = result.rows[0];
 
-  if (!user?.stripeCustomerId) {
+  if (!user?.stripe_customer_id) {
     return res.status(404).json({ error: "No Stripe customer found for this account." });
   }
 
@@ -136,7 +134,7 @@ billingRouter.post("/billing/portal", requireAuth, async (req, res) => {
     const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: user.stripeCustomerId,
+      customer: user.stripe_customer_id,
       return_url: `${baseUrl}/dashboard`,
     });
 

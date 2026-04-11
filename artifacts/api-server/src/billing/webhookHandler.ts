@@ -1,3 +1,4 @@
+import type Stripe from "stripe";
 import { type Request, type Response } from "express";
 import { getStripeClient, STRIPE_ENABLED } from "./stripeClient.js";
 import { logger } from "../lib/logger.js";
@@ -20,13 +21,14 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
 
   const sigStr = Array.isArray(sig) ? sig[0] : sig;
 
-  let event;
+  let event: Stripe.Event;
   try {
     const stripe = getStripeClient();
     event = stripe.webhooks.constructEvent(req.body as Buffer, sigStr, webhookSecret);
-  } catch (err: any) {
-    logger.warn({ err: err.message }, "Stripe webhook signature verification failed");
-    res.status(400).json({ error: `Webhook Error: ${err.message}` });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn({ err: message }, "Stripe webhook signature verification failed");
+    res.status(400).json({ error: `Webhook Error: ${message}` });
     return;
   }
 
@@ -36,21 +38,21 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
-      const sub = event.data.object as any;
+      const sub = event.data.object as Stripe.Subscription;
       logger.info(
         { subscriptionId: sub.id, status: sub.status, customerId: sub.customer },
         `Subscription ${event.type}`
       );
       break;
     }
-    case "invoice.payment_succeeded": {
-      const inv = event.data.object as any;
-      logger.info({ invoiceId: inv.id, amount: inv.amount_paid }, "Payment succeeded");
-      break;
-    }
+    case "invoice.payment_succeeded":
     case "invoice.payment_failed": {
-      const inv = event.data.object as any;
-      logger.warn({ invoiceId: inv.id, customerId: inv.customer }, "Payment failed");
+      const inv = event.data.object as Stripe.Invoice;
+      if (event.type === "invoice.payment_succeeded") {
+        logger.info({ invoiceId: inv.id, amount: inv.amount_paid }, "Payment succeeded");
+      } else {
+        logger.warn({ invoiceId: inv.id, customerId: inv.customer }, "Payment failed");
+      }
       break;
     }
     default:

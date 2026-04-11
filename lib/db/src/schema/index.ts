@@ -256,6 +256,11 @@ export const allowedUsers = pgTable(
     role: text("role").notNull().default("user"), // "admin" | "user"
     addedBy: text("added_by"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
+    // Stripe billing fields — populated when STRIPE_ENABLED=true
+    stripeCustomerId: text("stripe_customer_id"),
+    stripeSubscriptionId: text("stripe_subscription_id"),
+    stripePlanName: text("stripe_plan_name"),
+    stripeSubscriptionStatus: text("stripe_subscription_status"), // "active" | "trialing" | "past_due" | "canceled" | null
   },
   (t) => [unique("allowed_users_email_unique").on(t.email)]
 );

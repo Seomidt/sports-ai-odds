@@ -6,9 +6,10 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -17,6 +18,207 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AddUserBodyRole, UpdateUserBodyRole } from "@workspace/api-client-react";
 import { useGetMe } from "@workspace/api-client-react";
 import { Redirect } from "wouter";
+
+interface BillingStatus {
+  enabled: boolean;
+  configured: boolean;
+  mode?: "live" | "test";
+  accountId?: string;
+  accountName?: string;
+  message?: string;
+  setupSteps?: string[];
+}
+
+interface BillingPlan {
+  id: string;
+  name: string;
+  description: string | null;
+  metadata: Record<string, string>;
+  prices: {
+    id: string;
+    amount: number | null;
+    currency: string;
+    interval: string;
+    intervalCount: number;
+  }[];
+}
+
+function formatAmount(amount: number | null, currency: string): string {
+  if (amount == null) return "Free";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: currency.toUpperCase(),
+    minimumFractionDigits: 0,
+  }).format(amount / 100);
+}
+
+function BillingSection() {
+  const { data: status, isLoading: isLoadingStatus } = useQuery<BillingStatus>({
+    queryKey: ["billingStatus"],
+    queryFn: async () => {
+      const res = await fetch("/api/billing/status");
+      if (!res.ok) throw new Error("Failed to fetch billing status");
+      return res.json();
+    },
+    retry: false,
+    staleTime: 60_000,
+  });
+
+  const { data: plansData, isLoading: isLoadingPlans } = useQuery<{ plans: BillingPlan[] }>({
+    queryKey: ["billingPlans"],
+    queryFn: async () => {
+      const res = await fetch("/api/billing/plans");
+      if (!res.ok) throw new Error("Failed to fetch plans");
+      return res.json();
+    },
+    retry: false,
+    staleTime: 60_000,
+    enabled: status?.enabled === true,
+  });
+
+  const isLoading = isLoadingStatus;
+  const plans = plansData?.plans ?? [];
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-4 border-b border-white/10 pb-2 flex items-center">
+        <CreditCard className="w-5 h-5 mr-2 text-primary" />
+        BILLING
+      </h2>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8">
+          <Activity className="w-6 h-6 text-primary animate-pulse" />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* Status card */}
+          <div className="glass-card p-6 rounded-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-mono text-muted-foreground uppercase">Stripe Status</span>
+              {status?.enabled && status.configured ? (
+                <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-teal-400 bg-teal-400/10 px-2 py-1 rounded-full border border-teal-400/20">
+                  <CheckCircle2 className="w-3 h-3" /> ACTIVE
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5 text-xs font-mono font-bold text-amber-400 bg-amber-400/10 px-2 py-1 rounded-full border border-amber-400/20">
+                  <XCircle className="w-3 h-3" /> INACTIVE
+                </span>
+              )}
+            </div>
+
+            {status?.enabled && status.configured ? (
+              <div className="space-y-2 border-t border-white/10 pt-4">
+                <div className="flex justify-between text-sm font-mono">
+                  <span className="text-muted-foreground">Mode</span>
+                  <span className={`font-bold uppercase ${status.mode === "live" ? "text-teal-400" : "text-amber-400"}`}>
+                    {status.mode}
+                  </span>
+                </div>
+                {status.accountName && (
+                  <div className="flex justify-between text-sm font-mono">
+                    <span className="text-muted-foreground">Account</span>
+                    <span className="text-white truncate ml-4 text-right">{status.accountName}</span>
+                  </div>
+                )}
+                {status.accountId && (
+                  <div className="flex justify-between text-sm font-mono">
+                    <span className="text-muted-foreground">ID</span>
+                    <span className="text-muted-foreground truncate ml-4 text-right text-xs">{status.accountId}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {status?.message ?? "Stripe payments are not yet activated."}
+              </p>
+            )}
+          </div>
+
+          {/* Subscription plans */}
+          <div className="lg:col-span-2 glass-card p-6 rounded-xl space-y-4">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-mono text-muted-foreground uppercase">Subscription Plans</span>
+              {plans.length > 0 && (
+                <span className="text-xs font-mono text-muted-foreground">{plans.length} plan{plans.length !== 1 ? "s" : ""}</span>
+              )}
+            </div>
+
+            {status?.enabled && isLoadingPlans ? (
+              <div className="flex justify-center py-4">
+                <Activity className="w-5 h-5 text-primary animate-pulse" />
+              </div>
+            ) : plans.length > 0 ? (
+              <div className="space-y-3">
+                {plans.map((plan) => (
+                  <div key={plan.id} className="flex items-start justify-between bg-black/20 rounded-lg p-4 border border-white/5">
+                    <div className="space-y-1">
+                      <div className="font-mono font-bold text-white text-sm">{plan.name}</div>
+                      {plan.description && (
+                        <div className="text-xs text-muted-foreground">{plan.description}</div>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1 ml-4 shrink-0">
+                      {plan.prices.map((price) => (
+                        <span key={price.id} className="text-sm font-mono font-bold text-teal-400">
+                          {formatAmount(price.amount, price.currency)}{" "}
+                          <span className="text-muted-foreground font-normal text-xs">
+                            / {price.intervalCount > 1 ? `${price.intervalCount} ` : ""}{price.interval}
+                          </span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center py-8 text-center space-y-2">
+                <CreditCard className="w-8 h-8 text-white/10" />
+                <p className="text-sm text-muted-foreground">
+                  {status?.enabled
+                    ? "No plans found. Run the seed-products script to create plans."
+                    : "Plans will appear here once Stripe is activated."}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Setup instructions — only shown when inactive */}
+      {!status?.configured && (
+        <div className="glass-card p-6 rounded-xl border border-amber-400/10 bg-amber-400/5 space-y-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-mono font-bold text-amber-400 uppercase tracking-wider">Setup Required — How to Activate Stripe</span>
+          </div>
+          <ol className="space-y-3">
+            {(status?.setupSteps ?? [
+              "Connect the Stripe integration via the Integrations panel",
+              "Set STRIPE_SECRET_KEY in environment secrets",
+              "Optionally set STRIPE_WEBHOOK_SECRET for webhook verification",
+              "Set STRIPE_ENABLED=true in environment secrets",
+              "Restart the API server",
+              "Run the seed-products script to create subscription plans in Stripe",
+            ]).map((step, i) => (
+              <li key={i} className="flex items-start gap-3 text-sm font-mono text-muted-foreground">
+                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-xs text-white">
+                  {i + 1}
+                </span>
+                <span className="leading-relaxed">{step}</span>
+              </li>
+            ))}
+          </ol>
+          <div className="border-t border-white/10 pt-4">
+            <p className="text-xs text-muted-foreground font-mono">
+              After activation, users will be able to subscribe to plans via Stripe Checkout. Subscription status is synced automatically via webhooks.
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function Admin() {
   const { data: me } = useGetMe();
@@ -77,7 +279,7 @@ export function Admin() {
             <ShieldAlert className="w-8 h-8 mr-3 text-destructive" />
             SYSTEM ADMINISTRATION
           </h1>
-          <p className="text-muted-foreground">Manage platform access and monitor API quotas.</p>
+          <p className="text-muted-foreground">Manage platform access, monitor API quotas and configure billing.</p>
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -235,6 +437,11 @@ export function Admin() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Billing Section */}
+        <div className="border-t border-white/10 pt-8">
+          <BillingSection />
         </div>
       </div>
     </Layout>

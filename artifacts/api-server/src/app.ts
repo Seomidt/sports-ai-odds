@@ -5,6 +5,8 @@ import { clerkMiddleware } from "@clerk/express";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { STRIPE_ENABLED } from "./billing/stripeClient.js";
+import { handleStripeWebhook } from "./billing/webhookHandler.js";
 
 const app: Express = express();
 
@@ -31,6 +33,17 @@ app.use(
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 app.use(cors({ credentials: true, origin: true }));
+
+// Stripe webhook must be registered BEFORE express.json() so the raw buffer is preserved.
+// Only active when STRIPE_ENABLED=true.
+if (STRIPE_ENABLED) {
+  app.post(
+    "/api/stripe/webhook",
+    express.raw({ type: "application/json" }),
+    handleStripeWebhook
+  );
+}
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

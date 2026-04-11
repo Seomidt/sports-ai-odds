@@ -5,6 +5,7 @@ import analysisRouter from "./analysis.js";
 import alertsRouter from "./alerts.js";
 import adminRouter from "./admin.js";
 import meRouter from "./me.js";
+import billingRouter from "../billing/billingRoutes.js";
 
 const router: IRouter = Router();
 
@@ -14,5 +15,6 @@ router.use(analysisRouter);
 router.use(alertsRouter);
 router.use(adminRouter);
 router.use(meRouter);
+router.use(billingRouter);
 
 export default router;

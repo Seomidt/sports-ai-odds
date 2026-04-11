@@ -304,61 +304,49 @@ async function syncPlayerStatsForFixture(fixtureId: number) {
   const data = await fetchFixturePlayerStats(fixtureId);
   if (!data) return;
 
-  for (const teamData of data) {
-    for (const entry of teamData as unknown as Array<{
-      team: { id: number };
-      players: Array<{
-        player: { id: number; name: string };
-        statistics: Array<{
-          games: { minutes: number | null; position: string | null; rating: string | null };
-          goals: { total: number | null; assists: number | null };
-          shots: { total: number | null; on: number | null };
-          passes: { total: number | null; key: number | null; accuracy: string | null };
-          dribbles: { attempts: number | null; success: number | null };
-          duels: { total: number | null; won: number | null };
-        }>;
-      }>;
-    }>) {
-      for (const { player, statistics } of entry.players ?? []) {
-        const s = statistics[0];
-        if (!s) continue;
+  for (const teamEntry of data) {
+    const teamId = teamEntry.team.id;
 
-        const passAcc = s.passes.accuracy ? parseFloat(String(s.passes.accuracy).replace("%", "")) : null;
-        const rating = s.games.rating ? parseFloat(s.games.rating) : null;
+    for (const { player, statistics } of teamEntry.players) {
+      const s = statistics[0];
+      if (!s) continue;
 
-        await db
-          .insert(playerStats)
-          .values({
-            fixtureId,
-            playerId: player.id,
-            teamId: entry.team.id,
-            name: player.name,
-            position: s.games.position,
-            rating: isNaN(rating ?? NaN) ? null : rating,
+      const passAccStr = s.passes.accuracy != null ? String(s.passes.accuracy).replace("%", "") : null;
+      const passAcc = passAccStr !== null ? parseFloat(passAccStr) : null;
+      const rating = s.games.rating != null ? parseFloat(s.games.rating) : null;
+
+      await db
+        .insert(playerStats)
+        .values({
+          fixtureId,
+          playerId: player.id,
+          teamId,
+          name: player.name,
+          position: s.games.position,
+          rating: rating !== null && !isNaN(rating) ? rating : null,
+          goals: s.goals.total,
+          assists: s.goals.assists,
+          minutesPlayed: s.games.minutes,
+          passAccuracy: passAcc !== null && !isNaN(passAcc) ? passAcc : null,
+          shotsTotal: s.shots.total,
+          shotsOnTarget: s.shots.on,
+          duelsWon: s.duels.won,
+          duelsTotal: s.duels.total,
+        })
+        .onConflictDoUpdate({
+          target: [playerStats.fixtureId, playerStats.playerId],
+          set: {
+            rating: rating !== null && !isNaN(rating) ? rating : null,
             goals: s.goals.total,
             assists: s.goals.assists,
             minutesPlayed: s.games.minutes,
-            passAccuracy: isNaN(passAcc ?? NaN) ? null : passAcc,
+            passAccuracy: passAcc !== null && !isNaN(passAcc) ? passAcc : null,
             shotsTotal: s.shots.total,
             shotsOnTarget: s.shots.on,
             duelsWon: s.duels.won,
             duelsTotal: s.duels.total,
-          })
-          .onConflictDoUpdate({
-            target: [playerStats.fixtureId, playerStats.playerId],
-            set: {
-              rating: isNaN(rating ?? NaN) ? null : rating,
-              goals: s.goals.total,
-              assists: s.goals.assists,
-              minutesPlayed: s.games.minutes,
-              passAccuracy: isNaN(passAcc ?? NaN) ? null : passAcc,
-              shotsTotal: s.shots.total,
-              shotsOnTarget: s.shots.on,
-              duelsWon: s.duels.won,
-              duelsTotal: s.duels.total,
-            },
-          });
-      }
+          },
+        });
     }
   }
 }
@@ -474,16 +462,17 @@ async function syncSidelinedForRecentPlayers() {
     limit: 20,
   });
 
-  const playerIds = new Set<number>();
+  // Map playerId -> teamId using lineup data so we can store teamId with sidelined records
+  const playerToTeam = new Map<number, number>();
   for (const lineup of recentLineups) {
     const xi = lineup.startingXI as Array<{ player: { id: number } }> | null;
     const subs = lineup.substitutes as Array<{ player: { id: number } }> | null;
     for (const p of [...(xi ?? []), ...(subs ?? [])]) {
-      if (p?.player?.id) playerIds.add(p.player.id);
+      if (p?.player?.id) playerToTeam.set(p.player.id, lineup.teamId);
     }
   }
 
-  for (const playerId of playerIds) {
+  for (const [playerId, teamId] of playerToTeam) {
     const data = await fetchSidelined(playerId);
     if (!data || data.length === 0) continue;
     const entry = data[0]!;
@@ -494,6 +483,7 @@ async function syncSidelinedForRecentPlayers() {
         .values({
           playerId: entry.player.id,
           playerName: entry.player.name,
+          teamId,
           type: sl.type,
           startDate: sl.start,
           endDate: sl.end,
@@ -505,7 +495,7 @@ async function syncSidelinedForRecentPlayers() {
         });
     }
   }
-  console.log(`[poller] Sidelined checked for ${playerIds.size} players`);
+  console.log(`[poller] Sidelined checked for ${playerToTeam.size} players`);
 }
 
 async function syncTransfersForTrackedTeams() {

@@ -239,15 +239,17 @@ export async function fetchFixturesByTeam(teamId: number, season: number, last: 
 // ─── Pro plan endpoints ────────────────────────────────────────────────────────
 
 export interface ApiPlayerFixtureStat {
-  player: { id: number; name: string; photo: string };
-  statistics: Array<{
-    games: { minutes: number | null; position: string | null; rating: string | null; captain: boolean };
-    goals: { total: number | null; assists: number | null };
-    shots: { total: number | null; on: number | null };
-    passes: { total: number | null; key: number | null; accuracy: string | null };
-    dribbles: { attempts: number | null; success: number | null };
-    duels: { total: number | null; won: number | null };
-    team: { id: number };
+  team: { id: number; name: string; logo: string };
+  players: Array<{
+    player: { id: number; name: string; photo: string };
+    statistics: Array<{
+      games: { minutes: number | null; position: string | null; rating: string | null; captain: boolean };
+      goals: { total: number | null; assists: number | null };
+      shots: { total: number | null; on: number | null };
+      passes: { total: number | null; key: number | null; accuracy: string | null };
+      dribbles: { attempts: number | null; success: number | null };
+      duels: { total: number | null; won: number | null };
+    }>;
   }>;
 }
 

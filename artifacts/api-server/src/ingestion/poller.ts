@@ -51,6 +51,7 @@ import {
   fetchOddsAllMarkets,
   fetchSquad,
   fetchFixtureInjuries,
+  fetchFixturesBySeason,
   type ApiFixture,
   type ApiStatItem,
   type ApiLineup,
@@ -1247,4 +1248,97 @@ export function startPoller() {
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);
+
+  // Historical data seed: run once at startup (60s delay to avoid API burst),
+  // then refresh current season every 24 hours
+  setTimeout(() => seedHistoricalData(2).catch(console.error), 60 * 1000);
+  setInterval(() => seedHistoricalData(1).catch(console.error), 24 * 60 * 60 * 1000);
+}
+
+// ─── Historical season seed ────────────────────────────────────────────────────
+
+export interface SeedStatus {
+  running: boolean;
+  progress: { done: number; total: number; current: string };
+  lastRun: Date | null;
+  fixturesSeeded: number;
+  seasonsCompleted: string[];
+  error: string | null;
+}
+
+let seedState: SeedStatus = {
+  running: false,
+  progress: { done: 0, total: 0, current: "" },
+  lastRun: null,
+  fixturesSeeded: 0,
+  seasonsCompleted: [],
+  error: null,
+};
+
+export function getSeedStatus(): SeedStatus {
+  return { ...seedState };
+}
+
+/** Bulk-import all fixtures for the last `seasons` number of seasons across all tracked leagues.
+ *  Runs sequentially (one league/season at a time) to stay well within rate limits.
+ *  Safe to call multiple times — upsertFixture is idempotent. */
+export async function seedHistoricalData(seasons = 2): Promise<void> {
+  if (seedState.running) {
+    console.log("[seeder] Already running, skipping duplicate call");
+    return;
+  }
+
+  const currentSeason = TRACKED_LEAGUES[0]!.season; // e.g. 2025
+  const seasonList = Array.from({ length: seasons }, (_, i) => currentSeason - i);
+  const total = TRACKED_LEAGUES.length * seasonList.length;
+
+  seedState = {
+    running: true,
+    progress: { done: 0, total, current: "" },
+    lastRun: null,
+    fixturesSeeded: 0,
+    seasonsCompleted: [],
+    error: null,
+  };
+
+  let totalSeeded = 0;
+
+  try {
+    for (const season of seasonList) {
+      for (const league of TRACKED_LEAGUES) {
+        const label = `${league.name ?? `League ${league.id}`} ${season}`;
+        seedState.progress.current = label;
+        console.log(`[seeder] Fetching ${label}...`);
+
+        const fixtures_data = await fetchFixturesBySeason(league.id, season);
+
+        if (fixtures_data && fixtures_data.length > 0) {
+          let count = 0;
+          for (const f of fixtures_data) {
+            await upsertFixture(f);
+            count++;
+          }
+          totalSeeded += count;
+          seedState.fixturesSeeded = totalSeeded;
+          console.log(`[seeder] ${label}: seeded ${count} fixtures`);
+          seedState.seasonsCompleted.push(`${label} (${count})`);
+        } else {
+          console.log(`[seeder] ${label}: no data returned`);
+          seedState.seasonsCompleted.push(`${label} (0)`);
+        }
+
+        seedState.progress.done++;
+        // Brief pause between leagues to avoid rate spike
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+
+    seedState.running = false;
+    seedState.lastRun = new Date();
+    console.log(`[seeder] Complete — ${totalSeeded} total fixtures seeded`);
+  } catch (err) {
+    seedState.running = false;
+    seedState.error = String(err);
+    console.error("[seeder] Error:", err);
+  }
 }

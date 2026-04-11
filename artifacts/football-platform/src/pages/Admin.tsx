@@ -6,15 +6,14 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, ChevronRight, Brain, DollarSign, Zap } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
 import { AddUserBodyRole, UpdateUserBodyRole } from "@workspace/api-client-react";
 import { useGetMe } from "@workspace/api-client-react";
 import { Redirect } from "wouter";
@@ -148,6 +147,165 @@ function AiStatsSection() {
       ) : (
         <p className="text-sm text-muted-foreground text-center py-6">AI stats unavailable.</p>
       )}
+    </div>
+  );
+}
+
+interface SeedStatus {
+  running: boolean;
+  progress: { done: number; total: number; current: string };
+  lastRun: string | null;
+  fixturesSeeded: number;
+  seasonsCompleted: string[];
+  error: string | null;
+}
+
+function HistoricalDataSection() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [seasons, setSeasons] = useState("2");
+
+  const { data: status, isLoading } = useQuery<SeedStatus>({
+    queryKey: ["seedStatus"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/seed-history/status");
+      if (!res.ok) throw new Error("Failed to fetch seed status");
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const d = query.state.data as SeedStatus | undefined;
+      return d?.running ? 2_000 : 15_000;
+    },
+    staleTime: 2_000,
+  });
+
+  const handleSeed = async () => {
+    try {
+      const res = await fetch(`/api/admin/seed-history?seasons=${seasons}`, { method: "POST" });
+      if (res.status === 409) {
+        toast({ title: "Seed already running", variant: "destructive" });
+        return;
+      }
+      if (!res.ok) throw new Error("Failed to start seed");
+      toast({ title: `Historical seed started for ${seasons} season(s)` });
+      queryClient.invalidateQueries({ queryKey: ["seedStatus"] });
+    } catch {
+      toast({ title: "Failed to start seed", variant: "destructive" });
+    }
+  };
+
+  const pct = status && status.progress.total > 0
+    ? Math.round((status.progress.done / status.progress.total) * 100)
+    : 0;
+
+  return (
+    <div className="border-t border-white/10 pt-8">
+      <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-6 border-b border-white/10 pb-2 flex items-center">
+        <Database className="w-5 h-5 mr-2 text-teal-400" />
+        HISTORICAL DATA SEED
+      </h2>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* Controls */}
+        <div className="glass-card p-6 rounded-xl space-y-4">
+          <div className="space-y-2">
+            <label className="text-xs font-mono text-muted-foreground uppercase">Seasons to import</label>
+            <Select value={seasons} onValueChange={setSeasons} disabled={status?.running}>
+              <SelectTrigger className="bg-black/40 border-white/10 font-mono">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">Current season only</SelectItem>
+                <SelectItem value="2">2 seasons</SelectItem>
+                <SelectItem value="3">3 seasons</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            onClick={handleSeed}
+            disabled={status?.running}
+            className="w-full font-mono tracking-wider"
+            variant={status?.running ? "outline" : "default"}
+          >
+            {status?.running
+              ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" /> SEEDING...</>
+              : <><Play className="w-4 h-4 mr-2" /> START SEED</>
+            }
+          </Button>
+          <p className="text-xs text-muted-foreground font-mono leading-relaxed">
+            Imports all historical fixtures for tracked leagues. Runs automatically at startup — use this to re-seed or add extra seasons.
+          </p>
+        </div>
+
+        {/* Status */}
+        <div className="lg:col-span-2 glass-card p-6 rounded-xl space-y-4">
+          {isLoading ? (
+            <div className="flex justify-center py-8">
+              <Activity className="w-6 h-6 text-primary animate-pulse" />
+            </div>
+          ) : status ? (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                <div>
+                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Status</div>
+                  <div className={`text-sm font-mono font-bold ${status.running ? "text-amber-400" : status.error ? "text-red-400" : "text-teal-400"}`}>
+                    {status.running ? "RUNNING" : status.error ? "ERROR" : "IDLE"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Fixtures Seeded</div>
+                  <div className="text-sm font-mono font-bold text-white">
+                    {status.fixturesSeeded.toLocaleString()}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Last Run</div>
+                  <div className="text-sm font-mono text-muted-foreground">
+                    {status.lastRun ? format(new Date(status.lastRun), "MMM dd HH:mm") : "Never"}
+                  </div>
+                </div>
+              </div>
+
+              {status.running && (
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs font-mono text-muted-foreground">
+                    <span>{status.progress.current || "Starting..."}</span>
+                    <span>{status.progress.done}/{status.progress.total}</span>
+                  </div>
+                  <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                    <div
+                      className="h-2 rounded-full bg-teal-400 transition-all duration-500"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {status.error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                  <p className="text-xs font-mono text-red-400">{status.error}</p>
+                </div>
+              )}
+
+              {status.seasonsCompleted.length > 0 && (
+                <div className="border-t border-white/10 pt-4 space-y-1">
+                  <div className="text-xs font-mono text-muted-foreground uppercase mb-2">Completed</div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+                    {status.seasonsCompleted.map((s, i) => (
+                      <div key={i} className="text-xs font-mono text-teal-400/80 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3 h-3 shrink-0" /> {s}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">Status unavailable.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -527,6 +685,9 @@ export function Admin() {
 
         {/* AI Stats Section */}
         <AiStatsSection />
+
+        {/* Historical Data Seed Section */}
+        <HistoricalDataSection />
 
         {/* Billing Section */}
         <div className="border-t border-white/10 pt-8">

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
 import { getAiStats } from "../ai/analysisLayer.js";
 import { requireAdmin } from "../middlewares/requireAuth.js";
+import { getSeedStatus, seedHistoricalData } from "../ingestion/poller.js";
 
 const router = Router();
 
@@ -76,6 +77,23 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
     where: (u, { eq: eqFn }) => eqFn(u.id, id),
   });
   res.json({ user });
+});
+
+// GET /api/admin/seed-history/status — current seed job progress
+router.get("/admin/seed-history/status", requireAdmin, (_req, res) => {
+  res.json(getSeedStatus());
+});
+
+// POST /api/admin/seed-history — kick off (or re-run) the historical seed
+router.post("/admin/seed-history", requireAdmin, (req, res): void => {
+  const seasons = Math.min(5, Math.max(1, parseInt(String(req.query["seasons"] ?? "2"), 10)));
+  const status = getSeedStatus();
+  if (status.running) {
+    res.status(409).json({ error: "Seed already running", status });
+    return;
+  }
+  seedHistoricalData(seasons).catch(console.error);
+  res.json({ started: true, seasons, message: `Historical seed started for last ${seasons} season(s)` });
 });
 
 export default router;

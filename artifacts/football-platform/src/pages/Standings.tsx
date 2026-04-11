@@ -74,10 +74,10 @@ export function Standings() {
                         <TableCell className="text-center font-mono font-bold text-white">{row.rank}</TableCell>
                         <TableCell className="font-medium text-white">
                           <div className="flex items-center gap-2">
-                            {(row as any).teamLogo && (
-                              <img src={(row as any).teamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />
+                            {row.teamLogo && (
+                              <img src={row.teamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />
                             )}
-                            <span className="truncate">{(row as any).teamName ?? row.teamId}</span>
+                            <span className="truncate">{row.teamName ?? row.teamId}</span>
                           </div>
                         </TableCell>
                         <TableCell className="text-center font-mono">{row.played}</TableCell>

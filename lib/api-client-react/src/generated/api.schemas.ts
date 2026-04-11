@@ -139,6 +139,8 @@ export interface StandingRow {
   goalsAgainst?: number | null;
   goalsDiff?: number | null;
   form?: string | null;
+  teamName?: string | null;
+  teamLogo?: string | null;
 }
 
 export interface StandingsResponse {

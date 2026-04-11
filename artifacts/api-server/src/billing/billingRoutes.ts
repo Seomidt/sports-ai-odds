@@ -1,33 +1,15 @@
-/**
- * Billing Routes — Feature-Flagged
- *
- * Routes in this file are always registered, but return meaningful
- * "not configured" responses when STRIPE_ENABLED is false.
- *
- * When STRIPE_ENABLED=true and STRIPE_SECRET_KEY is set, full Stripe
- * functionality becomes available.
- *
- * Endpoints:
- *   GET  /api/billing/status          — current Stripe integration state
- *   GET  /api/billing/plans           — available subscription plans
- *   POST /api/billing/checkout        — create a checkout session (requires STRIPE_ENABLED)
- *   POST /api/billing/portal          — create customer portal session (requires STRIPE_ENABLED)
- */
-
 import { Router } from "express";
+import { getAuth } from "@clerk/express";
+import { db } from "@workspace/db";
+import { allowedUsers } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { STRIPE_ENABLED, getStripeClient } from "./stripeClient.js";
 
 const billingRouter = Router();
 
-/**
- * GET /api/billing/status
- * Returns the current Stripe integration state. Admin only for full details.
- */
-billingRouter.get("/billing/status", requireAuth, async (req, res) => {
-  const auth = (req as any).auth;
-  const isAdmin = (req as any).isAdmin;
-
+// GET /api/billing/status — returns current Stripe state (no sensitive data exposed)
+billingRouter.get("/billing/status", requireAuth, async (_req, res) => {
   if (!STRIPE_ENABLED) {
     return res.json({
       enabled: false,
@@ -36,6 +18,7 @@ billingRouter.get("/billing/status", requireAuth, async (req, res) => {
       setupSteps: [
         "Connect the Stripe integration via the Integrations panel",
         "Set STRIPE_SECRET_KEY in environment secrets",
+        "Optionally set STRIPE_WEBHOOK_SECRET for webhook verification",
         "Set STRIPE_ENABLED=true in environment secrets",
         "Restart the API server",
         "Run the seed-products script to create subscription plans",
@@ -45,14 +28,13 @@ billingRouter.get("/billing/status", requireAuth, async (req, res) => {
 
   try {
     const stripe = getStripeClient();
-    const balance = await stripe.balance.retrieve();
+    await stripe.balance.retrieve();
     return res.json({
       enabled: true,
       configured: true,
       mode: process.env.STRIPE_SECRET_KEY?.startsWith("sk_live_") ? "live" : "test",
-      currency: balance.available[0]?.currency?.toUpperCase(),
     });
-  } catch (err: any) {
+  } catch {
     return res.status(503).json({
       enabled: true,
       configured: false,
@@ -61,10 +43,7 @@ billingRouter.get("/billing/status", requireAuth, async (req, res) => {
   }
 });
 
-/**
- * GET /api/billing/plans
- * Returns available subscription plans synced from Stripe.
- */
+// GET /api/billing/plans — lists active subscription plans from Stripe
 billingRouter.get("/billing/plans", requireAuth, async (_req, res) => {
   if (!STRIPE_ENABLED) {
     return res.json({ plans: [] });
@@ -95,15 +74,12 @@ billingRouter.get("/billing/plans", requireAuth, async (_req, res) => {
     });
 
     return res.json({ plans });
-  } catch (err: any) {
+  } catch {
     return res.status(503).json({ error: "Failed to fetch plans from Stripe.", plans: [] });
   }
 });
 
-/**
- * POST /api/billing/checkout
- * Creates a Stripe Checkout session for a given price ID.
- */
+// POST /api/billing/checkout — creates a Checkout session for the authenticated user
 billingRouter.post("/billing/checkout", requireAuth, async (req, res) => {
   if (!STRIPE_ENABLED) {
     return res.status(503).json({ error: "Stripe payments are not enabled." });
@@ -126,23 +102,33 @@ billingRouter.post("/billing/checkout", requireAuth, async (req, res) => {
     });
 
     return res.json({ url: session.url });
-  } catch (err: any) {
+  } catch {
     return res.status(500).json({ error: "Failed to create checkout session." });
   }
 });
 
-/**
- * POST /api/billing/portal
- * Creates a Stripe Customer Portal session for managing subscriptions.
- */
+// POST /api/billing/portal — creates a Customer Portal session for the authenticated user.
+// Stripe customer ID is looked up from the database using the session user's email —
+// the client never supplies it, preventing IDOR.
 billingRouter.post("/billing/portal", requireAuth, async (req, res) => {
   if (!STRIPE_ENABLED) {
     return res.status(503).json({ error: "Stripe payments are not enabled." });
   }
 
-  const { customerId } = req.body as { customerId?: string };
-  if (!customerId) {
-    return res.status(400).json({ error: "customerId is required." });
+  const auth = getAuth(req);
+  const email = (auth?.sessionClaims?.email as string | undefined) ?? "";
+  if (!email) {
+    return res.status(401).json({ error: "Could not determine authenticated user email." });
+  }
+
+  const [user] = await db
+    .select()
+    .from(allowedUsers)
+    .where(eq(allowedUsers.email, email))
+    .limit(1);
+
+  if (!user?.stripeCustomerId) {
+    return res.status(404).json({ error: "No Stripe customer found for this account." });
   }
 
   try {
@@ -150,12 +136,12 @@ billingRouter.post("/billing/portal", requireAuth, async (req, res) => {
     const baseUrl = `https://${process.env.REPLIT_DOMAINS?.split(",")[0]}`;
 
     const session = await stripe.billingPortal.sessions.create({
-      customer: customerId,
-      return_url: `${baseUrl}/admin`,
+      customer: user.stripeCustomerId,
+      return_url: `${baseUrl}/dashboard`,
     });
 
     return res.json({ url: session.url });
-  } catch (err: any) {
+  } catch {
     return res.status(500).json({ error: "Failed to create billing portal session." });
   }
 });

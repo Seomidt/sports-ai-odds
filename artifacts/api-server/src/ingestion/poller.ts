@@ -1179,19 +1179,18 @@ async function adaptiveLiveLoop() {
  */
 async function dailySignalPrecompute() {
   const now = new Date();
-  const endOfDay = new Date(now);
-  endOfDay.setHours(23, 59, 59, 999);
+  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   const upcoming = await db.query.fixtures.findMany({
     where: (f, { and, gte, lte, inArray }) =>
       and(
         gte(f.kickoff, now),
-        lte(f.kickoff, endOfDay),
+        lte(f.kickoff, in7Days),
         inArray(f.statusShort, ["NS", "TBD"])
       ),
   });
 
-  console.log(`[signal-cron] Pre-computing signals for ${upcoming.length} fixtures`);
+  console.log(`[signal-cron] Pre-computing signals for ${upcoming.length} fixtures (next 7 days)`);
   let computed = 0;
 
   for (const fix of upcoming) {
@@ -1205,6 +1204,41 @@ async function dailySignalPrecompute() {
   }
 
   console.log(`[signal-cron] Done — ${computed}/${upcoming.length} fixtures pre-computed`);
+}
+
+/**
+ * One-shot signal computation at startup — catches all upcoming fixtures
+ * that already have data in the DB but no signals yet (e.g. after a fresh deploy).
+ * Runs 14 minutes after startup so heavy sync jobs finish first.
+ */
+async function startupSignalCompute() {
+  const now = new Date();
+  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(
+        gte(f.kickoff, now),
+        lte(f.kickoff, in7Days),
+        inArray(f.statusShort, ["NS", "TBD"])
+      ),
+  });
+
+  if (upcoming.length === 0) return;
+  console.log(`[signal-startup] Computing signals for ${upcoming.length} upcoming fixtures`);
+  let computed = 0;
+
+  for (const fix of upcoming) {
+    try {
+      await runPreMatchFeatures(fix.fixtureId, fix.homeTeamId, fix.awayTeamId);
+      await runSignalEngine(fix.fixtureId, "pre");
+      computed++;
+    } catch (err) {
+      console.error(`[signal-startup] Error for fixture ${fix.fixtureId}:`, err);
+    }
+  }
+
+  console.log(`[signal-startup] Done — ${computed}/${upcoming.length} computed`);
 }
 
 /**
@@ -1254,6 +1288,8 @@ export function startPoller() {
   setTimeout(() => syncSquadsForUpcomingTeams().catch(console.error), 10 * 60 * 1000);
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
+  // After all sync jobs finish, compute signals for all upcoming fixtures (next 7 days)
+  setTimeout(() => startupSignalCompute().catch(console.error), 14 * 60 * 1000);
 
   // ── Recurring intervals ────────────────────────────────────────────────────
 

@@ -499,10 +499,10 @@ export function Admin() {
   const { data: me } = useGetMe();
   const { data: statsData, isLoading: isLoadingStats } = useGetAdminStats();
   const { data: usersData, isLoading: isLoadingUsers } = useGetAdminUsers();
-  
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  
+
   const addMutation = useAddAdminUser();
   const deleteMutation = useDeleteAdminUser();
   const updateMutation = useUpdateAdminUser();
@@ -513,6 +513,8 @@ export function Admin() {
   if (me && me.role !== "admin") {
     return <Redirect to="/dashboard" />;
   }
+
+  if (me && me.role !== "admin") return null;
 
   const handleAddUser = async () => {
     if (!newEmail) return;

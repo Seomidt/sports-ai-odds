@@ -38,7 +38,20 @@ router.get("/fixtures/:id/odds", async (req, res): Promise<void> => {
     orderBy: (o, { desc: d }) => [d(o.snappedAt)],
   });
 
-  const body = { odds: snap ?? null };
+  const body = {
+    odds: snap
+      ? {
+          bookmaker: snap.bookmaker ?? null,
+          homeWin: snap.homeWin ?? null,
+          draw: snap.draw ?? null,
+          awayWin: snap.awayWin ?? null,
+          btts: snap.btts ?? null,
+          overUnder25: snap.overUnder25 ?? null,
+          handicapHome: snap.handicapHome ?? null,
+          snappedAt: snap.snappedAt,
+        }
+      : null,
+  };
   cacheSet(ck, body, TTL.MIN2);
   res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=60").set("X-Cache", "MISS").json(body);
 });

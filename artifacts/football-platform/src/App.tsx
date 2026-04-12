@@ -16,6 +16,7 @@ import { Match } from "./pages/Match";
 
 import { Standings } from "./pages/Standings";
 import { Following } from "./pages/Following";
+import { News } from "./pages/News";
 import { Admin } from "./pages/Admin";
 import NotFound from "./pages/not-found";
 import accessPendingImage from "@assets/IMG_3621_1775934471623.png";
@@ -217,6 +218,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/match/:id"><ProtectedRoute component={Match} /></Route>
             <Route path="/standings"><ProtectedRoute component={Standings} /></Route>
             <Route path="/following"><ProtectedRoute component={Following} /></Route>
+            <Route path="/news"><ProtectedRoute component={News} /></Route>
             <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
             
             <Route component={NotFound} />

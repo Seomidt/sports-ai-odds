@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target } from "lucide-react";
+import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { AlertPoller } from "./AlertPoller";
@@ -20,6 +20,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/pre-match", label: "Pre-Match", icon: Clock },
     { href: "/post-match", label: "Post-Match", icon: CheckCircle2 },
     { href: "/standings", label: "Standings", icon: ListOrdered },
+    { href: "/news", label: "News", icon: Newspaper },
     { href: "/following", label: "Following", icon: Star },
   ];
 

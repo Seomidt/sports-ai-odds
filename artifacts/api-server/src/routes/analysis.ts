@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import {
   getBettingTip,
   getBettingTips,
@@ -7,7 +7,9 @@ import {
   triggerPostMatchReview,
   getAiAccuracyStats,
   generateAlertText,
+  generateLeagueNews,
 } from "../ai/analysisLayer.js";
+import { cacheGet, cacheSet, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
@@ -111,6 +113,111 @@ router.get("/analysis/accuracy", async (_req, res) => {
   } catch (err) {
     console.error("[analysis] accuracy error:", err);
     return res.status(500).json({ error: "Failed to fetch accuracy stats" });
+  }
+});
+
+// GET /api/analysis/prematch-tips — all stored tips for upcoming fixtures (no AI generation)
+router.get("/analysis/prematch-tips", async (_req, res) => {
+  const cacheKey = "analysis:prematch-tips";
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    res.set("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
+  try {
+    const tips = await db.query.aiBettingTips.findMany({
+      where: (t, { isNull }) => isNull(t.outcome),
+    });
+
+    const byFixture: Record<number, typeof tips> = {};
+    for (const tip of tips) {
+      if (!byFixture[tip.fixtureId]) byFixture[tip.fixtureId] = [];
+      byFixture[tip.fixtureId]!.push(tip);
+    }
+
+    const body = { tips: byFixture };
+    cacheSet(cacheKey, body, TTL.MIN5);
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    return res.json(body);
+  } catch (err) {
+    console.error("[analysis] prematch-tips error:", err);
+    return res.status(500).json({ error: "Failed to fetch tips" });
+  }
+});
+
+// GET /api/news?leagueId=39 — AI-generated news for top 3 teams in a league
+router.get("/news", async (req, res) => {
+  const leagueId = parseInt(req.query["leagueId"] as string ?? "39");
+  const cacheKey = `news:${leagueId}`;
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
+    res.set("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
+  try {
+    const { rows: standingRows } = await pool.query(
+      `WITH latest_season AS (
+         SELECT MAX(season_year) AS sy FROM standings WHERE league_id = $1
+       )
+       SELECT DISTINCT ON (s.team_id)
+         s.team_id AS "teamId", s.points,
+         COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
+         COALESCE(s.team_logo, t.logo) AS "teamLogo",
+         ROW_NUMBER() OVER (ORDER BY s.points DESC, s.goals_diff DESC) AS rank
+       FROM standings s
+       LEFT JOIN teams t ON t.team_id = s.team_id
+       CROSS JOIN latest_season ls
+       WHERE s.league_id = $1 AND s.season_year = ls.sy
+       ORDER BY s.team_id, s.points DESC
+       LIMIT 3`,
+      [leagueId]
+    );
+
+    if (!standingRows.length) {
+      return res.json({ articles: [], message: "No standings data available" });
+    }
+
+    const teamIds = standingRows.map((r: { teamId: number }) => r.teamId);
+    const POST_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
+
+    const { rows: matchRows } = await pool.query(
+      `SELECT
+         CASE WHEN f.home_team_id = ANY($1::int[]) THEN f.home_team_id ELSE f.away_team_id END AS "teamId",
+         CASE WHEN f.home_team_id = ANY($1::int[]) THEN COALESCE(f.home_team_name, f.home_team_id::text) ELSE COALESCE(f.away_team_name, f.away_team_id::text) END AS "teamName",
+         CASE WHEN f.home_team_id = ANY($1::int[]) THEN COALESCE(f.away_team_name, f.away_team_id::text) ELSE COALESCE(f.home_team_name, f.home_team_id::text) END AS "opponentName",
+         f.home_goals AS "homeGoals", f.away_goals AS "awayGoals",
+         f.home_team_id = ANY($1::int[]) AS "isHome",
+         f.kickoff, f.status_short AS "statusShort"
+       FROM fixtures f
+       WHERE (f.home_team_id = ANY($1::int[]) OR f.away_team_id = ANY($1::int[]))
+         AND f.league_id = $2
+         AND f.status_short = ANY($3::text[])
+       ORDER BY f.kickoff DESC
+       LIMIT 15`,
+      [teamIds, leagueId, POST_STATUSES]
+    );
+
+    const topTeams = standingRows.map((r: { teamId: number; teamName: string; teamLogo: string | null; rank: number; points: number }, i: number) => ({
+      teamId: r.teamId,
+      teamName: r.teamName,
+      teamLogo: r.teamLogo,
+      rank: i + 1,
+      points: r.points,
+    }));
+
+    const articles = await generateLeagueNews(leagueId, topTeams, matchRows);
+
+    const body = { articles, generatedAt: new Date().toISOString() };
+    cacheSet(cacheKey, body, 3600_000);
+    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
+    return res.json(body);
+  } catch (err) {
+    console.error("[news] error:", err);
+    return res.status(500).json({ error: "News generation failed" });
   }
 });
 

@@ -243,18 +243,27 @@ router.get("/standings/:leagueId", async (req, res) => {
   }
 
   const { rows } = await pool.query(
-    `SELECT
-       s.id, s.league_id AS "leagueId", s.season_year AS "seasonYear",
-       s.team_id AS "teamId", s.rank, s.points, s.played,
-       s.won, s.drawn, s.lost,
-       s.goals_for AS "goalsFor", s.goals_against AS "goalsAgainst",
-       s.goals_diff AS "goalsDiff", s.form,
-       COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
-       COALESCE(s.team_logo, t.logo) AS "teamLogo"
-     FROM standings s
-     LEFT JOIN teams t ON t.team_id = s.team_id
-     WHERE s.league_id = $1
-     ORDER BY s.rank ASC`,
+    `WITH latest_season AS (
+       SELECT MAX(season_year) AS sy FROM standings WHERE league_id = $1
+     ),
+     deduped AS (
+       SELECT DISTINCT ON (s.team_id)
+         s.id, s.league_id AS "leagueId", s.season_year AS "seasonYear",
+         s.team_id AS "teamId", s.rank, s.points, s.played,
+         s.won, s.drawn, s.lost,
+         s.goals_for AS "goalsFor", s.goals_against AS "goalsAgainst",
+         s.goals_diff AS "goalsDiff", s.form,
+         COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
+         COALESCE(s.team_logo, t.logo) AS "teamLogo"
+       FROM standings s
+       LEFT JOIN teams t ON t.team_id = s.team_id
+       CROSS JOIN latest_season ls
+       WHERE s.league_id = $1 AND s.season_year = ls.sy
+       ORDER BY s.team_id, s.points DESC
+     )
+     SELECT *, ROW_NUMBER() OVER (ORDER BY points DESC, "goalsDiff" DESC) AS rank
+     FROM deduped
+     ORDER BY points DESC, "goalsDiff" DESC`,
     [leagueId]
   );
 

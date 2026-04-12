@@ -629,3 +629,83 @@ export async function generateAlertText(signalKey: string, signalLabel: string, 
   const raw = await callClaude(prompt);
   return raw?.replace(/```[^`]*```/g, "").trim() ?? `${matchName}: ${signalLabel}`;
 }
+
+export interface NewsArticle {
+  id: string;
+  teamId: number;
+  teamName: string;
+  teamLogo: string | null;
+  rank: number;
+  headline: string;
+  body: string;
+  fixtureLine: string;
+  homeGoals: number | null;
+  awayGoals: number | null;
+  opponent: string;
+  result: "win" | "draw" | "loss" | "upcoming";
+  kickoff: string | null;
+}
+
+export async function generateLeagueNews(
+  leagueId: number,
+  topTeams: Array<{ teamId: number; teamName: string; teamLogo: string | null; rank: number; points: number }>,
+  recentMatches: Array<{
+    teamId: number; teamName: string; opponentName: string; homeGoals: number | null;
+    awayGoals: number | null; isHome: boolean; kickoff: string | null; statusShort: string | null;
+  }>
+): Promise<NewsArticle[]> {
+  const articles: NewsArticle[] = [];
+
+  for (const team of topTeams) {
+    const teamMatches = recentMatches
+      .filter((m) => m.teamId === team.teamId)
+      .slice(0, 3);
+
+    if (teamMatches.length === 0) continue;
+
+    const lastMatch = teamMatches[0]!;
+    const isHome = lastMatch.isHome;
+    const goals = isHome ? lastMatch.homeGoals : lastMatch.awayGoals;
+    const oppGoals = isHome ? lastMatch.awayGoals : lastMatch.homeGoals;
+
+    let result: NewsArticle["result"] = "upcoming";
+    if (lastMatch.statusShort && ["FT","AET","PEN"].includes(lastMatch.statusShort)) {
+      if (goals != null && oppGoals != null) {
+        result = goals > oppGoals ? "win" : goals < oppGoals ? "loss" : "draw";
+      }
+    }
+
+    const matchContext = teamMatches.map((m) => {
+      const g = m.isHome ? m.homeGoals : m.awayGoals;
+      const og = m.isHome ? m.awayGoals : m.homeGoals;
+      const res = g != null && og != null ? `${g}-${og}` : "?-?";
+      const side = m.isHome ? "H" : "A";
+      return `${m.opponentName} (${side}) ${res}`;
+    }).join(", ");
+
+    const prompt = `You are a football journalist writing short news snippets. Write a 2-sentence news blurb about ${team.teamName} (currently ranked #${team.rank} in the league table). Their recent matches: ${matchContext}. Focus on their form and what it means for the title race. Be direct, punchy. No emoji. Max 60 words total.`;
+
+    const raw = await callClaude(prompt);
+    const body = raw?.trim() ?? `${team.teamName} continue their campaign.`;
+
+    const fixtureLine = `${lastMatch.isHome ? team.teamName : lastMatch.opponentName} ${lastMatch.homeGoals ?? "?"} - ${lastMatch.awayGoals ?? "?"} ${lastMatch.isHome ? lastMatch.opponentName : team.teamName}`;
+
+    articles.push({
+      id: `${leagueId}-${team.teamId}`,
+      teamId: team.teamId,
+      teamName: team.teamName,
+      teamLogo: team.teamLogo,
+      rank: team.rank,
+      headline: `#${team.rank} ${team.teamName}: ${result === "win" ? "Victory" : result === "draw" ? "Draw" : result === "loss" ? "Defeat" : "In Action"}`,
+      body,
+      fixtureLine,
+      homeGoals: lastMatch.homeGoals,
+      awayGoals: lastMatch.awayGoals,
+      opponent: lastMatch.opponentName,
+      result,
+      kickoff: lastMatch.kickoff,
+    });
+  }
+
+  return articles;
+}

@@ -6,6 +6,7 @@ import { getApiStats } from "../ingestion/apiFootballClient.js";
 import { getAiStats } from "../ai/analysisLayer.js";
 import { requireAdmin } from "../middlewares/requireAuth.js";
 import { getSeedStatus, seedHistoricalData } from "../ingestion/poller.js";
+import { clerkClient } from "@clerk/express";
 
 const router = Router();
 
@@ -77,6 +78,26 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res): Promise<void> =
     where: (u, { eq: eqFn }) => eqFn(u.id, id),
   });
   res.json({ user });
+});
+
+// GET /api/admin/clerk-users — list all Clerk registered users
+router.get("/admin/clerk-users", requireAdmin, async (_req, res): Promise<void> => {
+  try {
+    const response = await clerkClient.users.getUserList({ limit: 100, orderBy: "-created_at" });
+    const users = response.data.map((u) => ({
+      id: u.id,
+      email: u.emailAddresses[0]?.emailAddress ?? "",
+      firstName: u.firstName,
+      lastName: u.lastName,
+      imageUrl: u.imageUrl,
+      createdAt: u.createdAt,
+      lastSignInAt: u.lastSignInAt,
+    }));
+    res.json({ users, total: response.totalCount });
+  } catch (err) {
+    console.error("[admin] clerk-users error:", err);
+    res.status(500).json({ error: "Failed to fetch Clerk users" });
+  }
 });
 
 // GET /api/admin/seed-history/status — current seed job progress

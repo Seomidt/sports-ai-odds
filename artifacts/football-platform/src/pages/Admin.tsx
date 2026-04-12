@@ -6,7 +6,7 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, HelpCircle, LogIn } from "lucide-react";
 import { format } from "date-fns";
 import { useState, Component, ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -540,6 +540,19 @@ function AdminContent() {
   const { data: statsData, isLoading: isLoadingStats } = useGetAdminStats();
   const { data: usersData, isLoading: isLoadingUsers } = useGetAdminUsers();
 
+  const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") + "/api";
+  const { data: clerkUsersData, isLoading: isLoadingClerkUsers } = useQuery({
+    queryKey: ["admin", "clerk-users"],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/admin/clerk-users`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!res.ok) throw new Error("Failed to fetch Clerk users");
+      return res.json() as Promise<{ users: { id: string; email: string; firstName: string | null; lastName: string | null; createdAt: number; lastSignInAt: number | null }[]; total: number }>;
+    },
+    staleTime: 60_000,
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -623,12 +636,17 @@ function AdminContent() {
               <div className="space-y-6">
                 <div className="glass-card p-6 rounded-xl">
                   <div className="flex justify-between items-end mb-2">
-                    <span className="text-sm font-mono text-muted-foreground uppercase">Requests Today</span>
+                    <span className="text-sm font-mono text-muted-foreground uppercase flex items-center gap-1">
+                      Requests Today
+                      <span title="Total API-Football requests made today against your daily quota">
+                        <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
+                      </span>
+                    </span>
                     <span className="text-2xl font-mono font-bold text-white">
                       {statsData.requestsToday} <span className="text-sm text-muted-foreground">/ {statsData.maxPerDay}</span>
                     </span>
                   </div>
-                  <div className="w-full bg-white/5 rounded-full h-2.5 mb-4 overflow-hidden">
+                  <div className="w-full bg-white/10 rounded-full h-2.5 mb-4 overflow-hidden">
                     <div 
                       className={`h-2.5 rounded-full ${statsData.requestsToday / statsData.maxPerDay > 0.8 ? 'bg-destructive' : 'bg-primary'}`} 
                       style={{ width: `${Math.min((statsData.requestsToday / statsData.maxPerDay) * 100, 100)}%` }}
@@ -636,11 +654,21 @@ function AdminContent() {
                   </div>
                   <div className="grid grid-cols-2 gap-4 mt-6 border-t border-white/10 pt-4">
                     <div>
-                      <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Last Hour</div>
+                      <div className="text-xs font-mono text-muted-foreground uppercase mb-1 flex items-center gap-1">
+                        Last Hour
+                        <span title="Requests in the last 60 minutes (plan limit: 500/min)">
+                          <HelpCircle className="w-3 h-3 text-primary/60 cursor-help" />
+                        </span>
+                      </div>
                       <div className="text-lg font-mono text-white">{statsData.requestsThisHour}</div>
                     </div>
                     <div>
-                      <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Remaining</div>
+                      <div className="text-xs font-mono text-muted-foreground uppercase mb-1 flex items-center gap-1">
+                        Remaining
+                        <span title="API requests remaining for today before hitting your daily cap">
+                          <HelpCircle className="w-3 h-3 text-primary/60 cursor-help" />
+                        </span>
+                      </div>
                       <div className="text-lg font-mono text-white">{statsData.remaining}</div>
                     </div>
                   </div>
@@ -649,27 +677,37 @@ function AdminContent() {
                 {/* 7-day history mini bar chart */}
                 {(statsData as any).dailyHistory?.length > 0 && (
                   <div className="glass-card p-5 rounded-xl">
-                    <div className="flex items-end justify-between mb-3">
-                      <span className="text-xs font-mono text-muted-foreground uppercase">7-Day Usage</span>
+                    <div className="flex items-center justify-between mb-4">
+                      <span className="text-xs font-mono text-muted-foreground uppercase flex items-center gap-1">
+                        7-Day Usage
+                        <span title="API requests per day over the last 7 days. Teal bar = today.">
+                          <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
+                        </span>
+                      </span>
                       <span className="text-xs font-mono text-muted-foreground">
-                        avg <span className="text-white font-bold">{(statsData as any).dailyAvg ?? 0}</span> / day
+                        avg <span className="text-primary font-bold text-sm">{(statsData as any).dailyAvg ?? 0}</span> <span className="text-muted-foreground/60">/ day</span>
                       </span>
                     </div>
-                    <div className="flex items-end gap-1 h-16">
+                    <div className="flex items-end gap-1.5" style={{ height: 72 }}>
                       {((statsData as any).dailyHistory as { date: string; count: number }[]).map((day, i) => {
                         const maxCount = Math.max(...(statsData as any).dailyHistory.map((d: any) => d.count), 1);
-                        const heightPct = Math.max((day.count / maxCount) * 100, 3);
+                        const heightPct = Math.max((day.count / maxCount) * 100, 4);
                         const isToday = i === (statsData as any).dailyHistory.length - 1;
                         const label = day.date.slice(5); // MM-DD
                         return (
                           <div key={day.date} className="flex-1 flex flex-col items-center gap-1" title={`${day.date}: ${day.count} requests`}>
-                            <div className="w-full flex items-end" style={{ height: 48 }}>
+                            <div className="w-full flex flex-col items-center justify-end" style={{ height: 52 }}>
+                              {day.count > 0 && (
+                                <span className="text-[8px] font-mono mb-0.5 leading-none" style={{ color: isToday ? 'hsl(var(--primary))' : 'rgba(255,255,255,0.5)' }}>
+                                  {day.count}
+                                </span>
+                              )}
                               <div
-                                className={`w-full rounded-sm transition-all ${isToday ? 'bg-primary' : 'bg-white/20'}`}
+                                className={`w-full rounded-sm transition-all ${isToday ? 'bg-primary' : 'bg-white/40'}`}
                                 style={{ height: `${heightPct}%` }}
                               />
                             </div>
-                            <span className="text-[9px] font-mono text-muted-foreground/50">{label}</span>
+                            <span className={`text-[9px] font-mono leading-none ${isToday ? 'text-primary/80' : 'text-muted-foreground'}`}>{label}</span>
                           </div>
                         );
                       })}
@@ -780,6 +818,62 @@ function AdminContent() {
               )}
             </div>
           </div>
+        </div>
+
+        {/* Registered Accounts Section */}
+        <div className="border-t border-white/10 pt-8">
+          <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-4 border-b border-white/10 pb-2 flex items-center">
+            <LogIn className="w-5 h-5 mr-2 text-primary" />
+            REGISTERED ACCOUNTS
+            <span className="ml-3 text-sm font-normal text-muted-foreground font-mono normal-case">
+              {clerkUsersData ? `${clerkUsersData.total} total` : ""}
+            </span>
+            <span className="ml-2" title="All accounts that have signed up via Clerk authentication">
+              <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
+            </span>
+          </h2>
+          {isLoadingClerkUsers ? (
+            <div className="flex justify-center py-8"><Activity className="w-6 h-6 text-primary animate-pulse" /></div>
+          ) : clerkUsersData?.users?.length ? (
+            <div className="glass-card rounded-xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs text-muted-foreground uppercase bg-black/20 font-mono border-b border-white/10">
+                    <tr>
+                      <th className="px-4 py-3 font-normal">Account</th>
+                      <th className="px-4 py-3 font-normal">Email</th>
+                      <th className="px-4 py-3 font-normal">Signed Up</th>
+                      <th className="px-4 py-3 font-normal">Last Login</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {clerkUsersData.users.map((u) => {
+                      const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || "—";
+                      return (
+                        <tr key={u.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="px-4 py-3 font-medium text-white flex items-center gap-2">
+                            <UserIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                            {name}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-sm text-muted-foreground">{u.email}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                            {format(new Date(u.createdAt), 'MMM dd, yyyy')}
+                          </td>
+                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                            {u.lastSignInAt ? format(new Date(u.lastSignInAt), 'MMM dd, yyyy HH:mm') : <span className="text-muted-foreground/40">Never</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="glass-card p-8 rounded-xl text-center text-muted-foreground font-mono text-sm">
+              No registered accounts found.
+            </div>
+          )}
         </div>
 
         {/* AI Stats Section */}

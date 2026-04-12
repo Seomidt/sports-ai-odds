@@ -57,8 +57,12 @@ app.use(
     origin: (origin, callback) => {
       if (!origin) { callback(null, true); return; }
       const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(origin);
+      const isReplitApp = /^https:\/\/[a-zA-Z0-9-]+\.replit\.app$/.test(origin);
+      const isReplitDev = /^https?:\/\/[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.repl\.co$/.test(origin);
       const allowed =
         isLocalhost ||
+        isReplitApp ||
+        isReplitDev ||
         DEV_ORIGINS.has(origin) ||
         ALLOWED_ORIGINS.has(origin);
       callback(allowed ? null : new Error("CORS: origin not allowed"), allowed);

@@ -3,8 +3,9 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, Zap, TrendingUp, Target } from "lucide-react";
+import { Activity, Clock, Zap, TrendingUp, Target, ChevronDown } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
@@ -171,6 +172,8 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
 }
 
 export function PreMatch() {
+  const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
+
   const { data, isLoading } = useGetTodayFixtures({
     query: { queryKey: getGetTodayFixturesQueryKey(), staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 },
   });
@@ -208,6 +211,8 @@ export function PreMatch() {
     byLeague.get(f.leagueId)!.fixtures.push(f);
   }
 
+  const leagues = Array.from(byLeague.values());
+  const visibleLeagues = selectedLeague === "all" ? leagues : leagues.filter((l) => l.leagueId === selectedLeague);
   const totalWithTips = prematch.filter((f) => tipsData?.tips?.[f.fixtureId]?.length).length;
 
   return (
@@ -225,6 +230,24 @@ export function PreMatch() {
             )}
           </p>
         </header>
+
+        {leagues.length > 1 && (
+          <div className="relative inline-block">
+            <select
+              value={selectedLeague}
+              onChange={(e) => setSelectedLeague(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="appearance-none bg-white/5 border border-white/10 text-white text-sm font-mono rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:border-primary/50 cursor-pointer hover:bg-white/10 transition-colors"
+            >
+              <option value="all">All Leagues ({leagues.length})</option>
+              {leagues.map((l) => (
+                <option key={l.leagueId} value={l.leagueId}>
+                  {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -248,7 +271,7 @@ export function PreMatch() {
           </div>
         ) : (
           <div className="space-y-10">
-            {Array.from(byLeague.values()).map((league) => (
+            {visibleLeagues.map((league) => (
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/8">
                   {league.leagueLogo && (

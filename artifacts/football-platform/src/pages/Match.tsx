@@ -14,7 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
@@ -672,6 +672,104 @@ type BestOdds = {
   away?: { value: number; bookmaker: string } | null;
 } | null;
 
+function OddsAccordionRow({
+  label, bestValue, bestBookmaker, rows, getVal, isBestFn,
+}: {
+  label: string;
+  bestValue: number | null | undefined;
+  bestBookmaker: string | null | undefined;
+  rows: OddsSnap[];
+  getVal: (r: OddsSnap) => number | null | undefined;
+  isBestFn: (bm: string | null | undefined, val: number | null | undefined) => boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const hasData = bestValue != null || rows.some(r => getVal(r) != null);
+  if (!hasData) return null;
+  return (
+    <div className="border-b border-white/6 last:border-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/3 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground/50 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">{label}</span>
+        </div>
+        <div className="text-right">
+          <span className="font-mono text-base font-bold text-teal-400 tabular-nums">
+            {bestValue?.toFixed(2) ?? "—"}
+          </span>
+          {bestBookmaker && (
+            <div className="text-[9px] font-mono text-teal-400/50 uppercase mt-0.5">{bestBookmaker}</div>
+          )}
+        </div>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 space-y-1">
+          {rows.map((row, i) => {
+            const val = getVal(row);
+            if (val == null) return null;
+            const best = isBestFn(row.bookmaker, val);
+            return (
+              <div key={i} className="flex items-center justify-between py-1.5">
+                <span className="text-[11px] font-mono text-muted-foreground/70 uppercase tracking-wide">
+                  {row.bookmaker ?? "Unknown"}
+                </span>
+                <span className={`font-mono text-sm font-bold tabular-nums ${best ? "text-teal-400" : "text-white/60"}`}>
+                  {val.toFixed(2)}
+                  {best && <span className="ml-1 text-[9px] text-teal-400/60">★</span>}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OddsMarketRow({ name, entries }: { name: string; entries: { bookmaker: string; values: Array<{ value: string; odd: string }> }[] }) {
+  const [open, setOpen] = useState(false);
+  const firstBest = entries[0]?.values.reduce((b, v) => (!b || parseFloat(v.odd) > parseFloat(b.odd)) ? v : b, entries[0]?.values[0]);
+  return (
+    <div className="border-b border-white/6 last:border-0">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-white/3 transition-colors text-left"
+      >
+        <div className="flex items-center gap-3">
+          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground/50 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">{name}</span>
+        </div>
+        {firstBest && (
+          <span className="text-[11px] font-mono text-muted-foreground/50 truncate max-w-[120px]">
+            {firstBest.value} · {firstBest.odd}
+          </span>
+        )}
+      </button>
+      {open && (
+        <div className="px-4 pb-3">
+          {entries.map((entry, ei) => (
+            <div key={ei} className="mb-2">
+              {entries.length > 1 && (
+                <div className="text-[9px] font-mono text-muted-foreground/40 uppercase mb-1.5">{entry.bookmaker}</div>
+              )}
+              <div className="flex flex-wrap gap-2">
+                {entry.values.map((v, i) => (
+                  <div key={i} className="flex flex-col items-center bg-white/5 rounded-lg px-3 py-2 min-w-[70px]">
+                    <span className="text-[10px] font-mono text-muted-foreground uppercase truncate max-w-[80px]">{v.value}</span>
+                    <span className="font-mono text-sm text-teal-400 font-bold">{v.odd}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number; isLive: boolean; homeTeam: string; awayTeam: string }) {
   const { data: preData } = useGetFixtureOdds(fixtureId, { query: { queryKey: getGetFixtureOddsQueryKey(fixtureId), staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
   const { data: liveData } = useGetFixtureLiveOdds(fixtureId, { query: { queryKey: getGetFixtureLiveOddsQueryKey(fixtureId), staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: 30_000 } });
@@ -683,7 +781,6 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
   const liveOdds = liveData?.liveOdds ?? [];
   const latestLive = liveOdds[0] ?? null;
 
-  // Collect all markets across all stored bookmakers
   const allMarketEntries = marketsData?.oddsMarkets ?? [];
   const mergedMarkets: Record<string, { bookmaker: string; values: Array<{ value: string; odd: string }> }[]> = {};
   for (const entry of allMarketEntries) {
@@ -703,17 +800,10 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
   const isBestAway = (bm: string | null | undefined, val: number | null | undefined) =>
     val != null && bestOdds?.away?.bookmaker === bm && Math.abs((bestOdds.away?.value ?? 0) - val) < 0.001;
 
-  const oddsCell = (val: number | null | undefined, isBest: boolean) => {
-    if (val == null) return <span className="text-muted-foreground/40 font-mono text-sm">—</span>;
-    return (
-      <span className={`font-mono text-sm font-bold tabular-nums ${isBest ? "text-teal-400" : "text-white/70"}`}>
-        {val.toFixed(2)}
-        {isBest && <span className="ml-1 text-[9px] text-teal-400/70">★</span>}
-      </span>
-    );
-  };
+  const hasExtraMarkets = snap && (snap.btts != null || snap.overUnder25 != null || snap.handicapHome != null);
+  const hasAnyOdds = allOdds.length > 0 || hasExtraMarkets || Object.keys(mergedMarkets).length > 0;
 
-  if (allOdds.length === 0 && !latestLive && Object.keys(mergedMarkets).length === 0) {
+  if (!hasAnyOdds && !latestLive) {
     return (
       <div className="glass-card p-8 rounded-xl text-center">
         <p className="text-muted-foreground text-sm">Odds not yet available — data syncs 6 hours before kickoff.</p>
@@ -722,91 +812,62 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
   }
 
   return (
-    <div className="space-y-6">
-      {/* Best odds summary */}
-      {bestOdds && (bestOdds.home || bestOdds.draw || bestOdds.away) && (
-        <div className="glass-card p-4 rounded-xl border border-teal-400/20">
-          <div className="text-[10px] font-mono text-teal-400 uppercase tracking-widest mb-3">Bedste odds</div>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-teal-400/5 border border-teal-400/15 rounded-xl p-3">
-              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{homeTeam}</div>
-              <div className="font-mono text-lg text-teal-400 font-bold">{bestOdds.home?.value.toFixed(2) ?? "—"}</div>
-              {bestOdds.home && <div className="text-[9px] font-mono text-teal-400/60 mt-0.5 uppercase">{bestOdds.home.bookmaker}</div>}
-            </div>
-            <div className="bg-teal-400/5 border border-teal-400/15 rounded-xl p-3">
-              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">Draw</div>
-              <div className="font-mono text-lg text-teal-400 font-bold">{bestOdds.draw?.value.toFixed(2) ?? "—"}</div>
-              {bestOdds.draw && <div className="text-[9px] font-mono text-teal-400/60 mt-0.5 uppercase">{bestOdds.draw.bookmaker}</div>}
-            </div>
-            <div className="bg-teal-400/5 border border-teal-400/15 rounded-xl p-3">
-              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{awayTeam}</div>
-              <div className="font-mono text-lg text-teal-400 font-bold">{bestOdds.away?.value.toFixed(2) ?? "—"}</div>
-              {bestOdds.away && <div className="text-[9px] font-mono text-teal-400/60 mt-0.5 uppercase">{bestOdds.away.bookmaker}</div>}
-            </div>
+    <div className="space-y-4">
+      {/* 1X2 accordion */}
+      {allOdds.length > 0 && (
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/6">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Match Winner — 1X2</span>
           </div>
+          <OddsAccordionRow
+            label={homeTeam}
+            bestValue={bestOdds?.home?.value}
+            bestBookmaker={bestOdds?.home?.bookmaker}
+            rows={allOdds}
+            getVal={r => r.homeWin}
+            isBestFn={isBestHome}
+          />
+          <OddsAccordionRow
+            label="Draw"
+            bestValue={bestOdds?.draw?.value}
+            bestBookmaker={bestOdds?.draw?.bookmaker}
+            rows={allOdds}
+            getVal={r => r.draw}
+            isBestFn={isBestDraw}
+          />
+          <OddsAccordionRow
+            label={awayTeam}
+            bestValue={bestOdds?.away?.value}
+            bestBookmaker={bestOdds?.away?.bookmaker}
+            rows={allOdds}
+            getVal={r => r.awayWin}
+            isBestFn={isBestAway}
+          />
         </div>
       )}
 
-      {/* Bookmaker comparison table */}
-      {allOdds.length > 0 && (
+      {/* Extra markets accordion */}
+      {hasExtraMarkets && (
         <div className="glass-card rounded-xl overflow-hidden">
-          <div className="px-4 pt-4 pb-2">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Bookmaker sammenligning — 1X2</span>
+          <div className="px-4 py-3 border-b border-white/6">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Andre markeder</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/5">
-                  <th className="text-left px-4 py-2 text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Bookmaker</th>
-                  <th className="text-center px-3 py-2 text-[10px] font-mono text-muted-foreground uppercase tracking-wider truncate max-w-[80px]">{homeTeam.slice(0, 12)}</th>
-                  <th className="text-center px-3 py-2 text-[10px] font-mono text-muted-foreground uppercase tracking-wider">Draw</th>
-                  <th className="text-center px-3 py-2 text-[10px] font-mono text-muted-foreground uppercase tracking-wider truncate max-w-[80px]">{awayTeam.slice(0, 12)}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allOdds.map((row, i) => (
-                  <tr key={i} className="border-b border-white/5 hover:bg-white/3 transition-colors">
-                    <td className="px-4 py-3">
-                      <span className="text-[11px] font-mono font-semibold text-white/80 uppercase tracking-wide">
-                        {row.bookmaker ?? "Unknown"}
-                      </span>
-                    </td>
-                    <td className="text-center px-3 py-3">
-                      {oddsCell(row.homeWin, isBestHome(row.bookmaker, row.homeWin))}
-                    </td>
-                    <td className="text-center px-3 py-3">
-                      {oddsCell(row.draw, isBestDraw(row.bookmaker, row.draw))}
-                    </td>
-                    <td className="text-center px-3 py-3">
-                      {oddsCell(row.awayWin, isBestAway(row.bookmaker, row.awayWin))}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Additional markets from snap */}
-          {snap && (snap.btts != null || snap.overUnder25 != null || snap.handicapHome != null) && (
-            <div className="px-4 pb-4 mt-3 grid grid-cols-3 gap-3">
-              {snap.btts != null && (
-                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-2.5 text-center">
-                  <div className="text-[10px] font-mono text-violet-400 uppercase mb-1">BTTS</div>
-                  <span className="font-mono text-sm font-bold text-violet-400">{snap.btts.toFixed(2)}</span>
-                </div>
-              )}
-              {snap.overUnder25 != null && (
-                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-2.5 text-center">
-                  <div className="text-[10px] font-mono text-violet-400 uppercase mb-1">Over 2.5</div>
-                  <span className="font-mono text-sm font-bold text-violet-400">{snap.overUnder25.toFixed(2)}</span>
-                </div>
-              )}
-              {snap.handicapHome != null && (
-                <div className="bg-violet-500/10 border border-violet-500/20 rounded-lg p-2.5 text-center">
-                  <div className="text-[10px] font-mono text-violet-400 uppercase mb-1">Handicap H</div>
-                  <span className="font-mono text-sm font-bold text-violet-400">{snap.handicapHome.toFixed(2)}</span>
-                </div>
-              )}
+          {snap!.btts != null && (
+            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">BTTS</span>
+              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap!.btts!.toFixed(2)}</span>
+            </div>
+          )}
+          {snap!.overUnder25 != null && (
+            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">Over 2.5</span>
+              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap!.overUnder25!.toFixed(2)}</span>
+            </div>
+          )}
+          {snap!.handicapHome != null && (
+            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">Handicap H</span>
+              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap!.handicapHome!.toFixed(2)}</span>
             </div>
           )}
         </div>
@@ -814,61 +875,38 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
 
       {/* Live odds */}
       {isLive && latestLive && (
-        <div className="glass-card p-5 rounded-xl border border-amber-400/20">
-          <div className="flex items-center gap-2 mb-4">
+        <div className="glass-card rounded-xl overflow-hidden border border-amber-400/20">
+          <div className="px-4 py-3 border-b border-white/6 flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-xs font-mono text-amber-400 uppercase tracking-wider">Live Odds — {latestLive.bookmaker}</span>
+            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest">Live Odds — {latestLive.bookmaker}</span>
           </div>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="bg-amber-400/5 border border-amber-400/10 rounded-xl p-3">
-              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{homeTeam}</div>
-              <span className="font-mono text-sm text-amber-400 font-bold tabular-nums">{latestLive.homeWin?.toFixed(2) ?? "—"}</span>
+          {[
+            { label: homeTeam, val: latestLive.homeWin },
+            { label: "Draw", val: latestLive.draw },
+            { label: awayTeam, val: latestLive.awayWin },
+          ].map(({ label, val }) => (
+            <div key={label} className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide truncate max-w-[60%]">{label}</span>
+              <span className="font-mono text-base font-bold text-amber-400 tabular-nums">{val?.toFixed(2) ?? "—"}</span>
             </div>
-            <div className="bg-amber-400/5 border border-amber-400/10 rounded-xl p-3">
-              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">Draw</div>
-              <span className="font-mono text-sm text-amber-400 font-bold tabular-nums">{latestLive.draw?.toFixed(2) ?? "—"}</span>
-            </div>
-            <div className="bg-amber-400/5 border border-amber-400/10 rounded-xl p-3">
-              <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1 truncate">{awayTeam}</div>
-              <span className="font-mono text-sm text-amber-400 font-bold tabular-nums">{latestLive.awayWin?.toFixed(2) ?? "—"}</span>
-            </div>
-          </div>
+          ))}
           {liveOdds.length > 1 && (
-            <div className="mt-3 text-xs font-mono text-muted-foreground text-center">
-              {liveOdds.length} snapshots captured since kickoff
+            <div className="px-4 py-2 text-xs font-mono text-muted-foreground/50 text-right">
+              {liveOdds.length} snapshots siden kickoff
             </div>
           )}
         </div>
       )}
 
-      {/* All markets — grouped by market name, showing all bookmakers */}
+      {/* All markets accordion */}
       {Object.keys(mergedMarkets).length > 0 && (
-        <div>
-          <div className="mb-3">
-            <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Alle markeder</h3>
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/6">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Alle markeder</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {Object.entries(mergedMarkets).map(([name, entries]) => (
-              <div key={name} className="glass-card p-4 rounded-xl">
-                <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-3">{name}</div>
-                {entries.map((entry, ei) => (
-                  <div key={ei} className="mb-2">
-                    {entries.length > 1 && (
-                      <div className="text-[9px] font-mono text-muted-foreground/50 uppercase mb-1">{entry.bookmaker}</div>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {entry.values.map((v, i) => (
-                        <div key={i} className="flex flex-col items-center bg-white/5 rounded-lg px-3 py-2 min-w-[70px]">
-                          <span className="text-[10px] font-mono text-muted-foreground uppercase truncate max-w-[80px]">{v.value}</span>
-                          <span className="font-mono text-sm text-teal-400 font-bold">{v.odd}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
+          {Object.entries(mergedMarkets).map(([name, entries]) => (
+            <OddsMarketRow key={name} name={name} entries={entries} />
+          ))}
         </div>
       )}
     </div>

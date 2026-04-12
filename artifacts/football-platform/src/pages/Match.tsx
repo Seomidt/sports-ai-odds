@@ -22,6 +22,7 @@ import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { format } from "date-fns";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useState, Component } from "react";
 import { useToast } from "@/hooks/use-toast";
 
 export function Match() {
@@ -182,7 +183,9 @@ export function Match() {
               <PostReviewTab fixtureId={id} />
             </TabsContent>
             <TabsContent value="odds" className="mt-4">
-              <OddsTab fixtureId={id} isLive={isLive} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
+              <OddsErrorBoundary>
+                <OddsTab fixtureId={id} isLive={isLive} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
+              </OddsErrorBoundary>
             </TabsContent>
             <TabsContent value="h2h" className="mt-4">
               <H2HTab fixtureId={id} homeTeamId={fixture.homeTeamId!} awayTeamId={fixture.awayTeamId!} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
@@ -645,6 +648,29 @@ function PostReviewTab({ fixtureId }: { fixtureId: number }) {
   );
 }
 
+// ─── OddsTab error boundary ───────────────────────────────────────────────────
+
+class OddsErrorBoundary extends Component<{ children: React.ReactNode }, { error: string | null }> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { error: null };
+  }
+  static getDerivedStateFromError(err: Error) {
+    return { error: err.message };
+  }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="glass-card p-8 rounded-xl text-center space-y-2">
+          <p className="text-amber-400 text-xs font-mono uppercase tracking-wider">Odds could not be displayed</p>
+          <p className="text-muted-foreground text-xs font-mono">{this.state.error}</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ─── OddsTab ──────────────────────────────────────────────────────────────────
 
 type OddsSnap = {
@@ -722,7 +748,10 @@ function OddsAccordionRow({
 
 function OddsMarketRow({ name, entries }: { name: string; entries: { bookmaker: string; values: Array<{ value: string; odd: string }> }[] }) {
   const [open, setOpen] = useState(false);
-  const firstBest = entries[0]?.values.reduce((b, v) => (!b || parseFloat(v.odd) > parseFloat(b.odd)) ? v : b, entries[0]?.values[0]);
+  const firstValues = entries[0]?.values ?? [];
+  const firstBest = firstValues.length > 0
+    ? firstValues.reduce((b, v) => (!b || parseFloat(v.odd) > parseFloat(b.odd)) ? v : b, firstValues[0]!)
+    : null;
   return (
     <div className="border-b border-white/6 last:border-0">
       <button
@@ -747,7 +776,7 @@ function OddsMarketRow({ name, entries }: { name: string; entries: { bookmaker: 
                 <div className="text-[9px] font-mono text-muted-foreground/40 uppercase mb-1.5">{entry.bookmaker}</div>
               )}
               <div className="flex flex-wrap gap-2">
-                {entry.values.map((v, i) => (
+                {(entry.values ?? []).map((v, i) => (
                   <div key={i} className="flex flex-col items-center bg-white/5 rounded-lg px-3 py-2 min-w-[70px]">
                     <span className="text-[10px] font-mono text-muted-foreground uppercase truncate max-w-[80px]">{v.value}</span>
                     <span className="font-mono text-sm text-teal-400 font-bold">{v.odd}</span>

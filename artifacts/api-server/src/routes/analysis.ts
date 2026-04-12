@@ -84,9 +84,17 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
 });
 
 router.get("/analysis/value-odds", async (_req, res) => {
+  const cacheKey = "analysis:value-odds";
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    res.set("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
   try {
     const tips = await db.query.aiBettingTips.findMany({
-      where: (t, { and: andFn, isNull }) => andFn(isNull(t.outcome)),
+      where: (t, { isNull }) => isNull(t.outcome),
     });
 
     const ranked = tips
@@ -97,8 +105,10 @@ router.get("/analysis/value-odds", async (_req, res) => {
       })
       .sort((a, b) => b.combinedScore - a.combinedScore);
 
+    const body = { tips: ranked };
+    cacheSet(cacheKey, body, TTL.MIN5);
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
-    return res.json({ tips: ranked });
+    return res.json(body);
   } catch (err) {
     console.error("[analysis] value-odds error:", err);
     return res.status(500).json({ error: "Failed to fetch value odds" });
@@ -106,8 +116,17 @@ router.get("/analysis/value-odds", async (_req, res) => {
 });
 
 router.get("/analysis/accuracy", async (_req, res) => {
+  const cacheKey = "analysis:accuracy";
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    res.set("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
   try {
     const stats = await getAiAccuracyStats();
+    cacheSet(cacheKey, stats, TTL.MIN5);
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     return res.json(stats);
   } catch (err) {

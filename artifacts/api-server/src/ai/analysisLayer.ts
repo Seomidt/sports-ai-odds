@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "@workspace/db";
-import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -625,9 +625,15 @@ export async function getAiAccuracyStats() {
 // ─── Alert text (unchanged) ───────────────────────────────────────────────────
 
 export async function generateAlertText(signalKey: string, signalLabel: string, matchName: string): Promise<string> {
+  const cacheKey = `alert:${signalKey}:${matchName}`;
+  const cached = getCached<string>(cacheKey);
+  if (cached) return cached;
+
   const prompt = `Football alert: ${matchName} — Signal: "${signalLabel}". Write a 1-sentence alert in max 20 words. No emoji. Be direct and factual.`;
   const raw = await callClaude(prompt);
-  return raw?.replace(/```[^`]*```/g, "").trim() ?? `${matchName}: ${signalLabel}`;
+  const text = raw?.replace(/```[^`]*```/g, "").trim() ?? `${matchName}: ${signalLabel}`;
+  setCached(cacheKey, text, 60 * 60 * 1000); // 1 hour TTL
+  return text;
 }
 
 export interface NewsArticle {
@@ -645,6 +651,8 @@ export interface NewsArticle {
   result: "win" | "draw" | "loss" | "upcoming";
   kickoff: string | null;
 }
+
+const NEWS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours before regenerating
 
 export async function generateLeagueNews(
   leagueId: number,
@@ -675,6 +683,34 @@ export async function generateLeagueNews(
       }
     }
 
+    const fixtureLine = `${lastMatch.isHome ? team.teamName : lastMatch.opponentName} ${lastMatch.homeGoals ?? "?"} - ${lastMatch.awayGoals ?? "?"} ${lastMatch.isHome ? lastMatch.opponentName : team.teamName}`;
+    const headline = `#${team.rank} ${team.teamName}: ${result === "win" ? "Victory" : result === "draw" ? "Draw" : result === "loss" ? "Defeat" : "In Action"}`;
+
+    // ── Check DB for cached article (< 24h old) ──────────────────────────────
+    const existing = await db.query.newsArticles.findFirst({
+      where: (n, { and: andFn, eq: eqFn }) => andFn(eqFn(n.leagueId, leagueId), eqFn(n.teamId, team.teamId)),
+    });
+
+    if (existing && (Date.now() - existing.generatedAt.getTime()) < NEWS_TTL_MS) {
+      articles.push({
+        id: `${leagueId}-${team.teamId}`,
+        teamId: existing.teamId,
+        teamName: existing.teamName,
+        teamLogo: existing.teamLogo,
+        rank: existing.rank,
+        headline: existing.headline,
+        body: existing.body,
+        fixtureLine: existing.fixtureLine ?? fixtureLine,
+        homeGoals: existing.homeGoals,
+        awayGoals: existing.awayGoals,
+        opponent: existing.opponent ?? lastMatch.opponentName,
+        result: (existing.result as NewsArticle["result"]) ?? result,
+        kickoff: existing.kickoff?.toISOString() ?? lastMatch.kickoff,
+      });
+      continue;
+    }
+
+    // ── Generate new article with Claude ──────────────────────────────────────
     const matchContext = teamMatches.map((m) => {
       const g = m.isHome ? m.homeGoals : m.awayGoals;
       const og = m.isHome ? m.awayGoals : m.homeGoals;
@@ -688,7 +724,26 @@ export async function generateLeagueNews(
     const raw = await callClaude(prompt);
     const body = raw?.trim() ?? `${team.teamName} continue their campaign.`;
 
-    const fixtureLine = `${lastMatch.isHome ? team.teamName : lastMatch.opponentName} ${lastMatch.homeGoals ?? "?"} - ${lastMatch.awayGoals ?? "?"} ${lastMatch.isHome ? lastMatch.opponentName : team.teamName}`;
+    // ── Save to DB (upsert) ───────────────────────────────────────────────────
+    await db.insert(newsArticles).values({
+      leagueId,
+      teamId: team.teamId,
+      teamName: team.teamName,
+      teamLogo: team.teamLogo,
+      rank: team.rank,
+      headline,
+      body,
+      fixtureLine,
+      homeGoals: lastMatch.homeGoals,
+      awayGoals: lastMatch.awayGoals,
+      opponent: lastMatch.opponentName,
+      result,
+      kickoff: lastMatch.kickoff ? new Date(lastMatch.kickoff) : null,
+      generatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [newsArticles.leagueId, newsArticles.teamId],
+      set: { headline, body, fixtureLine, homeGoals: lastMatch.homeGoals, awayGoals: lastMatch.awayGoals, opponent: lastMatch.opponentName, result, kickoff: lastMatch.kickoff ? new Date(lastMatch.kickoff) : null, generatedAt: new Date() },
+    });
 
     articles.push({
       id: `${leagueId}-${team.teamId}`,
@@ -696,7 +751,7 @@ export async function generateLeagueNews(
       teamName: team.teamName,
       teamLogo: team.teamLogo,
       rank: team.rank,
-      headline: `#${team.rank} ${team.teamName}: ${result === "win" ? "Victory" : result === "draw" ? "Draw" : result === "loss" ? "Defeat" : "In Action"}`,
+      headline,
       body,
       fixtureLine,
       homeGoals: lastMatch.homeGoals,

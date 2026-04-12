@@ -584,6 +584,33 @@ export const aiBettingTips = pgTable(
   ]
 );
 
+// ─── AI News Cache (persisted to DB so Claude calls survive restarts) ─────────
+
+export const newsArticles = pgTable(
+  "news_articles",
+  {
+    id: serial("id").primaryKey(),
+    leagueId: integer("league_id").notNull(),
+    teamId: integer("team_id").notNull(),
+    teamName: text("team_name").notNull(),
+    teamLogo: text("team_logo"),
+    rank: integer("rank").notNull(),
+    headline: text("headline").notNull(),
+    body: text("body").notNull(),
+    fixtureLine: text("fixture_line"),
+    homeGoals: integer("home_goals"),
+    awayGoals: integer("away_goals"),
+    opponent: text("opponent"),
+    result: text("result"),
+    kickoff: timestamp("kickoff"),
+    generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("news_articles_league_team_uniq").on(t.leagueId, t.teamId),
+    index("news_articles_league_idx").on(t.leagueId),
+  ]
+);
+
 export type H2HFixture = typeof h2hFixtures.$inferSelect;
 export type TeamSeasonStats = typeof teamSeasonStats.$inferSelect;
 export type PlayerProfile = typeof playerProfiles.$inferSelect;
@@ -591,3 +618,4 @@ export type Venue = typeof venues.$inferSelect;
 export type Trophy = typeof trophies.$inferSelect;
 export type AiBettingTip = typeof aiBettingTips.$inferSelect;
 export type OddsMarket = typeof oddsMarkets.$inferSelect;
+export type NewsArticle = typeof newsArticles.$inferSelect;

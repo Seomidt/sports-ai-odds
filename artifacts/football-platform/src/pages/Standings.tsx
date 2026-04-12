@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, TrendingUp, TrendingDown, Minus, Search, HelpCircle } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Minus, ChevronDown, HelpCircle } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -187,7 +187,6 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
 export function Standings() {
   const [activeLeagueId, setActiveLeagueId] = useState<number>(39);
   const [activeLeagueName, setActiveLeagueName] = useState<string>("Premier League");
-  const [search, setSearch] = useState("");
 
   const { data: leaguesData, isLoading: leaguesLoading } = useQuery<{ leagues: LeagueEntry[] }>({
     queryKey: ["standings-leagues"],
@@ -197,9 +196,6 @@ export function Standings() {
   });
 
   const leagues = leaguesData?.leagues ?? [];
-  const filtered = leagues.filter(l =>
-    l.leagueName.toLowerCase().includes(search.toLowerCase())
-  );
 
   return (
     <Layout>
@@ -213,50 +209,38 @@ export function Standings() {
           </p>
         </header>
 
-        <div className="glass-card rounded-xl p-4 space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-            <input
-              type="text"
-              placeholder="Search leagues..."
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder:text-muted-foreground/40 font-mono focus:outline-none focus:border-primary/40"
+        <div className="flex items-center gap-3">
+          <div className="relative flex-1">
+            <img
+              src={LEAGUE_LOGO(activeLeagueId)}
+              alt=""
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 object-contain pointer-events-none"
+              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
-          </div>
-
-          {leaguesLoading ? (
-            <div className="flex justify-center py-4">
-              <Activity className="w-5 h-5 text-primary animate-pulse" />
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-              {filtered.map(league => (
-                <button
-                  key={league.leagueId}
-                  onClick={() => { setActiveLeagueId(league.leagueId); setActiveLeagueName(league.leagueName); }}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all border ${
-                    activeLeagueId === league.leagueId
-                      ? "bg-primary/20 border-primary/40 text-white"
-                      : "bg-black/20 border-white/8 text-muted-foreground hover:text-white hover:border-white/20 hover:bg-white/5"
-                  }`}
-                >
-                  <img
-                    src={LEAGUE_LOGO(league.leagueId)}
-                    alt=""
-                    className="w-5 h-5 object-contain shrink-0"
-                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
-                  <span className="text-xs font-mono font-semibold truncate leading-tight">{league.leagueName}</span>
-                </button>
-              ))}
-              {filtered.length === 0 && !leaguesLoading && (
-                <p className="col-span-full text-center text-xs text-muted-foreground/50 font-mono py-4">
-                  No leagues found
-                </p>
+            <select
+              value={activeLeagueId}
+              disabled={leaguesLoading}
+              onChange={e => {
+                const id = Number(e.target.value);
+                const found = leagues.find(l => l.leagueId === id);
+                setActiveLeagueId(id);
+                setActiveLeagueName(found?.leagueName ?? "");
+              }}
+              className="w-full appearance-none bg-white/5 border border-white/10 text-white text-sm font-mono rounded-lg pl-10 pr-9 py-2.5 focus:outline-none focus:border-primary/50 cursor-pointer hover:bg-white/8 transition-colors disabled:opacity-50"
+            >
+              {leaguesLoading ? (
+                <option>Loading leagues...</option>
+              ) : (
+                leagues.map(l => (
+                  <option key={l.leagueId} value={l.leagueId} className="bg-[#0f0f1a] text-white">
+                    {l.leagueName}
+                  </option>
+                ))
               )}
-            </div>
-          )}
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 pointer-events-none" />
+          </div>
+          {leaguesLoading && <Activity className="w-4 h-4 text-primary animate-pulse shrink-0" />}
         </div>
 
         <div className="glass-card rounded-xl overflow-hidden">

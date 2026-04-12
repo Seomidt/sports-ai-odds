@@ -44,6 +44,12 @@ export const fixtures = pgTable(
     awayGoals: integer("away_goals"),
     venue: text("venue"),
     referee: text("referee"),
+    weatherTemp: real("weather_temp"),
+    weatherDesc: text("weather_desc"),
+    weatherIcon: text("weather_icon"),
+    weatherWind: real("weather_wind"),
+    weatherHumidity: integer("weather_humidity"),
+    weatherFetchedAt: timestamp("weather_fetched_at"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [

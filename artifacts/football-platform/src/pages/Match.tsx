@@ -14,7 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
@@ -114,7 +114,7 @@ export function Match() {
           </div>
 
           <div className="flex flex-col items-center justify-center">
-            <div className="flex items-center justify-center gap-4 mb-8">
+            <div className="flex items-center justify-center gap-4 mb-8 flex-wrap">
               {isLive ? (
                 <div className="flex items-center gap-2 px-3 py-1 rounded bg-primary/10 border border-primary/20 text-primary">
                   <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
@@ -124,6 +124,14 @@ export function Match() {
                 <div className="px-3 py-1 rounded bg-white/5 border border-white/10 text-muted-foreground">
                   <span className="text-sm font-bold tracking-widest">{fixture.statusShort}</span>
                 </div>
+              )}
+              {fixture.weatherDesc && (
+                <WeatherBadge
+                  temp={fixture.weatherTemp ?? null}
+                  desc={fixture.weatherDesc}
+                  wind={fixture.weatherWind ?? null}
+                  icon={fixture.weatherIcon ?? null}
+                />
               )}
             </div>
 
@@ -206,6 +214,35 @@ interface BettingTip {
   accuracyNote: string | null;
   createdAt: string;
   reviewedAt: string | null;
+}
+
+function WeatherBadge({ temp, desc, wind, icon }: { temp: number | null; desc: string; wind: number | null; icon: string | null }) {
+  const isAdverse = (wind ?? 0) > 10 ||
+    desc.toLowerCase().includes("snow") ||
+    desc.toLowerCase().includes("heavy rain") ||
+    desc.toLowerCase().includes("thunderstorm") ||
+    desc.toLowerCase().includes("hail") ||
+    desc.toLowerCase().includes("blizzard") ||
+    (temp ?? 15) < -5 ||
+    (temp ?? 15) > 36;
+
+  const baseClass = isAdverse
+    ? "flex items-center gap-2 px-3 py-1 rounded border text-amber-400 bg-amber-400/10 border-amber-400/30"
+    : "flex items-center gap-2 px-3 py-1 rounded border text-violet-300 bg-violet-400/10 border-violet-400/20";
+
+  return (
+    <div className={baseClass} title={`${desc} — ${Math.round(temp ?? 0)}°C, vind ${Math.round(wind ?? 0)} m/s`}>
+      {icon
+        ? <img src={`https://openweathermap.org/img/wn/${icon}.png`} className="w-5 h-5 object-contain" alt={desc} />
+        : (wind ?? 0) > 10 ? <Wind className="w-4 h-4" /> : <CloudRain className="w-4 h-4" />
+      }
+      <span className="text-xs font-mono font-bold tracking-wider">
+        {Math.round(temp ?? 0)}°C
+        {(wind ?? 0) > 5 && <span className="ml-1 opacity-70">{Math.round(wind ?? 0)}m/s</span>}
+      </span>
+      {isAdverse && <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />}
+    </div>
+  );
 }
 
 function TrustGauge({ score }: { score: number }) {

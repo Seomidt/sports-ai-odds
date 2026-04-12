@@ -60,6 +60,7 @@ import {
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
+import { fetchWeatherForCity } from "../lib/weatherClient.js";
 
 const TRACKED_LEAGUE_IDS = new Set(TRACKED_LEAGUES.map((l) => l.id));
 
@@ -1172,6 +1173,67 @@ async function adaptiveLiveLoop() {
   }
 }
 
+// ─── Weather sync ─────────────────────────────────────────────────────────────
+/**
+ * Fetches weather forecasts for upcoming fixtures (next 5 days) where the
+ * venue city is known. Refreshes every 3 hours; skips fixtures already fetched
+ * within the last 3 hours.
+ */
+async function syncWeatherForUpcomingFixtures() {
+  const now = new Date();
+  const in5Days = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+  const staleThreshold = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(
+        gte(f.kickoff, now),
+        lte(f.kickoff, in5Days),
+        inArray(f.leagueId, [...TRACKED_LEAGUE_IDS])
+      ),
+  });
+
+  const stale = upcoming.filter(
+    (f) => !f.weatherFetchedAt || f.weatherFetchedAt < staleThreshold
+  );
+
+  if (stale.length === 0) {
+    console.log("[weather] All upcoming fixtures already have fresh weather data");
+    return;
+  }
+
+  console.log(`[weather] Fetching weather for ${stale.length} fixtures`);
+
+  for (const f of stale) {
+    try {
+      const city = f.venue ?? null;
+      if (!city) continue;
+
+      const cityName = city.split(",")[0]?.trim() ?? city;
+      const unixTs = f.kickoff ? Math.floor(f.kickoff.getTime() / 1000) : Math.floor(Date.now() / 1000);
+      const w = await fetchWeatherForCity(cityName, unixTs);
+      if (!w) continue;
+
+      await db
+        .update(fixtures)
+        .set({
+          weatherTemp: w.temp,
+          weatherDesc: w.desc,
+          weatherIcon: w.icon,
+          weatherWind: w.wind,
+          weatherHumidity: w.humidity,
+          weatherFetchedAt: new Date(),
+        })
+        .where(eq(fixtures.fixtureId, f.fixtureId));
+
+      console.log(`[weather] ${f.homeTeamName} vs ${f.awayTeamName}: ${w.desc}, ${Math.round(w.temp)}°C, wind ${Math.round(w.wind)}m/s${w.isAdverse ? " ⚠ ADVERSE" : ""}`);
+      await new Promise((r) => setTimeout(r, 200));
+    } catch (err) {
+      console.warn(`[weather] Error for fixture ${f.fixtureId}:`, err);
+    }
+  }
+}
+
 // ─── Daily 5am Signal Pre-computation ─────────────────────────────────────────
 /**
  * Pre-computes pre-match features and signals for ALL of today's upcoming fixtures.
@@ -1307,6 +1369,7 @@ export function startPoller() {
   setTimeout(() => syncSquadsForUpcomingTeams().catch(console.error), 10 * 60 * 1000);
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
+  setTimeout(() => syncWeatherForUpcomingFixtures().catch(console.error), 13 * 60 * 1000);
   // After all sync jobs finish, compute signals for all upcoming fixtures (next 7 days)
   setTimeout(() => startupSignalCompute().catch(console.error), 14 * 60 * 1000);
 
@@ -1360,6 +1423,9 @@ export function startPoller() {
     syncVenuesAndInfoForKnownTeams().catch(console.error);
     syncTrophiesForKnownTeams().catch(console.error);
   }, 24 * 60 * 60 * 1000);
+
+  // Weather: every 3 hours (forecast accuracy degrades over time)
+  setInterval(() => syncWeatherForUpcomingFixtures().catch(console.error), 3 * 60 * 60 * 1000);
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);

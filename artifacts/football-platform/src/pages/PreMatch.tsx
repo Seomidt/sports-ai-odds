@@ -3,7 +3,7 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, Zap, TrendingUp, Target, ChevronDown } from "lucide-react";
+import { Activity, Clock, Zap, TrendingUp, Target, ChevronDown, Wind, CloudRain, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -41,6 +41,31 @@ type StoredTip = {
   marketOdds: number | null;
   valueRating: string | null;
 };
+
+function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: string; wind: number | null; icon: string | null }) {
+  const isAdverse = (wind ?? 0) > 10 ||
+    desc.toLowerCase().includes("snow") || desc.toLowerCase().includes("blizzard") ||
+    desc.toLowerCase().includes("heavy rain") || desc.toLowerCase().includes("thunderstorm") ||
+    desc.toLowerCase().includes("hail") || (temp ?? 15) < -5 || (temp ?? 15) > 36;
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+        isAdverse
+          ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
+          : "text-violet-300 bg-violet-400/10 border-violet-400/20"
+      }`}
+      title={`${desc} — ${Math.round(temp ?? 0)}°C, vind ${Math.round(wind ?? 0)} m/s`}
+    >
+      {icon
+        ? <img src={`https://openweathermap.org/img/wn/${icon}.png`} className="w-3.5 h-3.5 object-contain" alt="" />
+        : <Wind className="w-3 h-3" />
+      }
+      {Math.round(temp ?? 0)}°
+      {isAdverse && <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />}
+    </span>
+  );
+}
 
 function ValueBadge({ rating }: { rating: string | null }) {
   if (!rating || rating === "overpriced") return null;
@@ -107,11 +132,21 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
   return (
     <Link href={`/match/${fixture.fixtureId}`}>
       <div className={`glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border ${borderClass} group`}>
-        <div className="flex justify-between items-center mb-4">
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded font-mono">
-            <Clock className="w-3 h-3 shrink-0" />
-            {kickoffLabel(fixture.kickoff)}
-          </span>
+        <div className="flex justify-between items-center mb-4 gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded font-mono">
+              <Clock className="w-3 h-3 shrink-0" />
+              {kickoffLabel(fixture.kickoff)}
+            </span>
+            {fixture.weatherDesc && (
+              <WeatherMini
+                temp={fixture.weatherTemp ?? null}
+                desc={fixture.weatherDesc}
+                wind={fixture.weatherWind ?? null}
+                icon={fixture.weatherIcon ?? null}
+              />
+            )}
+          </div>
           {signals.length > 0 ? (
             <span className={`inline-flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${
               signals.length >= 4

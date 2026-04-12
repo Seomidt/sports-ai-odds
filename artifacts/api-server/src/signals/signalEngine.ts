@@ -1,6 +1,7 @@
 import { db } from "@workspace/db";
 import { fixtureSignals, teamFeatures } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { fetchWeatherForCity } from "../lib/weatherClient.js";
 
 type Phase = "pre" | "live" | "post";
 
@@ -53,6 +54,37 @@ export async function runSignalEngine(fixtureId: number, phase: Phase) {
   if (phase === "pre") {
     const hf = await getFeatures(fixtureId, homeId, "pre");
     const af = await getFeatures(fixtureId, awayId, "pre");
+
+    // Weather signal — use stored weather if fresh, otherwise fetch live
+    const venueCity = fixture.venue?.split(",")[0]?.trim();
+    let weatherDesc = fixture.weatherDesc;
+    let weatherWind = fixture.weatherWind;
+    let weatherTemp = fixture.weatherTemp;
+
+    if (!weatherDesc && venueCity && fixture.kickoff) {
+      const w = await fetchWeatherForCity(venueCity, Math.floor(fixture.kickoff.getTime() / 1000));
+      if (w) { weatherDesc = w.desc; weatherWind = w.wind; weatherTemp = w.temp; }
+    }
+
+    const isAdverseWeather =
+      (weatherWind ?? 0) > 10 ||
+      (weatherDesc ?? "").toLowerCase().includes("snow") ||
+      (weatherDesc ?? "").toLowerCase().includes("blizzard") ||
+      (weatherDesc ?? "").toLowerCase().includes("heavy rain") ||
+      (weatherDesc ?? "").toLowerCase().includes("thunderstorm") ||
+      (weatherDesc ?? "").toLowerCase().includes("hail") ||
+      (weatherDesc ?? "").toLowerCase().includes("sleet") ||
+      (weatherTemp ?? 15) < -5 ||
+      (weatherTemp ?? 15) > 36;
+
+    if (weatherDesc) {
+      await upsertSignal(fixtureId, "pre", "adverse_weather",
+        isAdverseWeather
+          ? `Vejr kan påvirke spillet: ${weatherDesc} (${Math.round(weatherTemp ?? 0)}°C, vind ${Math.round(weatherWind ?? 0)} m/s)`
+          : `Vejrforhold: ${weatherDesc} (${Math.round(weatherTemp ?? 0)}°C)`,
+        weatherWind ?? null,
+        isAdverseWeather);
+    }
 
     // Underdog momentum advantage
     const underdogAdvantage = (af["team_form_last_5"] ?? 0) > (hf["team_form_last_5"] ?? 0) + 0.2;

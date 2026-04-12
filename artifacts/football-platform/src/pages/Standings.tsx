@@ -75,7 +75,10 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
       <th className={`text-${align} py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest ${className}`}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="cursor-help border-b border-dashed border-muted-foreground/30">{label}</span>
+            <span className="inline-flex items-center gap-0.5 cursor-help select-none">
+              {label}
+              <HelpCircle className="w-2.5 h-2.5 text-muted-foreground/60 shrink-0" />
+            </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs font-mono max-w-48 text-white bg-black/90 border border-white/10">
             {COL_TIPS[label] ?? label}

@@ -6,9 +6,9 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, Component, ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,38 @@ import { useToast } from "@/hooks/use-toast";
 import { AddUserBodyRole, UpdateUserBodyRole } from "@workspace/api-client-react";
 import { useGetMe } from "@workspace/api-client-react";
 import { Redirect } from "wouter";
+
+class AdminErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error?: Error }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <Layout>
+          <div className="flex flex-col items-center justify-center min-h-[50vh] space-y-4 text-center">
+            <AlertTriangle className="w-12 h-12 text-red-400" />
+            <h2 className="text-xl font-mono font-bold text-white">Admin Panel Error</h2>
+            <p className="text-muted-foreground font-mono text-sm max-w-md">
+              {this.state.error?.message ?? "An unexpected error occurred."}
+            </p>
+            <button
+              onClick={() => this.setState({ hasError: false })}
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-mono text-sm rounded-lg transition-colors"
+            >
+              Try again
+            </button>
+          </div>
+        </Layout>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface BillingStatus {
   enabled: boolean;
@@ -496,6 +528,14 @@ function BillingSection() {
 }
 
 export function Admin() {
+  return (
+    <AdminErrorBoundary>
+      <AdminContent />
+    </AdminErrorBoundary>
+  );
+}
+
+function AdminContent() {
   const { data: me } = useGetMe();
   const { data: statsData, isLoading: isLoadingStats } = useGetAdminStats();
   const { data: usersData, isLoading: isLoadingUsers } = useGetAdminUsers();
@@ -510,11 +550,19 @@ export function Admin() {
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<AddUserBodyRole>("user");
 
-  if (me && me.role !== "admin") {
-    return <Redirect to="/dashboard" />;
+  if (!me) {
+    return (
+      <Layout>
+        <div className="flex items-center justify-center min-h-[50vh]">
+          <Activity className="w-8 h-8 text-primary animate-pulse" />
+        </div>
+      </Layout>
+    );
   }
 
-  if (me && me.role !== "admin") return null;
+  if (me.role !== "admin") {
+    return <Redirect to="/dashboard" />;
+  }
 
   const handleAddUser = async () => {
     if (!newEmail) return;

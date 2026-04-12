@@ -6,9 +6,6 @@ import {
   useGetFixtureH2H,
   useGetTeamStatistics,
   useGetFixtureOddsMarkets,
-  useFollowFixture,
-  useUnfollowFixture,
-  useGetFollowedFixtures,
   getGetFixtureOddsQueryKey,
   getGetFixtureLiveOddsQueryKey,
   getGetFixtureOddsMarketsQueryKey,
@@ -24,6 +21,7 @@ import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { format } from "date-fns";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 
 export function Match() {
   const [, params] = useRoute("/match/:id");
@@ -35,27 +33,33 @@ export function Match() {
     query: { enabled: !!id, queryKey: ['fixture', id] } 
   });
   
-  const { data: followedData } = useGetFollowedFixtures({
-    request: { headers: { 'x-session-id': sessionId } },
-    query: {
-      queryKey: ['followedFixtures', sessionId],
-      enabled: !!sessionId,
-    }
+  const { toast } = useToast();
+
+  const { data: followedData, refetch: refetchFollowed } = useQuery<{ fixtureIds: number[] }>({
+    queryKey: ['followedFixtures', sessionId],
+    enabled: !!sessionId,
+    queryFn: async () => {
+      const res = await fetch('/api/fixtures/followed', {
+        headers: { 'x-session-id': sessionId },
+      });
+      if (!res.ok) throw new Error('Failed to fetch followed fixtures');
+      return res.json();
+    },
   });
 
-  const isFollowed = followedData?.fixtureIds?.includes(id);
-  const followMutation = useFollowFixture({ request: { headers: { 'x-session-id': sessionId } }});
-  const unfollowMutation = useUnfollowFixture({ request: { headers: { 'x-session-id': sessionId } }});
+  const isFollowed = followedData?.fixtureIds?.includes(id) ?? false;
 
   const toggleFollow = async () => {
     try {
-      if (isFollowed) {
-        await unfollowMutation.mutateAsync({ id });
-      } else {
-        await followMutation.mutateAsync({ id });
-      }
-      await queryClient.invalidateQueries({ queryKey: ['followedFixtures', sessionId] });
+      const method = isFollowed ? 'DELETE' : 'POST';
+      const res = await fetch(`/api/fixtures/${id}/follow`, {
+        method,
+        headers: { 'x-session-id': sessionId },
+      });
+      if (!res.ok) throw new Error('Follow request failed');
+      await refetchFollowed();
     } catch {
+      toast({ title: 'Could not update follow status', variant: 'destructive' });
     }
   };
 

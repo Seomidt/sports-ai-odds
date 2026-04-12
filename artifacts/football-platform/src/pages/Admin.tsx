@@ -58,6 +58,9 @@ interface AiStats {
   estimatedCostUsd: number;
   last24hInputTokens: number;
   last24hOutputTokens: number;
+  last7dInputTokens?: number;
+  last7dOutputTokens?: number;
+  last7dTokens?: number;
   callsTotal: number;
   model: string;
   pricingNote: string;
@@ -98,6 +101,20 @@ function AiStatsSection() {
             </div>
             <div className="text-xs text-muted-foreground font-mono mt-1">
               {data.totalInputTokens.toLocaleString()} in · {data.totalOutputTokens.toLocaleString()} out
+            </div>
+          </div>
+
+          {/* Last 7d */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-muted-foreground uppercase">Last 7 Days</span>
+              <Clock className="w-4 h-4 text-amber-400" />
+            </div>
+            <div className="text-2xl font-mono font-bold text-white">
+              {(data.last7dTokens ?? data.totalTokens).toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">
+              {(data.last7dInputTokens ?? data.last24hInputTokens).toLocaleString()} in · {(data.last7dOutputTokens ?? data.last24hOutputTokens).toLocaleString()} out
             </div>
           </div>
 

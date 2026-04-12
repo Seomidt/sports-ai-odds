@@ -5,11 +5,19 @@ import { Layout } from "@/components/Layout";
 import { Activity, Newspaper, Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const LEAGUES = [
-  { id: 39,  name: "Premier League",   flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
-  { id: 140, name: "La Liga",          flag: "🇪🇸" },
-  { id: 135, name: "Serie A",          flag: "🇮🇹" },
-  { id: 78,  name: "Bundesliga",       flag: "🇩🇪" },
-  { id: 2,   name: "Champions League", flag: "⭐" },
+  { id: 39,  name: "Premier League",      flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
+  { id: 140, name: "La Liga",             flag: "🇪🇸" },
+  { id: 135, name: "Serie A",             flag: "🇮🇹" },
+  { id: 78,  name: "Bundesliga",          flag: "🇩🇪" },
+  { id: 61,  name: "Ligue 1",            flag: "🇫🇷" },
+  { id: 88,  name: "Eredivisie",          flag: "🇳🇱" },
+  { id: 94,  name: "Primeira Liga",       flag: "🇵🇹" },
+  { id: 119, name: "Superliga",           flag: "🇩🇰" },
+  { id: 179, name: "Scottish Prem.",      flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿" },
+  { id: 203, name: "Süper Lig",           flag: "🇹🇷" },
+  { id: 2,   name: "Champions League",    flag: "⭐" },
+  { id: 3,   name: "Europa League",       flag: "🟠" },
+  { id: 848, name: "Conference League",   flag: "🟢" },
 ];
 
 interface NewsArticle {

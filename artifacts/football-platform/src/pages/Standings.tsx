@@ -4,11 +4,19 @@ import { Layout } from "@/components/Layout";
 import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 const LEAGUES = [
-  { id: 39,  name: "Premier League",   flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", season: 2024 },
-  { id: 140, name: "La Liga",          flag: "🇪🇸", season: 2024 },
-  { id: 135, name: "Serie A",          flag: "🇮🇹", season: 2024 },
-  { id: 78,  name: "Bundesliga",       flag: "🇩🇪", season: 2024 },
-  { id: 2,   name: "Champions League", flag: "⭐", season: 2024 },
+  { id: 39,  name: "Premier League",      flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", season: 2025 },
+  { id: 140, name: "La Liga",             flag: "🇪🇸", season: 2025 },
+  { id: 135, name: "Serie A",             flag: "🇮🇹", season: 2025 },
+  { id: 78,  name: "Bundesliga",          flag: "🇩🇪", season: 2025 },
+  { id: 61,  name: "Ligue 1",            flag: "🇫🇷", season: 2025 },
+  { id: 88,  name: "Eredivisie",          flag: "🇳🇱", season: 2025 },
+  { id: 94,  name: "Primeira Liga",       flag: "🇵🇹", season: 2025 },
+  { id: 119, name: "Superliga",           flag: "🇩🇰", season: 2025 },
+  { id: 179, name: "Scottish Prem.",      flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", season: 2025 },
+  { id: 203, name: "Süper Lig",           flag: "🇹🇷", season: 2025 },
+  { id: 2,   name: "Champions League",    flag: "⭐", season: 2025 },
+  { id: 3,   name: "Europa League",       flag: "🟠", season: 2025 },
+  { id: 848, name: "Conference League",   flag: "🟢", season: 2025 },
 ];
 
 function FormBadge({ char }: { char: string }) {

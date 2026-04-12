@@ -62,11 +62,19 @@ const LIVE_STATUSES = ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"];
 const POST_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
 
 const LEAGUE_META: Record<number, { country: string; logo: string; flag: string | null }> = {
-  39: { country: "England", logo: "https://media.api-sports.io/football/leagues/39.png", flag: "https://media.api-sports.io/flags/gb.svg" },
-  140: { country: "Spain", logo: "https://media.api-sports.io/football/leagues/140.png", flag: "https://media.api-sports.io/flags/es.svg" },
-  135: { country: "Italy", logo: "https://media.api-sports.io/football/leagues/135.png", flag: "https://media.api-sports.io/flags/it.svg" },
-  78: { country: "Germany", logo: "https://media.api-sports.io/football/leagues/78.png", flag: "https://media.api-sports.io/flags/de.svg" },
-  2: { country: "World", logo: "https://media.api-sports.io/football/leagues/2.png", flag: null },
+  39:  { country: "England",     logo: "https://media.api-sports.io/football/leagues/39.png",  flag: "https://media.api-sports.io/flags/gb.svg" },
+  140: { country: "Spain",       logo: "https://media.api-sports.io/football/leagues/140.png", flag: "https://media.api-sports.io/flags/es.svg" },
+  135: { country: "Italy",       logo: "https://media.api-sports.io/football/leagues/135.png", flag: "https://media.api-sports.io/flags/it.svg" },
+  78:  { country: "Germany",     logo: "https://media.api-sports.io/football/leagues/78.png",  flag: "https://media.api-sports.io/flags/de.svg" },
+  2:   { country: "World",       logo: "https://media.api-sports.io/football/leagues/2.png",   flag: null },
+  3:   { country: "World",       logo: "https://media.api-sports.io/football/leagues/3.png",   flag: null },
+  848: { country: "World",       logo: "https://media.api-sports.io/football/leagues/848.png", flag: null },
+  61:  { country: "France",      logo: "https://media.api-sports.io/football/leagues/61.png",  flag: "https://media.api-sports.io/flags/fr.svg" },
+  88:  { country: "Netherlands", logo: "https://media.api-sports.io/football/leagues/88.png",  flag: "https://media.api-sports.io/flags/nl.svg" },
+  94:  { country: "Portugal",    logo: "https://media.api-sports.io/football/leagues/94.png",  flag: "https://media.api-sports.io/flags/pt.svg" },
+  119: { country: "Denmark",     logo: "https://media.api-sports.io/football/leagues/119.png", flag: "https://media.api-sports.io/flags/dk.svg" },
+  179: { country: "Scotland",    logo: "https://media.api-sports.io/football/leagues/179.png", flag: "https://media.api-sports.io/flags/gb-sct.svg" },
+  203: { country: "Turkey",      logo: "https://media.api-sports.io/football/leagues/203.png", flag: "https://media.api-sports.io/flags/tr.svg" },
 };
 
 type DbFixture = typeof fixtures.$inferSelect;
@@ -287,7 +295,10 @@ router.get("/widget-proxy/standings", async (req, res) => {
 
     const meta = LEAGUE_META[leagueId] ?? { country: "Unknown", logo: "", flag: null };
     const leagueNames: Record<number, string> = {
-      39: "Premier League", 140: "La Liga", 135: "Serie A", 78: "Bundesliga", 2: "UEFA Champions League",
+      39: "Premier League", 140: "La Liga", 135: "Serie A", 78: "Bundesliga",
+      2: "UEFA Champions League", 3: "UEFA Europa League", 848: "UEFA Conference League",
+      61: "Ligue 1", 88: "Eredivisie", 94: "Primeira Liga",
+      119: "Superliga", 179: "Scottish Premiership", 203: "Super Lig",
     };
 
     const standingsTable = rows.map((s: Record<string, unknown>) => ({
@@ -339,11 +350,19 @@ router.get("/widget-proxy/standings", async (req, res) => {
 
 router.get("/widget-proxy/leagues", async (_req, res) => {
   const leagues = [
-    { id: 39, name: "Premier League", country: "England", season: 2024 },
-    { id: 140, name: "La Liga", country: "Spain", season: 2024 },
-    { id: 135, name: "Serie A", country: "Italy", season: 2024 },
-    { id: 78, name: "Bundesliga", country: "Germany", season: 2024 },
-    { id: 2, name: "UEFA Champions League", country: "World", season: 2024 },
+    { id: 39,  name: "Premier League",        country: "England",     season: 2025 },
+    { id: 140, name: "La Liga",               country: "Spain",       season: 2025 },
+    { id: 135, name: "Serie A",               country: "Italy",       season: 2025 },
+    { id: 78,  name: "Bundesliga",            country: "Germany",     season: 2025 },
+    { id: 2,   name: "UEFA Champions League", country: "World",       season: 2025 },
+    { id: 3,   name: "UEFA Europa League",    country: "World",       season: 2025 },
+    { id: 848, name: "UEFA Conference League",country: "World",       season: 2025 },
+    { id: 61,  name: "Ligue 1",              country: "France",      season: 2025 },
+    { id: 88,  name: "Eredivisie",            country: "Netherlands", season: 2025 },
+    { id: 94,  name: "Primeira Liga",         country: "Portugal",    season: 2025 },
+    { id: 119, name: "Superliga",             country: "Denmark",     season: 2025 },
+    { id: 179, name: "Scottish Premiership",  country: "Scotland",    season: 2025 },
+    { id: 203, name: "Super Lig",             country: "Turkey",      season: 2025 },
   ];
 
   const response = leagues.map((l) => {

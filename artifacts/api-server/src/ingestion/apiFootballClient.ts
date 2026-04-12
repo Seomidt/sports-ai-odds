@@ -99,11 +99,19 @@ export function getApiStats() {
 }
 
 export const TRACKED_LEAGUES = [
-  { id: 39, name: "Premier League", season: 2025 },
-  { id: 140, name: "La Liga", season: 2025 },
-  { id: 135, name: "Serie A", season: 2025 },
-  { id: 78, name: "Bundesliga", season: 2025 },
-  { id: 2, name: "Champions League", season: 2025 },
+  { id: 39,  name: "Premier League",       season: 2025 },
+  { id: 140, name: "La Liga",              season: 2025 },
+  { id: 135, name: "Serie A",              season: 2025 },
+  { id: 78,  name: "Bundesliga",           season: 2025 },
+  { id: 2,   name: "Champions League",     season: 2025 },
+  { id: 3,   name: "Europa League",        season: 2025 },
+  { id: 848, name: "Conference League",    season: 2025 },
+  { id: 61,  name: "Ligue 1",             season: 2025 },
+  { id: 88,  name: "Eredivisie",           season: 2025 },
+  { id: 94,  name: "Primeira Liga",        season: 2025 },
+  { id: 119, name: "Superliga",            season: 2025 },
+  { id: 179, name: "Scottish Premiership", season: 2025 },
+  { id: 203, name: "Super Lig",            season: 2025 },
 ];
 
 export interface ApiFixture {

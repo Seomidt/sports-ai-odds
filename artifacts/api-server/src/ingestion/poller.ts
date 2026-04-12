@@ -23,7 +23,7 @@ import {
   oddsMarkets,
   fixtureSignals,
 } from "@workspace/db/schema";
-import { eq, inArray, lt, sql } from "drizzle-orm";
+import { eq, and, inArray, lt, sql } from "drizzle-orm";
 import {
   TRACKED_LEAGUES,
   fetchTodayFixtures,
@@ -292,6 +292,9 @@ async function insertOddsSnapshot(
     if (ouMarket) overUnder25 = parseFloat(ouMarket.values.find((v) => v.value === "Over 2.5")?.odd ?? "0") || null;
   }
 
+  await db.delete(oddsSnapshots).where(
+    and(eq(oddsSnapshots.fixtureId, fixtureId), eq(oddsSnapshots.bookmaker, bm.name))
+  );
   await db.insert(oddsSnapshots).values({
     fixtureId,
     bookmaker: bm.name,
@@ -1083,6 +1086,9 @@ async function syncOddsAllMarketsForUpcoming() {
       for (const m of markets) {
         if (seen.has(m.bookmaker)) continue;
         seen.add(m.bookmaker);
+        await db.delete(oddsMarkets).where(
+          and(eq(oddsMarkets.fixtureId, fix.fixtureId), eq(oddsMarkets.bookmaker, m.bookmaker))
+        );
         await db.insert(oddsMarkets).values({
           fixtureId: fix.fixtureId,
           bookmaker: m.bookmaker,
@@ -1103,6 +1109,9 @@ async function syncOddsAllMarketsForUpcoming() {
       for (const bet of bm.bets) {
         mkt[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
       }
+      await db.delete(oddsMarkets).where(
+        and(eq(oddsMarkets.fixtureId, fix.fixtureId), eq(oddsMarkets.bookmaker, bm.name))
+      );
       await db.insert(oddsMarkets).values({
         fixtureId: fix.fixtureId,
         bookmaker: bm.name,
@@ -1457,13 +1466,15 @@ export function startPoller() {
   // Standings: every 2 hours (updates after match ends, not mid-game)
   setInterval(() => syncStandings().catch(console.error), 2 * 60 * 60 * 1000);
 
-  // Pre-match lineups + odds + predictions + injuries: every 5 min (Ultra budget allows it)
+  // Pre-match lineups + base odds + injuries: every 5 min
   setInterval(() => {
     syncPreMatchData().catch(console.error);
     syncOdds().catch(console.error);
-    syncOddsAllMarketsForUpcoming().catch(console.error);
     syncFixtureInjuriesForUpcoming().catch(console.error);
   }, 5 * 60 * 1000);
+
+  // Full odds markets (all bookmakers, all bet types): every 30 min is enough
+  setInterval(() => syncOddsAllMarketsForUpcoming().catch(console.error), 30 * 60 * 1000);
 
   // H2H: every 6 hours (changes only before a new fixture)
   setInterval(() => syncH2HForUpcomingFixtures().catch(console.error), 6 * 60 * 60 * 1000);

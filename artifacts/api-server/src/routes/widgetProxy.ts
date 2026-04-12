@@ -243,7 +243,7 @@ router.get("/widget-proxy/fixtures/headtohead", async (req, res) => {
 
 router.get("/widget-proxy/standings", async (req, res) => {
   const leagueId = Number(req.query["league"] ?? 0);
-  const seasonYear = Number(req.query["season"] ?? 2024);
+  const seasonYear = Number(req.query["season"] ?? 2025);
 
   if (!leagueId) {
     return res.status(400).json({ errors: { league: "Required" }, response: [] });

@@ -136,7 +136,7 @@ router.get("/fixtures/:id/player-stats", async (req, res): Promise<void> => {
 
 router.get("/leagues/:leagueId/topscorers", async (req, res): Promise<void> => {
   const leagueId = parseInt(req.params.leagueId ?? "0");
-  const season = parseInt((req.query.season as string) ?? "2024");
+  const season = parseInt((req.query.season as string) ?? "2025");
 
   const ck = `league:${leagueId}:topscorers:${season}`;
   const hit = cacheGet(ck);
@@ -156,7 +156,7 @@ router.get("/leagues/:leagueId/topscorers", async (req, res): Promise<void> => {
 
 router.get("/leagues/:leagueId/topassists", async (req, res): Promise<void> => {
   const leagueId = parseInt(req.params.leagueId ?? "0");
-  const season = parseInt((req.query.season as string) ?? "2024");
+  const season = parseInt((req.query.season as string) ?? "2025");
 
   const ck = `league:${leagueId}:topassists:${season}`;
   const hit = cacheGet(ck);
@@ -280,7 +280,7 @@ router.get("/fixtures/:id/odds-markets", async (req, res): Promise<void> => {
 
 router.get("/teams/:teamId/statistics", async (req, res): Promise<void> => {
   const teamId = parseInt(req.params.teamId ?? "0");
-  const season = parseInt((req.query.season as string) ?? "2024");
+  const season = parseInt((req.query.season as string) ?? "2025");
   if (!teamId) { res.status(400).json({ error: "Invalid team id" }); return; }
 
   const ck = `team:${teamId}:statistics:${season}`;
@@ -352,7 +352,7 @@ router.get("/players/:playerId", async (req, res): Promise<void> => {
 
 router.get("/leagues/:leagueId/topdiscipline", async (req, res): Promise<void> => {
   const leagueId = parseInt(req.params.leagueId ?? "0");
-  const season = parseInt((req.query.season as string) ?? "2024");
+  const season = parseInt((req.query.season as string) ?? "2025");
 
   const ck = `league:${leagueId}:topdiscipline:${season}`;
   const hit = cacheGet(ck);

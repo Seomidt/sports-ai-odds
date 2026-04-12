@@ -944,8 +944,8 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
   awayTeam: string;
 }) {
   const { data: h2hData, isLoading } = useGetFixtureH2H(fixtureId, { query: { queryKey: getGetFixtureH2HQueryKey(fixtureId), staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
-  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2024 }, { query: { queryKey: getGetTeamStatisticsQueryKey(homeTeamId, { season: 2024 }), staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
-  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2024 }, { query: { queryKey: getGetTeamStatisticsQueryKey(awayTeamId, { season: 2024 }), staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
+  const { data: homeStats } = useGetTeamStatistics(homeTeamId, { season: 2025 }, { query: { queryKey: getGetTeamStatisticsQueryKey(homeTeamId, { season: 2025 }), staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
+  const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2025 }, { query: { queryKey: getGetTeamStatisticsQueryKey(awayTeamId, { season: 2025 }), staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
 
   const h2hRows = h2hData?.h2h ?? [];
   const homeSeasonStats = homeStats?.statistics?.[0] ?? null;

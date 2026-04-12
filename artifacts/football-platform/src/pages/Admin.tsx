@@ -501,8 +501,9 @@ export function Admin() {
     if (!newEmail) return;
     try {
       await addMutation.mutateAsync({ data: { email: newEmail, role: newRole } });
-      queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
       setNewEmail("");
+      setNewRole("user");
       toast({ title: "User added successfully" });
     } catch (e) {
       toast({ title: "Failed to add user", variant: "destructive" });
@@ -512,7 +513,7 @@ export function Admin() {
   const handleDeleteUser = async (id: number) => {
     try {
       await deleteMutation.mutateAsync({ id });
-      queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
       toast({ title: "User removed" });
     } catch (e) {
       toast({ title: "Failed to remove user", variant: "destructive" });
@@ -522,7 +523,7 @@ export function Admin() {
   const handleUpdateRole = async (id: number, role: string) => {
     try {
       await updateMutation.mutateAsync({ id, data: { role: role as UpdateUserBodyRole } });
-      queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
       toast({ title: "Role updated" });
     } catch (e) {
       toast({ title: "Failed to update role", variant: "destructive" });
@@ -621,17 +622,17 @@ export function Admin() {
             </h2>
             
             <div className="glass-card p-6 rounded-xl space-y-6">
-              <div className="flex gap-4 items-end bg-black/20 p-4 rounded-lg border border-white/5">
-                <div className="flex-1 space-y-2">
+              <div className="flex flex-col lg:flex-row gap-4 items-stretch lg:items-end bg-black/20 p-4 rounded-lg border border-white/5">
+                <div className="flex-1 min-w-0 space-y-2">
                   <label className="text-xs font-mono text-muted-foreground uppercase">Email Address</label>
                   <Input 
                     placeholder="analyst@syndicate.com" 
                     value={newEmail} 
                     onChange={e => setNewEmail(e.target.value)} 
-                    className="bg-black/40 border-white/10 font-mono text-white placeholder:text-muted-foreground/40"
+                    className="w-full bg-black/40 border-white/10 font-mono text-white placeholder:text-muted-foreground/40 px-4 py-3 h-12 text-sm"
                   />
                 </div>
-                <div className="w-32 space-y-2">
+                <div className="w-full lg:w-32 space-y-2">
                   <label className="text-xs font-mono text-muted-foreground uppercase">Role</label>
                   <Select value={newRole} onValueChange={(v) => setNewRole(v as AddUserBodyRole)}>
                     <SelectTrigger className="bg-black/40 border-white/10 font-mono">
@@ -643,7 +644,7 @@ export function Admin() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleAddUser} disabled={!newEmail || addMutation.isPending} className="font-mono tracking-wider">
+                <Button onClick={handleAddUser} disabled={!newEmail || addMutation.isPending} className="w-full lg:w-auto font-mono tracking-wider">
                   <Plus className="w-4 h-4 mr-2" /> ADD
                 </Button>
               </div>

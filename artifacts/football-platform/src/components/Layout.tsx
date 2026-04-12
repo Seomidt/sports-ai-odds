@@ -2,6 +2,7 @@ import { Link, useLocation } from "wouter";
 import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { AlertPoller } from "./AlertPoller";
 import { useState } from "react";
 
@@ -11,7 +12,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { signOut } = useClerk();
   const { user } = useUser();
-  const { data: me } = useGetMe();
+  const { data: me } = useGetMe({
+    query: {
+      staleTime: 5 * 60 * 1000,
+      placeholderData: keepPreviousData,
+    },
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [

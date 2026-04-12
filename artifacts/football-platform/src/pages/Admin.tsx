@@ -3,7 +3,8 @@ import {
   useGetAdminUsers, 
   useAddAdminUser, 
   useDeleteAdminUser, 
-  useUpdateAdminUser 
+  useUpdateAdminUser,
+  getGetAdminUsersQueryKey,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, LogIn } from "lucide-react";
@@ -619,7 +620,7 @@ function AdminContent() {
     if (!newEmail) return;
     try {
       await addMutation.mutateAsync({ data: { email: newEmail, role: newRole } });
-      await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      await queryClient.invalidateQueries({ queryKey: getGetAdminUsersQueryKey() });
       setNewEmail("");
       setNewRole("user");
       toast({ title: "User added successfully" });
@@ -631,7 +632,7 @@ function AdminContent() {
   const handleDeleteUser = async (id: number) => {
     try {
       await deleteMutation.mutateAsync({ id });
-      await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      await queryClient.invalidateQueries({ queryKey: getGetAdminUsersQueryKey() });
       toast({ title: "User removed" });
     } catch (e) {
       toast({ title: "Failed to remove user", variant: "destructive" });
@@ -641,7 +642,7 @@ function AdminContent() {
   const handleUpdateRole = async (id: number, role: string) => {
     try {
       await updateMutation.mutateAsync({ id, data: { role: role as UpdateUserBodyRole } });
-      await queryClient.invalidateQueries({ queryKey: ['adminUsers'] });
+      await queryClient.invalidateQueries({ queryKey: getGetAdminUsersQueryKey() });
       toast({ title: "Role updated" });
     } catch (e) {
       toast({ title: "Failed to update role", variant: "destructive" });

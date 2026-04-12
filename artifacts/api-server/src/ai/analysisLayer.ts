@@ -534,22 +534,38 @@ Respond with ONLY valid JSON:
 
 // ─── Live analysis (kept for live tab) ───────────────────────────────────────
 
-async function buildLiveSignalContext(fixtureId: number): Promise<Record<string, number | boolean | string>> {
-  const signals = await db.query.fixtureSignals.findMany({
-    where: (s, { and: andFn, eq: eqFn }) =>
-      andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, "live")),
-  });
-  const fixture = await db.query.fixtures.findFirst({
-    where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
-  });
+async function buildLiveSignalContext(fixtureId: number): Promise<Record<string, number | boolean | string> | null> {
+  const [signals, fixture, latestOdds] = await Promise.all([
+    db.query.fixtureSignals.findMany({
+      where: (s, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, "live")),
+    }),
+    db.query.fixtures.findFirst({
+      where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
+    }),
+    db.query.oddsSnapshots.findFirst({
+      where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId),
+      orderBy: (o, { desc: d }) => [d(o.snappedAt)],
+    }),
+  ]);
+
+  if (!fixture) return null;
 
   const ctx: Record<string, number | boolean | string> = {
-    match: `${fixture?.homeTeamName ?? "Home"} vs ${fixture?.awayTeamName ?? "Away"}`,
-    minute: fixture?.statusElapsed ?? 0,
-    home_goals: fixture?.homeGoals ?? 0,
-    away_goals: fixture?.awayGoals ?? 0,
-    status: fixture?.statusShort ?? "NS",
+    match: `${fixture.homeTeamName ?? "Home"} vs ${fixture.awayTeamName ?? "Away"}`,
+    minute: fixture.statusElapsed ?? 0,
+    home_goals: fixture.homeGoals ?? 0,
+    away_goals: fixture.awayGoals ?? 0,
+    status: fixture.statusShort ?? "NS",
   };
+
+  if (latestOdds) {
+    if (latestOdds.homeWin) ctx.home_odds = latestOdds.homeWin;
+    if (latestOdds.draw) ctx.draw_odds = latestOdds.draw;
+    if (latestOdds.awayWin) ctx.away_odds = latestOdds.awayWin;
+    if (latestOdds.overUnder25) ctx.over_25_odds = latestOdds.overUnder25;
+    if (latestOdds.btts) ctx.btts_odds = latestOdds.btts;
+  }
 
   for (const s of signals) {
     if (s.signalBool !== null && s.signalBool !== undefined) ctx[s.signalKey] = s.signalBool;
@@ -564,7 +580,7 @@ export async function getLiveAnalysis(fixtureId: number): Promise<LiveAnalysis> 
   if (cached) return cached;
 
   const ctx = await buildLiveSignalContext(fixtureId);
-  if (Object.keys(ctx).length <= 5) return FALLBACK_LIVE;
+  if (!ctx) return FALLBACK_LIVE;
 
   const prompt = `You are a football analyst. Live match data:
 

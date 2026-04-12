@@ -458,9 +458,16 @@ function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
         <div className="flex items-center justify-center py-16">
           <Activity className="w-6 h-6 text-primary animate-pulse" />
         </div>
-      ) : liveAnalysis?.headline ? (
+      ) : liveAnalysis ? (
         <div className="space-y-4">
-          <p className="text-xl font-bold text-white leading-snug">{liveAnalysis.headline}</p>
+          {liveAnalysis.headline ? (
+            <p className="text-xl font-bold text-white leading-snug">{liveAnalysis.headline}</p>
+          ) : (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Activity className="w-4 h-4 animate-pulse text-primary" />
+              <span className="text-sm italic">Generating live analysis…</span>
+            </div>
+          )}
           <div className="flex flex-wrap gap-2">
             {liveAnalysis.momentum_verdict && (
               <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-violet-400 bg-violet-400/10 border-violet-400/20 uppercase">
@@ -474,7 +481,9 @@ function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
               </span>
             )}
           </div>
-          <p className="text-muted-foreground leading-relaxed">{liveAnalysis.narrative}</p>
+          {liveAnalysis.narrative && (
+            <p className="text-muted-foreground leading-relaxed">{liveAnalysis.narrative}</p>
+          )}
           {liveAnalysis.key_factors && liveAnalysis.key_factors.length > 0 && (
             <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
               {liveAnalysis.key_factors.map((f: string, i: number) => (

@@ -47,6 +47,20 @@ export async function runAlertEngine() {
         const alertKey = `${fixtureId}:${signal.signalKey}:${session.sessionId}`;
         if (alreadyAlerted.has(alertKey)) continue;
 
+        // DB-level dedup: skip if an alert for this (fixture, signal, session) already exists
+        const existing = await db.query.alertLog.findFirst({
+          where: (a, { and: andFn, eq: eqFn }) =>
+            andFn(
+              eqFn(a.fixtureId, fixtureId),
+              eqFn(a.signalKey, signal.signalKey),
+              eqFn(a.sessionId, session.sessionId),
+            ),
+        });
+        if (existing) {
+          alreadyAlerted.add(alertKey);
+          continue;
+        }
+
         // Generate AI text
         const alertText = await generateAlertText(signal.signalKey, signal.signalLabel, matchName);
 

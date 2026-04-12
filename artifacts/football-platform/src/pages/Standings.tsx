@@ -31,7 +31,7 @@ function FormBadge({ char }: { char: string }) {
 function TrendIcon({ diff }: { diff: number }) {
   if (diff > 0) return <TrendingUp className="w-3 h-3 text-primary" />;
   if (diff < 0) return <TrendingDown className="w-3 h-3 text-destructive" />;
-  return <Minus className="w-3 h-3 text-muted-foreground/40" />;
+  return <Minus className="w-3 h-3 text-amber-400" />;
 }
 
 function StandingsTable({ leagueId }: { leagueId: number }) {
@@ -77,7 +77,7 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
           <TooltipTrigger asChild>
             <span className="cursor-help border-b border-dashed border-muted-foreground/30">{label}</span>
           </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs font-mono max-w-48">
+          <TooltipContent side="top" className="text-xs font-mono max-w-48 text-white bg-black/90 border border-white/10">
             {COL_TIPS[label] ?? label}
           </TooltipContent>
         </Tooltip>

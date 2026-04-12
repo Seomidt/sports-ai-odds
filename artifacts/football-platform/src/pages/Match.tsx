@@ -277,7 +277,7 @@ function TipCard({ tip, betTypeLabel }: { tip: BettingTip; betTypeLabel: string 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center gap-1.5 cursor-help">
-                  <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
+                  <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white'}`}>
                     {tip.trustScore}
                   </span>
                   <span className="text-xs text-muted-foreground font-mono">/10</span>

@@ -12,9 +12,9 @@ import proDataRouter from "./proData.js";
 const router: IRouter = Router();
 
 router.use(healthRouter);
+router.use(alertsRouter);
 router.use(fixturesRouter);
 router.use(analysisRouter);
-router.use(alertsRouter);
 router.use(adminRouter);
 router.use(meRouter);
 router.use(billingRouter);

@@ -6,7 +6,8 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, HelpCircle, LogIn } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, LogIn } from "lucide-react";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { format } from "date-fns";
 import { useState, Component, ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -638,9 +639,9 @@ function AdminContent() {
                   <div className="flex justify-between items-end mb-2">
                     <span className="text-sm font-mono text-muted-foreground uppercase flex items-center gap-1">
                       Requests Today
-                      <span title="Total API-Football requests made today against your daily quota">
-                        <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
-                      </span>
+                      <HelpTooltip side="top" iconClassName="w-3.5 h-3.5">
+                        Total API-Football requests made today against your daily quota
+                      </HelpTooltip>
                     </span>
                     <span className="text-2xl font-mono font-bold text-white">
                       {statsData.requestsToday} <span className="text-sm text-muted-foreground">/ {statsData.maxPerDay}</span>
@@ -656,18 +657,18 @@ function AdminContent() {
                     <div>
                       <div className="text-xs font-mono text-muted-foreground uppercase mb-1 flex items-center gap-1">
                         Last Hour
-                        <span title="Requests in the last 60 minutes (plan limit: 500/min)">
-                          <HelpCircle className="w-3 h-3 text-primary/60 cursor-help" />
-                        </span>
+                        <HelpTooltip side="top" iconClassName="w-3 h-3">
+                          Requests in the last 60 minutes (plan limit: 500/min)
+                        </HelpTooltip>
                       </div>
                       <div className="text-lg font-mono text-white">{statsData.requestsThisHour}</div>
                     </div>
                     <div>
                       <div className="text-xs font-mono text-muted-foreground uppercase mb-1 flex items-center gap-1">
                         Remaining
-                        <span title="API requests remaining for today before hitting your daily cap">
-                          <HelpCircle className="w-3 h-3 text-primary/60 cursor-help" />
-                        </span>
+                        <HelpTooltip side="top" iconClassName="w-3 h-3">
+                          API requests remaining for today before hitting your daily cap
+                        </HelpTooltip>
                       </div>
                       <div className="text-lg font-mono text-white">{statsData.remaining}</div>
                     </div>
@@ -679,9 +680,9 @@ function AdminContent() {
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-mono text-muted-foreground uppercase flex items-center gap-1">
                         7-Day Average
-                        <span title="Gennemsnitligt antal API-kald per dag de seneste 7 dage">
-                          <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
-                        </span>
+                        <HelpTooltip side="top" iconClassName="w-3.5 h-3.5">
+                          Gennemsnitligt antal API-kald per dag de seneste 7 dage
+                        </HelpTooltip>
                       </span>
                       <span className="text-2xl font-mono font-bold text-primary">
                         {(statsData as any).dailyAvg ?? 0}
@@ -804,9 +805,9 @@ function AdminContent() {
             <span className="ml-3 text-sm font-normal text-muted-foreground font-mono normal-case">
               {clerkUsersData ? `${clerkUsersData.total} total` : ""}
             </span>
-            <span className="ml-2" title="All accounts that have signed up via Clerk authentication">
-              <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
-            </span>
+            <HelpTooltip side="top" iconClassName="w-3.5 h-3.5" className="ml-2">
+              All accounts that have signed up via Clerk authentication
+            </HelpTooltip>
           </h2>
           {isLoadingClerkUsers ? (
             <div className="flex justify-center py-8"><Activity className="w-6 h-6 text-primary animate-pulse" /></div>

@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, TrendingUp, TrendingDown, Minus, ChevronDown, HelpCircle } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Activity, TrendingUp, TrendingDown, Minus, ChevronDown } from "lucide-react";
+import { HelpTooltip } from "@/components/HelpTooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -73,17 +74,12 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
   function ColTh({ label, align = "center", className = "" }: { label: string; align?: "left" | "center" | "right"; className?: string }) {
     return (
       <th className={`text-${align} py-3 px-2 font-mono text-[11px] text-muted-foreground/80 uppercase tracking-widest ${className}`}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span className="inline-flex items-center gap-1 cursor-help select-none">
-              {label}
-              <HelpCircle className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs font-mono max-w-48 text-white bg-black/90 border border-white/10">
+        <span className="inline-flex items-center gap-1 select-none">
+          {label}
+          <HelpTooltip side="top" iconClassName="w-3.5 h-3.5">
             {COL_TIPS[label] ?? label}
-          </TooltipContent>
-        </Tooltip>
+          </HelpTooltip>
+        </span>
       </th>
     );
   }

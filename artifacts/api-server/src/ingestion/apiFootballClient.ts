@@ -1,3 +1,7 @@
+import { db } from "@workspace/db";
+import { systemKv } from "@workspace/db/schema";
+import { eq } from "drizzle-orm";
+
 const BASE_URL = "https://v3.football.api-sports.io";
 
 const API_KEY = process.env["API_FOOTBALL_KEY"];
@@ -12,8 +16,54 @@ const MIN_REQUEST_INTERVAL_MS = 250; // Ultra plan: 500 req/min = 120ms, use 250
 let requestLog: { timestamp: number; endpoint: string }[] = [];
 let dayResetAt = Date.now();
 
-// 7-day rolling history — persists in memory across the day
+// 7-day rolling history — now persisted to DB across restarts
 const dailyHistory: { date: string; count: number }[] = [];
+
+// ── Persistence helpers ──────────────────────────────────────────────────────
+
+async function kvGet(key: string): Promise<string | null> {
+  try {
+    const row = await db.query.systemKv.findFirst({ where: (t, { eq: eqFn }) => eqFn(t.key, key) });
+    return row?.value ?? null;
+  } catch { return null; }
+}
+
+async function kvSet(key: string, value: string): Promise<void> {
+  try {
+    await db.insert(systemKv).values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: systemKv.key, set: { value, updatedAt: new Date() } });
+  } catch { /* best-effort */ }
+}
+
+/** Load today's request count + 7-day history from DB. Call once on startup. */
+export async function initApiStats(): Promise<void> {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayVal = await kvGet(`api:today:${today}`);
+  if (todayVal) requestsToday = parseInt(todayVal, 10) || 0;
+
+  const histVal = await kvGet("api:history");
+  if (histVal) {
+    try {
+      const parsed = JSON.parse(histVal) as { date: string; count: number }[];
+      // Only keep days that are not today (today is tracked live)
+      const past = parsed.filter((d) => d.date !== today);
+      dailyHistory.push(...past.slice(-6));
+    } catch { /* ignore */ }
+  }
+  console.log(`[api-football] Stats loaded from DB — ${requestsToday} requests today`);
+}
+
+let _flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced flush — writes at most once per 30s */
+function scheduleFlush(): void {
+  if (_flushTimer) return;
+  _flushTimer = setTimeout(async () => {
+    _flushTimer = null;
+    const today = new Date().toISOString().slice(0, 10);
+    await kvSet(`api:today:${today}`, String(requestsToday));
+  }, 30_000);
+}
 
 // Serialise ALL API requests through a single promise chain to prevent concurrent
 // requests from racing past the rate-limit check.
@@ -51,6 +101,7 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
     });
 
     requestsToday++;
+    scheduleFlush();
     requestLog.push({ timestamp: Date.now(), endpoint });
     // Keep only last 200 entries in memory
     if (requestLog.length > 200) requestLog = requestLog.slice(-200);
@@ -75,15 +126,18 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
   }); // end serialiseRequest
 }
 
-// Reset counter daily — save today's count to 7-day history first
-setInterval(() => {
+// Reset counter daily — persist today's count to DB and history
+setInterval(async () => {
   const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
   dailyHistory.push({ date: dateStr, count: requestsToday });
   if (dailyHistory.length > 7) dailyHistory.shift(); // keep last 7 days
+  // Persist final count + updated history before reset
+  await kvSet(`api:today:${dateStr}`, String(requestsToday));
+  await kvSet("api:history", JSON.stringify(dailyHistory));
   requestsToday = 0;
   requestLog = [];
   dayResetAt = Date.now();
-  console.log("[api-football] Daily request counter reset");
+  console.log("[api-football] Daily request counter reset and persisted");
 }, 24 * 60 * 60 * 1000);
 
 export function getApiStats() {
@@ -649,6 +703,7 @@ export async function fetchFixturesBySeason(
       });
 
       requestsToday++;
+      scheduleFlush();
       requestLog.push({ timestamp: Date.now(), endpoint: "/fixtures[season]" });
       if (requestLog.length > 200) requestLog = requestLog.slice(-200);
 

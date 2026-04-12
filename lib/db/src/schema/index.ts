@@ -625,3 +625,11 @@ export type Trophy = typeof trophies.$inferSelect;
 export type AiBettingTip = typeof aiBettingTips.$inferSelect;
 export type OddsMarket = typeof oddsMarkets.$inferSelect;
 export type NewsArticle = typeof newsArticles.$inferSelect;
+
+// ─── Persistent key-value store (counters that survive restarts) ──────────────
+
+export const systemKv = pgTable("system_kv", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

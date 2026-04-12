@@ -55,10 +55,12 @@ import {
   fetchSquad,
   fetchFixtureInjuries,
   fetchFixturesBySeason,
+  initApiStats,
   type ApiFixture,
   type ApiStatItem,
   type ApiLineup,
 } from "./apiFootballClient.js";
+import { initAiStats } from "../ai/analysisLayer.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
@@ -1426,6 +1428,10 @@ export function startPoller() {
   pollerStarted = true;
 
   console.log("[poller] Starting polling service (Ultra plan — 75k req/day, 500 req/min)");
+
+  // ── Load persisted stats from DB (survive restarts) ───────────────────────
+  initApiStats().catch(console.error);
+  initAiStats().catch(console.error);
 
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncNearTermFixtures().catch(console.error);

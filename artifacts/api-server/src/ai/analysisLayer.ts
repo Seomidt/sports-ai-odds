@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
-import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -25,6 +25,22 @@ function setCached<T>(key: string, value: T, ttlMs: number) {
   cache.set(key, { value, expiresAt: Date.now() + ttlMs });
 }
 
+// ─── KV persistence helpers ───────────────────────────────────────────────────
+
+async function kvSet(key: string, value: string): Promise<void> {
+  try {
+    await db.insert(systemKv).values({ key, value, updatedAt: new Date() })
+      .onConflictDoUpdate({ target: systemKv.key, set: { value, updatedAt: new Date() } });
+  } catch { /* best-effort */ }
+}
+
+async function kvGet(key: string): Promise<string | null> {
+  try {
+    const row = await db.query.systemKv.findFirst({ where: (t, { eq: eqFn }) => eqFn(t.key, key) });
+    return row?.value ?? null;
+  } catch { return null; }
+}
+
 // ─── Token tracking ───────────────────────────────────────────────────────────
 
 const INPUT_COST_PER_M = 0.80;
@@ -34,6 +50,26 @@ interface AiUsageEntry { at: number; inputTokens: number; outputTokens: number; 
 let aiUsageLog: AiUsageEntry[] = [];
 let totalInputTokens = 0;
 let totalOutputTokens = 0;
+
+/** Load cumulative AI token usage from DB. Call once on startup. */
+export async function initAiStats(): Promise<void> {
+  const inputVal = await kvGet("ai:input_tokens");
+  const outputVal = await kvGet("ai:output_tokens");
+  if (inputVal) totalInputTokens = parseInt(inputVal, 10) || 0;
+  if (outputVal) totalOutputTokens = parseInt(outputVal, 10) || 0;
+  console.log(`[ai] Stats loaded from DB — ${totalInputTokens + totalOutputTokens} total tokens`);
+}
+
+let _aiFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleAiFlush(): void {
+  if (_aiFlushTimer) return;
+  _aiFlushTimer = setTimeout(async () => {
+    _aiFlushTimer = null;
+    await kvSet("ai:input_tokens", String(totalInputTokens));
+    await kvSet("ai:output_tokens", String(totalOutputTokens));
+  }, 10_000); // flush 10s after last AI call
+}
 
 export function getAiStats() {
   const totalCost =
@@ -65,6 +101,7 @@ async function callClaude(prompt: string): Promise<string | null> {
     const outputTok = msg.usage?.output_tokens ?? 0;
     totalInputTokens += inputTok;
     totalOutputTokens += outputTok;
+    scheduleAiFlush();
     aiUsageLog.push({ at: Date.now(), inputTokens: inputTok, outputTokens: outputTok });
     if (aiUsageLog.length > 500) aiUsageLog = aiUsageLog.slice(-500);
     const block = msg.content[0];

@@ -1,23 +1,19 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Minus, Search } from "lucide-react";
 
-const LEAGUES = [
-  { id: 39,  name: "Premier League",      flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿", season: 2025 },
-  { id: 140, name: "La Liga",             flag: "🇪🇸", season: 2025 },
-  { id: 135, name: "Serie A",             flag: "🇮🇹", season: 2025 },
-  { id: 78,  name: "Bundesliga",          flag: "🇩🇪", season: 2025 },
-  { id: 61,  name: "Ligue 1",            flag: "🇫🇷", season: 2025 },
-  { id: 88,  name: "Eredivisie",          flag: "🇳🇱", season: 2025 },
-  { id: 94,  name: "Primeira Liga",       flag: "🇵🇹", season: 2025 },
-  { id: 119, name: "Superliga",           flag: "🇩🇰", season: 2025 },
-  { id: 179, name: "Scottish Prem.",      flag: "🏴󠁧󠁢󠁳󠁣󠁴󠁿", season: 2025 },
-  { id: 203, name: "Süper Lig",           flag: "🇹🇷", season: 2025 },
-  { id: 2,   name: "Champions League",    flag: "⭐", season: 2025 },
-  { id: 3,   name: "Europa League",       flag: "🟠", season: 2025 },
-  { id: 848, name: "Conference League",   flag: "🟢", season: 2025 },
-];
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const LEAGUE_LOGO = (id: number) => `https://media.api-sports.io/football/leagues/${id}.png`;
+
+interface LeagueEntry {
+  leagueId: number;
+  leagueName: string;
+  season: string;
+  teams: string;
+}
 
 function FormBadge({ char }: { char: string }) {
   const color =
@@ -37,7 +33,7 @@ function TrendIcon({ diff }: { diff: number }) {
   return <Minus className="w-3 h-3 text-muted-foreground/40" />;
 }
 
-function StandingsTable({ leagueId, season }: { leagueId: number; season: number }) {
+function StandingsTable({ leagueId }: { leagueId: number }) {
   const { data, isLoading } = useGetStandings(leagueId, {
     query: { queryKey: getGetStandingsQueryKey(leagueId), staleTime: 10 * 60_000, gcTime: 30 * 60_000, refetchInterval: 15 * 60_000 },
   });
@@ -140,11 +136,11 @@ function StandingsTable({ leagueId, season }: { leagueId: number; season: number
       <div className="flex gap-6 px-4 py-3 border-t border-white/6 mt-1">
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 font-mono">
           <div className="w-3 h-3 rounded-sm bg-primary/30 border border-primary/50" />
-          Champions League
+          UCL / Top
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 font-mono">
           <div className="w-3 h-3 rounded-sm bg-amber-400/20 border border-amber-400/40" />
-          Europa League
+          Europe
         </div>
         <div className="flex items-center gap-2 text-[11px] text-muted-foreground/60 font-mono">
           <div className="w-3 h-3 rounded-sm bg-destructive/20 border border-destructive/40" />
@@ -156,7 +152,21 @@ function StandingsTable({ leagueId, season }: { leagueId: number; season: number
 }
 
 export function Standings() {
-  const [activeLeague, setActiveLeague] = useState(LEAGUES[0]!);
+  const [activeLeagueId, setActiveLeagueId] = useState<number>(39);
+  const [activeLeagueName, setActiveLeagueName] = useState<string>("Premier League");
+  const [search, setSearch] = useState("");
+
+  const { data: leaguesData, isLoading: leaguesLoading } = useQuery<{ leagues: LeagueEntry[] }>({
+    queryKey: ["standings-leagues"],
+    queryFn: () => fetch(`${BASE}/api/standings/leagues`).then(r => r.json()),
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+  });
+
+  const leagues = leaguesData?.leagues ?? [];
+  const filtered = leagues.filter(l =>
+    l.leagueName.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
     <Layout>
@@ -165,27 +175,68 @@ export function Standings() {
           <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">
             STANDINGS
           </h1>
-          <p className="text-muted-foreground text-sm">Live tables for tracked leagues · updates every 15 min</p>
+          <p className="text-muted-foreground text-sm">
+            Live tables for all tracked leagues · {leagues.length} leagues · updates every 15 min
+          </p>
         </header>
 
-        <div className="flex flex-wrap gap-2">
-          {LEAGUES.map((league) => (
-            <button
-              key={league.id}
-              onClick={() => setActiveLeague(league)}
-              className={`px-4 py-2 rounded-lg text-xs font-mono font-semibold tracking-wider uppercase transition-all border ${
-                activeLeague.id === league.id
-                  ? "bg-primary/20 text-primary border-primary/40"
-                  : "bg-black/20 text-muted-foreground border-white/10 hover:text-white hover:border-white/20"
-              }`}
-            >
-              {league.flag} {league.name}
-            </button>
-          ))}
+        <div className="glass-card rounded-xl p-4 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+            <input
+              type="text"
+              placeholder="Search leagues..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              className="w-full bg-black/30 border border-white/10 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder:text-muted-foreground/40 font-mono focus:outline-none focus:border-primary/40"
+            />
+          </div>
+
+          {leaguesLoading ? (
+            <div className="flex justify-center py-4">
+              <Activity className="w-5 h-5 text-primary animate-pulse" />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+              {filtered.map(league => (
+                <button
+                  key={league.leagueId}
+                  onClick={() => { setActiveLeagueId(league.leagueId); setActiveLeagueName(league.leagueName); }}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all border ${
+                    activeLeagueId === league.leagueId
+                      ? "bg-primary/20 border-primary/40 text-white"
+                      : "bg-black/20 border-white/8 text-muted-foreground hover:text-white hover:border-white/20 hover:bg-white/5"
+                  }`}
+                >
+                  <img
+                    src={LEAGUE_LOGO(league.leagueId)}
+                    alt=""
+                    className="w-5 h-5 object-contain shrink-0"
+                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
+                  <span className="text-xs font-mono font-semibold truncate leading-tight">{league.leagueName}</span>
+                </button>
+              ))}
+              {filtered.length === 0 && !leaguesLoading && (
+                <p className="col-span-full text-center text-xs text-muted-foreground/50 font-mono py-4">
+                  No leagues found
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="glass-card rounded-xl overflow-hidden">
-          <StandingsTable key={activeLeague.id} leagueId={activeLeague.id} season={activeLeague.season} />
+          <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6">
+            <img
+              src={LEAGUE_LOGO(activeLeagueId)}
+              alt=""
+              className="w-6 h-6 object-contain"
+              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+            <span className="font-mono font-bold text-sm text-white tracking-wide">{activeLeagueName}</span>
+          </div>
+          <StandingsTable key={activeLeagueId} leagueId={activeLeagueId} />
         </div>
       </div>
     </Layout>

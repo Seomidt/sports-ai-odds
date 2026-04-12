@@ -7,6 +7,16 @@ import { cacheGet, cacheSet, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
+const LEAGUE_NAMES: Record<number, string> = {
+  39: "Premier League", 140: "La Liga", 135: "Serie A", 78: "Bundesliga", 61: "Ligue 1",
+  2: "UEFA Champions League", 3: "UEFA Europa League", 848: "UEFA Conference League",
+  40: "Championship", 79: "2. Bundesliga", 88: "Eredivisie", 94: "Primeira Liga",
+  107: "Belgian Pro League", 113: "Allsvenskan", 119: "Superliga", 120: "1. Division",
+  179: "Scottish Premiership", 203: "Süper Lig", 218: "Bundesliga (Austria)",
+  235: "Eliteserien", 244: "Veikkausliiga", 271: "Ekstraklasa",
+  98: "J1 League", 188: "A-League Men", 253: "MLS", 262: "Liga MX", 292: "K League 1",
+};
+
 // GET /api/fixtures/today — all fixtures across tracked leagues for today+tomorrow
 router.get("/fixtures/today", async (req, res) => {
   const cacheKey = "fixtures:today";
@@ -225,6 +235,41 @@ router.get("/fixtures/:id/signals", async (req, res) => {
   const ttl = phase === "post" ? TTL.HOUR24 : phase === "live" ? TTL.S30 : TTL.MIN1;
   cacheSet(cacheKey, body, ttl);
   res.set("Cache-Control", `public, max-age=${Math.floor(ttl / 1000)}, stale-while-revalidate=${Math.floor(ttl / 2000)}`);
+  res.set("X-Cache", "MISS");
+  return res.json(body);
+});
+
+// GET /api/standings/leagues — all leagues that have standings data in DB
+router.get("/standings/leagues", async (_req, res) => {
+  const cacheKey = "standings:leagues";
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    res.set("X-Cache", "HIT");
+    return res.json(cached);
+  }
+
+  const { rows: rawRows } = await pool.query(`
+    SELECT
+      league_id AS "leagueId",
+      MAX(season_year) AS season,
+      COUNT(DISTINCT team_id) AS teams
+    FROM standings
+    GROUP BY league_id
+    HAVING COUNT(DISTINCT team_id) >= 6
+    ORDER BY COUNT(DISTINCT team_id) DESC, league_id
+  `);
+
+  const rows = rawRows.map((r: Record<string, unknown>) => ({
+    leagueId: r["leagueId"],
+    leagueName: LEAGUE_NAMES[Number(r["leagueId"])] ?? `League ${r["leagueId"]}`,
+    season: r["season"],
+    teams: r["teams"],
+  }));
+
+  const body = { leagues: rows };
+  cacheSet(cacheKey, body, TTL.MIN5);
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
   res.set("X-Cache", "MISS");
   return res.json(body);
 });

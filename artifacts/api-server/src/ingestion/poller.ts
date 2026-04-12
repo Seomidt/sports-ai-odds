@@ -1168,6 +1168,62 @@ async function adaptiveLiveLoop() {
   }
 }
 
+// ─── Daily 5am Signal Pre-computation ─────────────────────────────────────────
+/**
+ * Pre-computes pre-match features and signals for ALL of today's upcoming fixtures.
+ * Results are persisted in the fixture_signals DB table, so users see signals
+ * immediately without waiting for the 90-minute lineup window.
+ */
+async function dailySignalPrecompute() {
+  const now = new Date();
+  const endOfDay = new Date(now);
+  endOfDay.setHours(23, 59, 59, 999);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(
+        gte(f.kickoff, now),
+        lte(f.kickoff, endOfDay),
+        inArray(f.statusShort, ["NS", "TBD"])
+      ),
+  });
+
+  console.log(`[signal-cron] Pre-computing signals for ${upcoming.length} fixtures`);
+  let computed = 0;
+
+  for (const fix of upcoming) {
+    try {
+      await runPreMatchFeatures(fix.fixtureId, fix.homeTeamId, fix.awayTeamId);
+      await runSignalEngine(fix.fixtureId, "pre");
+      computed++;
+    } catch (err) {
+      console.error(`[signal-cron] Error for fixture ${fix.fixtureId}:`, err);
+    }
+  }
+
+  console.log(`[signal-cron] Done — ${computed}/${upcoming.length} fixtures pre-computed`);
+}
+
+/**
+ * Schedules dailySignalPrecompute to run every day at 05:00 local time.
+ * Uses setTimeout to align with the wall-clock hour, then setInterval for recurrence.
+ */
+function scheduleDailySignalCron() {
+  const now = new Date();
+  const next5am = new Date(now);
+  next5am.setHours(5, 0, 0, 0);
+  if (next5am <= now) next5am.setDate(next5am.getDate() + 1);
+
+  const msUntil5am = next5am.getTime() - now.getTime();
+  const minUntil = Math.round(msUntil5am / 60_000);
+  console.log(`[signal-cron] Next 5am run scheduled in ${minUntil} min (${next5am.toISOString()})`);
+
+  setTimeout(() => {
+    dailySignalPrecompute().catch(console.error);
+    setInterval(() => dailySignalPrecompute().catch(console.error), 24 * 60 * 60 * 1000);
+  }, msUntil5am);
+}
+
 export function startPoller() {
   if (pollerStarted) return;
   pollerStarted = true;
@@ -1253,6 +1309,11 @@ export function startPoller() {
   // Historical data seed: only run if database has no past-season fixtures yet.
   // Runs once at startup (60s delay). Can always be triggered manually via admin panel.
   setTimeout(() => seedHistoricalIfNeeded().catch(console.error), 60 * 1000);
+
+  // Daily 5am signal pre-compute: runs immediately at startup (30s delay) and then
+  // every day at 05:00 local time to cache signals for ALL of today's fixtures.
+  setTimeout(() => dailySignalPrecompute().catch(console.error), 30 * 1000);
+  scheduleDailySignalCron();
 }
 
 // ─── Historical season seed ────────────────────────────────────────────────────

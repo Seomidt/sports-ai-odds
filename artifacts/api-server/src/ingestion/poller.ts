@@ -21,6 +21,7 @@ import {
   venues,
   trophies,
   oddsMarkets,
+  fixtureSignals,
 } from "@workspace/db/schema";
 import { eq, inArray, lt, sql } from "drizzle-orm";
 import {
@@ -1225,10 +1226,28 @@ async function startupSignalCompute() {
   });
 
   if (upcoming.length === 0) return;
-  console.log(`[signal-startup] Computing signals for ${upcoming.length} upcoming fixtures`);
+
+  // Find which fixtures already have pre-match signals stored in DB — skip those
+  const existingSignals = await db.query.fixtureSignals.findMany({
+    where: (s, { and, inArray: inArr, eq: eqFn }) =>
+      and(
+        inArr(s.fixtureId, upcoming.map((f) => f.fixtureId)),
+        eqFn(s.phase, "pre")
+      ),
+    columns: { fixtureId: true },
+  });
+  const alreadyComputed = new Set(existingSignals.map((s) => s.fixtureId));
+  const toCompute = upcoming.filter((f) => !alreadyComputed.has(f.fixtureId));
+
+  if (toCompute.length === 0) {
+    console.log(`[signal-startup] All ${upcoming.length} upcoming fixtures already have signals — skipping`);
+    return;
+  }
+
+  console.log(`[signal-startup] Computing signals for ${toCompute.length}/${upcoming.length} fixtures (${alreadyComputed.size} already had signals)`);
   let computed = 0;
 
-  for (const fix of upcoming) {
+  for (const fix of toCompute) {
     try {
       await runPreMatchFeatures(fix.fixtureId, fix.homeTeamId, fix.awayTeamId);
       await runSignalEngine(fix.fixtureId, "pre");
@@ -1238,7 +1257,7 @@ async function startupSignalCompute() {
     }
   }
 
-  console.log(`[signal-startup] Done — ${computed}/${upcoming.length} computed`);
+  console.log(`[signal-startup] Done — ${computed}/${toCompute.length} newly computed`);
 }
 
 /**

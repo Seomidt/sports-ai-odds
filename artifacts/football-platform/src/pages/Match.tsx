@@ -239,7 +239,7 @@ function ValueBadge({ rating }: { rating: string | null }) {
   );
 }
 
-function TipCard({ tip, betTypeLabel }: { tip: BettingTip; betTypeLabel: string }) {
+function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null }) {
   const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
 
@@ -260,6 +260,11 @@ function TipCard({ tip, betTypeLabel }: { tip: BettingTip; betTypeLabel: string 
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs font-mono text-muted-foreground uppercase">Odds</span>
               <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
+              {bookmaker && (
+                <span className="text-[10px] font-mono text-muted-foreground bg-white/5 border border-white/10 px-1.5 py-0.5 rounded uppercase tracking-wide">
+                  {bookmaker}
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -315,6 +320,9 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     staleTime: 15 * 60_000,
     gcTime: 30 * 60_000,
   });
+
+  const { data: oddsData } = useGetFixtureOdds(fixtureId, { query: { queryKey: getGetFixtureOddsQueryKey(fixtureId), staleTime: 10 * 60_000 } });
+  const bookmaker = oddsData?.odds?.bookmaker ?? null;
 
   const { data: accData } = useQuery<{ hitRate: number | null; reviewed: number; hits: number }>({
     queryKey: ['aiAccuracy'],
@@ -376,7 +384,7 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
           )}
 
           {tips.map((tip) => (
-            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabel(tip.betType)} />
+            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabel(tip.betType)} bookmaker={bookmaker} />
           ))}
 
           {tips[0] && (
@@ -630,8 +638,13 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
       {/* 1X2 Pre-match */}
       {snap && (
         <div className="glass-card p-5 rounded-xl">
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-4">
-            Match Winner — {snap.bookmaker ?? "Pre-match"}
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Match Winner</span>
+            {snap.bookmaker && (
+              <span className="text-[10px] font-mono font-bold text-violet-400 bg-violet-400/10 border border-violet-400/25 px-2 py-0.5 rounded uppercase tracking-wide">
+                {snap.bookmaker}
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-3 text-center">
             <div className="bg-white/5 rounded-xl p-3">
@@ -706,7 +719,14 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
       {/* All markets */}
       {markets && Object.keys(markets).length > 0 && (
         <div>
-          <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest mb-3">All Markets</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-mono text-muted-foreground uppercase tracking-widest">All Markets</h3>
+            {marketsData?.oddsMarkets?.[0]?.bookmaker && (
+              <span className="text-[10px] font-mono font-bold text-violet-400 bg-violet-400/10 border border-violet-400/25 px-2 py-0.5 rounded uppercase tracking-wide">
+                {marketsData.oddsMarkets[0].bookmaker as string}
+              </span>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {Object.entries(markets).map(([name, values]) => renderMarket(name, values))}
           </div>

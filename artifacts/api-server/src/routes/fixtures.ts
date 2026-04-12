@@ -161,8 +161,8 @@ router.get("/fixtures/:id", async (req, res) => {
   const body = { fixture, events, stats, lineups };
 
   // TTL depends on fixture state
-  const ttl = isLive ? TTL.S30 : isFinished ? TTL.HOUR24 : TTL.MIN5;
-  const maxAge = isLive ? 30 : isFinished ? 86400 : 300;
+  const ttl = isLive ? TTL.S15 : isFinished ? TTL.HOUR24 : TTL.MIN5;
+  const maxAge = isLive ? 15 : isFinished ? 86400 : 300;
   cacheSet(cacheKey, body, ttl);
   res.set("Cache-Control", `public, max-age=${maxAge}, stale-while-revalidate=${Math.floor(maxAge / 2)}`);
   res.set("X-Cache", "MISS");

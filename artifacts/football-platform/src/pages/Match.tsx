@@ -29,8 +29,18 @@ export function Match() {
   const { sessionId } = useSession();
   const queryClient = useQueryClient();
 
+  const LIVE_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE']);
   const { data: fixtureData, isLoading: isLoadingFixture } = useGetFixture(id, { 
-    query: { enabled: !!id, queryKey: ['fixture', id] } 
+    query: { 
+      enabled: !!id, 
+      queryKey: ['fixture', id],
+      staleTime: 15_000,
+      refetchInterval: (query) => {
+        const status = (query.state.data as any)?.fixture?.statusShort as string | undefined;
+        return status && LIVE_STATUSES.has(status) ? 15_000 : false;
+      },
+      refetchIntervalInBackground: true,
+    } 
   });
   
   const { toast } = useToast();

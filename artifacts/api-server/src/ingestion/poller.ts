@@ -58,6 +58,7 @@ import {
 } from "./apiFootballClient.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
+import { cacheDel } from "../lib/routeCache.js";
 
 const TRACKED_LEAGUE_IDS = new Set(TRACKED_LEAGUES.map((l) => l.id));
 
@@ -1152,6 +1153,8 @@ async function adaptiveLiveLoop() {
 
           await runLiveFeatures(f.fixture.id, f.teams.home.id, f.teams.away.id);
           await runSignalEngine(f.fixture.id, "live");
+          // Immediately evict the route cache so the next browser poll gets fresh data
+          cacheDel(`fixture:${f.fixture.id}`);
         } else if (isFinished && !postMatchProcessed.has(f.fixture.id)) {
           postMatchProcessed.add(f.fixture.id);
           console.log(`[poller] Post-match processing for fixture ${f.fixture.id}`);

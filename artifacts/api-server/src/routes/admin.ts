@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { allowedUsers } from "@workspace/db/schema";
-import { eq } from "drizzle-orm";
+import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets } from "@workspace/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
 import { getAiStats } from "../ai/analysisLayer.js";
 import { requireAdmin } from "../middlewares/requireAuth.js";
@@ -97,6 +97,31 @@ router.get("/admin/clerk-users", requireAdmin, async (_req, res): Promise<void> 
   } catch (err) {
     console.error("[admin] clerk-users error:", err);
     res.status(500).json({ error: "Failed to fetch Clerk users" });
+  }
+});
+
+// GET /api/admin/db-stats — real record counts straight from the DB
+router.get("/admin/db-stats", requireAdmin, async (_req, res): Promise<void> => {
+  try {
+    const [[fix], [tm], [std], [sig], [tips], [odds]] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(fixtures),
+      db.select({ count: sql<number>`count(*)::int` }).from(teams),
+      db.select({ count: sql<number>`count(*)::int` }).from(standings),
+      db.select({ count: sql<number>`count(*)::int` }).from(fixtureSignals),
+      db.select({ count: sql<number>`count(*)::int` }).from(aiBettingTips),
+      db.select({ count: sql<number>`count(*)::int` }).from(oddsMarkets),
+    ]);
+    res.json({
+      fixtures: fix?.count ?? 0,
+      teams: tm?.count ?? 0,
+      standings: std?.count ?? 0,
+      fixtureSignals: sig?.count ?? 0,
+      aiTips: tips?.count ?? 0,
+      oddsMarkets: odds?.count ?? 0,
+    });
+  } catch (err) {
+    console.error("[admin] db-stats error:", err);
+    res.status(500).json({ error: "Failed to fetch DB stats" });
   }
 });
 

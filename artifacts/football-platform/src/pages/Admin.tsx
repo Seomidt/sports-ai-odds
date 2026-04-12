@@ -210,6 +210,15 @@ interface SeedStatus {
   error: string | null;
 }
 
+interface DbStats {
+  fixtures: number;
+  teams: number;
+  standings: number;
+  fixtureSignals: number;
+  aiTips: number;
+  oddsMarkets: number;
+}
+
 function HistoricalDataSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -227,6 +236,17 @@ function HistoricalDataSection() {
       return d?.running ? 2_000 : 15_000;
     },
     staleTime: 2_000,
+  });
+
+  const { data: dbStats } = useQuery<DbStats>({
+    queryKey: ["dbStats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/db-stats");
+      if (!res.ok) throw new Error("Failed to fetch DB stats");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+    staleTime: 15_000,
   });
 
   const handleSeed = async () => {
@@ -304,9 +324,9 @@ function HistoricalDataSection() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Fixtures Seeded</div>
+                  <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Fixtures in DB</div>
                   <div className="text-sm font-mono font-bold text-white">
-                    {status.fixturesSeeded.toLocaleString()}
+                    {dbStats ? dbStats.fixtures.toLocaleString() : status.fixturesSeeded.toLocaleString()}
                   </div>
                 </div>
                 <div>
@@ -316,6 +336,23 @@ function HistoricalDataSection() {
                   </div>
                 </div>
               </div>
+
+              {dbStats && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-3 border-t border-white/10">
+                  {[
+                    { label: "Teams", value: dbStats.teams },
+                    { label: "Standings", value: dbStats.standings },
+                    { label: "Signals", value: dbStats.fixtureSignals },
+                    { label: "Odds Markets", value: dbStats.oddsMarkets },
+                    { label: "AI Tips", value: dbStats.aiTips },
+                  ].map(({ label, value }) => (
+                    <div key={label}>
+                      <div className="text-[10px] font-mono text-muted-foreground/60 uppercase mb-0.5">{label}</div>
+                      <div className="text-xs font-mono text-white/80">{value.toLocaleString()}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {status.running && (
                 <div className="space-y-2">

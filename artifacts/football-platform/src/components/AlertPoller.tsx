@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useGetUnreadAlerts } from "@workspace/api-client-react";
 import type { Alert } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Zap, X, ArrowRight, Activity } from "lucide-react";
+import { useSession } from "@/lib/session";
+import { useQuery } from "@tanstack/react-query";
 
 const STORAGE_KEY = "signal_terminal_seen_alerts";
 const AUTO_DISMISS_MS = 9_000;
@@ -159,12 +160,19 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
 export function AlertPoller() {
   const seenIdsRef = useRef<Set<number>>(getSeenIds());
   const [activeAlerts, setActiveAlerts] = useState<Alert[]>([]);
+  const { sessionId } = useSession();
 
-  const { data } = useGetUnreadAlerts({
-    query: {
-      refetchInterval: 30_000,
-      staleTime: 25_000,
-      queryKey: ["globalUnreadAlerts"],
+  const { data } = useQuery<{ alerts: Alert[] }>({
+    queryKey: ["globalUnreadAlerts", sessionId],
+    enabled: !!sessionId,
+    refetchInterval: 30_000,
+    staleTime: 25_000,
+    queryFn: async () => {
+      const res = await fetch("/api/alerts/unread", {
+        headers: { "x-session-id": sessionId },
+      });
+      if (!res.ok) return { alerts: [] };
+      return res.json();
     },
   });
 

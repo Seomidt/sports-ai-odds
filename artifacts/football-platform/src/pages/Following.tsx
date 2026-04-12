@@ -1,14 +1,14 @@
-import { useGetFollowedFixtures, useGetFixture, useGetUnreadAlerts, useMarkAlertRead, useExplainAlert } from "@workspace/api-client-react";
+import { useGetFixture } from "@workspace/api-client-react";
 import type { Alert } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, Bell, Info, ShieldAlert, Star, CheckCircle2 } from "lucide-react";
+import { Activity, Bell, Info, Star, CheckCircle2 } from "lucide-react";
 import { useSession } from "@/lib/session";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 function FixtureCard({ id }: { id: number }) {
   const { data: fixtureData, isLoading } = useGetFixture(id, {
@@ -64,30 +64,42 @@ export function Following() {
   const { sessionId } = useSession();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  const { data: followedData, isLoading: isLoadingFollowed } = useGetFollowedFixtures({
-    request: { headers: { 'x-session-id': sessionId } },
-    query: {
-      queryKey: ['followedFixtures', sessionId],
-      enabled: !!sessionId,
-    }
-  });
-
-  const { data: alertsData } = useGetUnreadAlerts({
-    query: { refetchInterval: 30000, queryKey: ['unreadAlerts'] },
-    request: { headers: { 'x-session-id': sessionId } }
-  });
-
-  const markReadMutation = useMarkAlertRead({
-    request: { headers: { 'x-session-id': sessionId } }
-  });
-  const explainMutation = useExplainAlert();
   const [explainingAlertId, setExplainingAlertId] = useState<number | null>(null);
+
+  const { data: followedData, isLoading: isLoadingFollowed } = useQuery<{ fixtureIds: number[] }>({
+    queryKey: ['followedFixtures', sessionId],
+    enabled: !!sessionId,
+    queryFn: async () => {
+      const res = await fetch('/api/fixtures/followed', {
+        headers: { 'x-session-id': sessionId },
+      });
+      if (!res.ok) return { fixtureIds: [] };
+      return res.json();
+    },
+  });
+
+  const { data: alertsData, refetch: refetchAlerts } = useQuery<{ alerts: Alert[] }>({
+    queryKey: ['unreadAlerts', sessionId],
+    enabled: !!sessionId,
+    refetchInterval: 30_000,
+    queryFn: async () => {
+      const res = await fetch('/api/alerts/unread', {
+        headers: { 'x-session-id': sessionId },
+      });
+      if (!res.ok) return { alerts: [] };
+      return res.json();
+    },
+  });
 
   const handleMarkRead = async (id: number) => {
     try {
-      await markReadMutation.mutateAsync({ id });
-      queryClient.invalidateQueries({ queryKey: ['unreadAlerts'] });
+      const res = await fetch(`/api/alerts/${id}/read`, {
+        method: 'POST',
+        headers: { 'x-session-id': sessionId },
+      });
+      if (!res.ok) throw new Error('Failed to mark alert as read');
+      await refetchAlerts();
+      queryClient.invalidateQueries({ queryKey: ['globalUnreadAlerts', sessionId] });
     } catch (e) {
       console.error(e);
     }
@@ -96,23 +108,20 @@ export function Following() {
   const handleExplain = async (alert: Alert) => {
     setExplainingAlertId(alert.id);
     try {
-      const res = await explainMutation.mutateAsync({
-        data: {
+      const res = await fetch('/api/alerts/explain', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-session-id': sessionId },
+        body: JSON.stringify({
           signalKey: alert.signalKey,
           signalLabel: alert.alertText,
-          matchName: `Fixture ${alert.fixtureId}`
-        }
+          matchName: `Fixture ${alert.fixtureId}`,
+        }),
       });
-      toast({
-        title: "AI Explanation",
-        description: res.alertText,
-      });
-    } catch (e) {
-      toast({
-        title: "Error",
-        description: "Failed to explain alert",
-        variant: "destructive"
-      });
+      if (!res.ok) throw new Error('Failed to explain alert');
+      const data = await res.json();
+      toast({ title: "AI Explanation", description: data.alertText });
+    } catch {
+      toast({ title: "Error", description: "Failed to explain alert", variant: "destructive" });
     } finally {
       setExplainingAlertId(null);
     }

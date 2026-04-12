@@ -578,6 +578,37 @@ export function Admin() {
                   </div>
                 </div>
 
+                {/* 7-day history mini bar chart */}
+                {(statsData as any).dailyHistory?.length > 0 && (
+                  <div className="glass-card p-5 rounded-xl">
+                    <div className="flex items-end justify-between mb-3">
+                      <span className="text-xs font-mono text-muted-foreground uppercase">7-Day Usage</span>
+                      <span className="text-xs font-mono text-muted-foreground">
+                        avg <span className="text-white font-bold">{(statsData as any).dailyAvg ?? 0}</span> / day
+                      </span>
+                    </div>
+                    <div className="flex items-end gap-1 h-16">
+                      {((statsData as any).dailyHistory as { date: string; count: number }[]).map((day, i) => {
+                        const maxCount = Math.max(...(statsData as any).dailyHistory.map((d: any) => d.count), 1);
+                        const heightPct = Math.max((day.count / maxCount) * 100, 3);
+                        const isToday = i === (statsData as any).dailyHistory.length - 1;
+                        const label = day.date.slice(5); // MM-DD
+                        return (
+                          <div key={day.date} className="flex-1 flex flex-col items-center gap-1" title={`${day.date}: ${day.count} requests`}>
+                            <div className="w-full flex items-end" style={{ height: 48 }}>
+                              <div
+                                className={`w-full rounded-sm transition-all ${isToday ? 'bg-primary' : 'bg-white/20'}`}
+                                style={{ height: `${heightPct}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] font-mono text-muted-foreground/50">{label}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
               </div>
             ) : null}
           </div>
@@ -597,7 +628,7 @@ export function Admin() {
                     placeholder="analyst@syndicate.com" 
                     value={newEmail} 
                     onChange={e => setNewEmail(e.target.value)} 
-                    className="bg-black/40 border-white/10 font-mono"
+                    className="bg-black/40 border-white/10 font-mono text-white placeholder:text-muted-foreground/40"
                   />
                 </div>
                 <div className="w-32 space-y-2">

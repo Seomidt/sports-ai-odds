@@ -12,6 +12,9 @@ const MIN_REQUEST_INTERVAL_MS = 250; // Ultra plan: 500 req/min = 120ms, use 250
 let requestLog: { timestamp: number; endpoint: string }[] = [];
 let dayResetAt = Date.now();
 
+// 7-day rolling history — persists in memory across the day
+const dailyHistory: { date: string; count: number }[] = [];
+
 // Serialise ALL API requests through a single promise chain to prevent concurrent
 // requests from racing past the rate-limit check.
 let requestChain: Promise<void> = Promise.resolve();
@@ -72,8 +75,11 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
   }); // end serialiseRequest
 }
 
-// Reset counter daily
+// Reset counter daily — save today's count to 7-day history first
 setInterval(() => {
+  const dateStr = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  dailyHistory.push({ date: dateStr, count: requestsToday });
+  if (dailyHistory.length > 7) dailyHistory.shift(); // keep last 7 days
   requestsToday = 0;
   requestLog = [];
   dayResetAt = Date.now();
@@ -88,6 +94,14 @@ export function getApiStats() {
     endpoint: r.endpoint,
     time: new Date(r.timestamp).toISOString(),
   }));
+
+  // Build 7-day chart data (past 6 archived days + today)
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const last7 = [...dailyHistory.slice(-6), { date: todayStr, count: requestsToday }];
+  const dailyAvg = last7.length > 0
+    ? Math.round(last7.reduce((s, d) => s + d.count, 0) / last7.length)
+    : requestsToday;
+
   return {
     requestsToday,
     maxPerDay: MAX_REQUESTS_PER_DAY,
@@ -95,6 +109,8 @@ export function getApiStats() {
     requestsThisHour,
     dayResetAt: new Date(dayResetAt).toISOString(),
     recentRequests,
+    dailyHistory: last7,
+    dailyAvg,
   };
 }
 

@@ -2,7 +2,8 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, TrendingUp, TrendingDown, Minus, Search } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Minus, Search, HelpCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -57,22 +58,50 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
     );
   }
 
+  const COL_TIPS: Record<string, string> = {
+    P: "Played — total matches played",
+    W: "Won — matches won",
+    D: "Drawn — matches drawn",
+    L: "Lost — matches lost",
+    GF: "Goals For — goals scored",
+    GA: "Goals Against — goals conceded",
+    "+/-": "Goal Difference (GF minus GA)",
+    FORM: "Last 5 results: W=Win, D=Draw, L=Loss (most recent first)",
+    PTS: "Points (Win=3, Draw=1, Loss=0)",
+  };
+
+  function ColTh({ label, align = "center", className = "" }: { label: string; align?: "left" | "center" | "right"; className?: string }) {
+    return (
+      <th className={`text-${align} py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest ${className}`}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="cursor-help border-b border-dashed border-muted-foreground/30">{label}</span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="text-xs font-mono max-w-48">
+            {COL_TIPS[label] ?? label}
+          </TooltipContent>
+        </Tooltip>
+      </th>
+    );
+  }
+
   return (
+    <TooltipProvider>
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-white/6">
             <th className="text-left py-3 pl-4 pr-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">#</th>
             <th className="text-left py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest">Team</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">P</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">W</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">D</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-8">L</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">GF</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">GA</th>
-            <th className="text-center py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-10">+/-</th>
-            <th className="text-left py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest">Form</th>
-            <th className="text-center py-3 pr-4 pl-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest w-12">Pts</th>
+            <ColTh label="P" className="w-8" />
+            <ColTh label="W" className="w-8" />
+            <ColTh label="D" className="w-8" />
+            <ColTh label="L" className="w-8" />
+            <ColTh label="GF" className="w-12" />
+            <ColTh label="GA" className="w-12" />
+            <ColTh label="+/-" className="w-10" />
+            <ColTh label="FORM" align="left" />
+            <ColTh label="PTS" className="w-12" />
           </tr>
         </thead>
         <tbody>
@@ -148,6 +177,7 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 

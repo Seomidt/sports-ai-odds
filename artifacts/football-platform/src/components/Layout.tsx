@@ -29,7 +29,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen w-full overflow-hidden text-foreground">
+    <div className="flex h-[100dvh] w-full overflow-hidden text-foreground">
       <AlertPoller />
 
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
@@ -159,7 +159,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </main>
 
-        <nav className="md:hidden shrink-0 flex items-center justify-around border-t border-white/5 bg-black/40 backdrop-blur-xl pb-safe">
+        <nav className="md:hidden shrink-0 flex items-center justify-around border-t border-white/5 bg-black/40 backdrop-blur-xl" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
           {navItems.map((item) => {
             const isActive = location === item.href || location.startsWith(`${item.href}/`);
             return (

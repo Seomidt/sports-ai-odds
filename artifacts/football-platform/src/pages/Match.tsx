@@ -19,6 +19,7 @@ import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
 import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { format } from "date-fns";
@@ -272,12 +273,25 @@ function TipCard({ tip, betTypeLabel }: { tip: BettingTip; betTypeLabel: string 
           )}
         </div>
         <div className="shrink-0">
-          <div className="flex items-center gap-1.5">
-            <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
-              {tip.trustScore}
-            </span>
-            <span className="text-xs text-muted-foreground font-mono">/10</span>
-          </div>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1.5 cursor-help">
+                  <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
+                    {tip.trustScore}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono">/10</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="left" className="text-xs font-mono max-w-52 space-y-1">
+                <p className="font-bold text-white mb-1">AI Confidence Score</p>
+                <p className="text-muted-foreground">1–4 · Low — limited or conflicting data</p>
+                <p className="text-muted-foreground">5–6 · Moderate — some supporting evidence</p>
+                <p className="text-amber-400">7–8 · High — strong data alignment</p>
+                <p className="text-teal-400">9–10 · Very high — multiple strong signals</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
 

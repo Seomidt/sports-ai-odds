@@ -123,8 +123,8 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
               {signals.length} {signals.length === 1 ? "signal" : "signals"}
             </span>
           ) : (
-            <span className="text-xs font-mono text-muted-foreground/30 bg-white/3 px-2 py-0.5 rounded">
-              no signals
+            <span className="text-xs font-mono text-muted-foreground/25 bg-white/3 px-2 py-0.5 rounded" title="No pre-match patterns detected yet. Signals appear as the match approaches.">
+              scanning...
             </span>
           )}
         </div>

@@ -674,43 +674,19 @@ function AdminContent() {
                   </div>
                 </div>
 
-                {/* 7-day history mini bar chart */}
-                {(statsData as any).dailyHistory?.length > 0 && (
+                {(statsData as any).dailyAvg != null && (
                   <div className="glass-card p-5 rounded-xl">
-                    <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center justify-between">
                       <span className="text-xs font-mono text-muted-foreground uppercase flex items-center gap-1">
-                        7-Day Usage
-                        <span title="API requests per day over the last 7 days. Teal bar = today.">
+                        7-Day Average
+                        <span title="Gennemsnitligt antal API-kald per dag de seneste 7 dage">
                           <HelpCircle className="w-3.5 h-3.5 text-primary/70 cursor-help" />
                         </span>
                       </span>
-                      <span className="text-xs font-mono text-muted-foreground">
-                        avg <span className="text-primary font-bold text-sm">{(statsData as any).dailyAvg ?? 0}</span> <span className="text-muted-foreground/60">/ day</span>
+                      <span className="text-2xl font-mono font-bold text-primary">
+                        {(statsData as any).dailyAvg ?? 0}
+                        <span className="text-sm font-normal text-muted-foreground ml-1">/ day</span>
                       </span>
-                    </div>
-                    <div className="flex items-end gap-1.5" style={{ height: 72 }}>
-                      {((statsData as any).dailyHistory as { date: string; count: number }[]).map((day, i) => {
-                        const maxCount = Math.max(...(statsData as any).dailyHistory.map((d: any) => d.count), 1);
-                        const heightPct = Math.max((day.count / maxCount) * 100, 4);
-                        const isToday = i === (statsData as any).dailyHistory.length - 1;
-                        const label = day.date.slice(5); // MM-DD
-                        return (
-                          <div key={day.date} className="flex-1 flex flex-col items-center gap-1" title={`${day.date}: ${day.count} requests`}>
-                            <div className="w-full flex flex-col items-center justify-end" style={{ height: 52 }}>
-                              {day.count > 0 && (
-                                <span className="text-[8px] font-mono mb-0.5 leading-none" style={{ color: isToday ? 'hsl(var(--primary))' : 'rgba(255,255,255,0.5)' }}>
-                                  {day.count}
-                                </span>
-                              )}
-                              <div
-                                className={`w-full rounded-sm transition-all ${isToday ? 'bg-primary' : 'bg-white/40'}`}
-                                style={{ height: `${heightPct}%` }}
-                              />
-                            </div>
-                            <span className={`text-[9px] font-mono leading-none ${isToday ? 'text-primary/80' : 'text-muted-foreground'}`}>{label}</span>
-                          </div>
-                        );
-                      })}
                     </div>
                   </div>
                 )}

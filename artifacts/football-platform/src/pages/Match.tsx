@@ -14,7 +14,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link } from "wouter";
@@ -276,7 +276,10 @@ function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLab
                   <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white'}`}>
                     {tip.trustScore}
                   </span>
-                  <span className="text-xs text-muted-foreground font-mono">/10</span>
+                  <div className="flex flex-col items-start gap-0.5">
+                    <span className="text-xs text-muted-foreground font-mono">/10</span>
+                    <HelpCircle className="w-3 h-3 text-primary/70" />
+                  </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent side="left" className="text-xs font-mono max-w-52 space-y-1">

@@ -72,12 +72,12 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
 
   function ColTh({ label, align = "center", className = "" }: { label: string; align?: "left" | "center" | "right"; className?: string }) {
     return (
-      <th className={`text-${align} py-3 px-2 font-mono text-[11px] text-muted-foreground/60 uppercase tracking-widest ${className}`}>
+      <th className={`text-${align} py-3 px-2 font-mono text-[11px] text-muted-foreground/80 uppercase tracking-widest ${className}`}>
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex items-center gap-0.5 cursor-help select-none">
+            <span className="inline-flex items-center gap-1 cursor-help select-none">
               {label}
-              <HelpCircle className="w-2.5 h-2.5 text-muted-foreground/60 shrink-0" />
+              <HelpCircle className="w-3.5 h-3.5 text-primary/70 shrink-0" />
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="text-xs font-mono max-w-48 text-white bg-black/90 border border-white/10">

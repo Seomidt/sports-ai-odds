@@ -9,7 +9,7 @@ import {
   generateAlertText,
   generateLeagueNews,
 } from "../ai/analysisLayer.js";
-import { cacheGet, cacheSet, TTL } from "../lib/routeCache.js";
+import { cacheGet, cacheSet, getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
@@ -84,29 +84,20 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
 });
 
 router.get("/analysis/value-odds", async (_req, res) => {
-  const cacheKey = "analysis:value-odds";
-  const cached = cacheGet(cacheKey);
-  if (cached) {
-    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
-    res.set("X-Cache", "HIT");
-    return res.json(cached);
-  }
-
   try {
-    const tips = await db.query.aiBettingTips.findMany({
-      where: (t, { isNull }) => isNull(t.outcome),
+    const body = await getOrFetch("analysis:value-odds", TTL.MIN5, async () => {
+      const tips = await db.query.aiBettingTips.findMany({
+        where: (t, { isNull }) => isNull(t.outcome),
+      });
+      const ranked = tips
+        .filter(t => t.betType !== 'no_bet')
+        .map(t => {
+          const valueScore = t.valueRating === 'strong_value' ? 4 : t.valueRating === 'value' ? 3 : t.valueRating === 'fair' ? 2 : 1;
+          return { ...t, valueScore, combinedScore: valueScore * 10 + t.trustScore };
+        })
+        .sort((a, b) => b.combinedScore - a.combinedScore);
+      return { tips: ranked };
     });
-
-    const ranked = tips
-      .filter(t => t.betType !== 'no_bet')
-      .map(t => {
-        const valueScore = t.valueRating === 'strong_value' ? 4 : t.valueRating === 'value' ? 3 : t.valueRating === 'fair' ? 2 : 1;
-        return { ...t, valueScore, combinedScore: valueScore * 10 + t.trustScore };
-      })
-      .sort((a, b) => b.combinedScore - a.combinedScore);
-
-    const body = { tips: ranked };
-    cacheSet(cacheKey, body, TTL.MIN5);
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     return res.json(body);
   } catch (err) {
@@ -116,17 +107,8 @@ router.get("/analysis/value-odds", async (_req, res) => {
 });
 
 router.get("/analysis/accuracy", async (_req, res) => {
-  const cacheKey = "analysis:accuracy";
-  const cached = cacheGet(cacheKey);
-  if (cached) {
-    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
-    res.set("X-Cache", "HIT");
-    return res.json(cached);
-  }
-
   try {
-    const stats = await getAiAccuracyStats();
-    cacheSet(cacheKey, stats, TTL.MIN5);
+    const stats = await getOrFetch("analysis:accuracy", TTL.MIN5, getAiAccuracyStats);
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     return res.json(stats);
   } catch (err) {
@@ -137,27 +119,18 @@ router.get("/analysis/accuracy", async (_req, res) => {
 
 // GET /api/analysis/prematch-tips — all stored tips for upcoming fixtures (no AI generation)
 router.get("/analysis/prematch-tips", async (_req, res) => {
-  const cacheKey = "analysis:prematch-tips";
-  const cached = cacheGet(cacheKey);
-  if (cached) {
-    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
-    res.set("X-Cache", "HIT");
-    return res.json(cached);
-  }
-
   try {
-    const tips = await db.query.aiBettingTips.findMany({
-      where: (t, { isNull }) => isNull(t.outcome),
+    const body = await getOrFetch("analysis:prematch-tips", TTL.MIN5, async () => {
+      const tips = await db.query.aiBettingTips.findMany({
+        where: (t, { isNull }) => isNull(t.outcome),
+      });
+      const byFixture: Record<number, typeof tips> = {};
+      for (const tip of tips) {
+        if (!byFixture[tip.fixtureId]) byFixture[tip.fixtureId] = [];
+        byFixture[tip.fixtureId]!.push(tip);
+      }
+      return { tips: byFixture };
     });
-
-    const byFixture: Record<number, typeof tips> = {};
-    for (const tip of tips) {
-      if (!byFixture[tip.fixtureId]) byFixture[tip.fixtureId] = [];
-      byFixture[tip.fixtureId]!.push(tip);
-    }
-
-    const body = { tips: byFixture };
-    cacheSet(cacheKey, body, TTL.MIN5);
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
     return res.json(body);
   } catch (err) {
@@ -169,69 +142,57 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
 // GET /api/news?leagueId=39 — AI-generated news for top 3 teams in a league
 router.get("/news", async (req, res) => {
   const leagueId = parseInt(req.query["leagueId"] as string ?? "39");
-  const cacheKey = `news:${leagueId}`;
-  const cached = cacheGet(cacheKey);
-  if (cached) {
-    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
-    res.set("X-Cache", "HIT");
-    return res.json(cached);
-  }
 
   try {
-    const { rows: standingRows } = await pool.query(
-      `WITH latest_season AS (
-         SELECT MAX(season_year) AS sy FROM standings WHERE league_id = $1
-       )
-       SELECT DISTINCT ON (s.team_id)
-         s.team_id AS "teamId", s.points,
-         COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
-         COALESCE(s.team_logo, t.logo) AS "teamLogo",
-         ROW_NUMBER() OVER (ORDER BY s.points DESC, s.goals_diff DESC) AS rank
-       FROM standings s
-       LEFT JOIN teams t ON t.team_id = s.team_id
-       CROSS JOIN latest_season ls
-       WHERE s.league_id = $1 AND s.season_year = ls.sy
-       ORDER BY s.team_id, s.points DESC
-       LIMIT 3`,
-      [leagueId]
-    );
+    const body = await getOrFetch(`news:${leagueId}`, TTL.HOUR2, async () => {
+      const { rows: standingRows } = await pool.query(
+        `WITH latest_season AS (
+           SELECT MAX(season_year) AS sy FROM standings WHERE league_id = $1
+         )
+         SELECT DISTINCT ON (s.team_id)
+           s.team_id AS "teamId", s.points,
+           COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
+           COALESCE(s.team_logo, t.logo) AS "teamLogo",
+           ROW_NUMBER() OVER (ORDER BY s.points DESC, s.goals_diff DESC) AS rank
+         FROM standings s
+         LEFT JOIN teams t ON t.team_id = s.team_id
+         CROSS JOIN latest_season ls
+         WHERE s.league_id = $1 AND s.season_year = ls.sy
+         ORDER BY s.team_id, s.points DESC
+         LIMIT 3`,
+        [leagueId]
+      );
 
-    if (!standingRows.length) {
-      return res.json({ articles: [], message: "No standings data available" });
-    }
+      if (!standingRows.length) return { articles: [], message: "No standings data available" };
 
-    const teamIds = standingRows.map((r: { teamId: number }) => r.teamId);
-    const POST_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
+      const teamIds = standingRows.map((r: { teamId: number }) => r.teamId);
+      const POST_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
 
-    const { rows: matchRows } = await pool.query(
-      `SELECT
-         CASE WHEN f.home_team_id = ANY($1::int[]) THEN f.home_team_id ELSE f.away_team_id END AS "teamId",
-         CASE WHEN f.home_team_id = ANY($1::int[]) THEN COALESCE(f.home_team_name, f.home_team_id::text) ELSE COALESCE(f.away_team_name, f.away_team_id::text) END AS "teamName",
-         CASE WHEN f.home_team_id = ANY($1::int[]) THEN COALESCE(f.away_team_name, f.away_team_id::text) ELSE COALESCE(f.home_team_name, f.home_team_id::text) END AS "opponentName",
-         f.home_goals AS "homeGoals", f.away_goals AS "awayGoals",
-         f.home_team_id = ANY($1::int[]) AS "isHome",
-         f.kickoff, f.status_short AS "statusShort"
-       FROM fixtures f
-       WHERE (f.home_team_id = ANY($1::int[]) OR f.away_team_id = ANY($1::int[]))
-         AND f.league_id = $2
-         AND f.status_short = ANY($3::text[])
-       ORDER BY f.kickoff DESC
-       LIMIT 15`,
-      [teamIds, leagueId, POST_STATUSES]
-    );
+      const { rows: matchRows } = await pool.query(
+        `SELECT
+           CASE WHEN f.home_team_id = ANY($1::int[]) THEN f.home_team_id ELSE f.away_team_id END AS "teamId",
+           CASE WHEN f.home_team_id = ANY($1::int[]) THEN COALESCE(f.home_team_name, f.home_team_id::text) ELSE COALESCE(f.away_team_name, f.away_team_id::text) END AS "teamName",
+           CASE WHEN f.home_team_id = ANY($1::int[]) THEN COALESCE(f.away_team_name, f.away_team_id::text) ELSE COALESCE(f.home_team_name, f.home_team_id::text) END AS "opponentName",
+           f.home_goals AS "homeGoals", f.away_goals AS "awayGoals",
+           f.home_team_id = ANY($1::int[]) AS "isHome",
+           f.kickoff, f.status_short AS "statusShort"
+         FROM fixtures f
+         WHERE (f.home_team_id = ANY($1::int[]) OR f.away_team_id = ANY($1::int[]))
+           AND f.league_id = $2
+           AND f.status_short = ANY($3::text[])
+         ORDER BY f.kickoff DESC
+         LIMIT 15`,
+        [teamIds, leagueId, POST_STATUSES]
+      );
 
-    const topTeams = standingRows.map((r: { teamId: number; teamName: string; teamLogo: string | null; rank: number; points: number }, i: number) => ({
-      teamId: r.teamId,
-      teamName: r.teamName,
-      teamLogo: r.teamLogo,
-      rank: i + 1,
-      points: r.points,
-    }));
+      const topTeams = standingRows.map((r: { teamId: number; teamName: string; teamLogo: string | null; rank: number; points: number }, i: number) => ({
+        teamId: r.teamId, teamName: r.teamName, teamLogo: r.teamLogo, rank: i + 1, points: r.points,
+      }));
 
-    const articles = await generateLeagueNews(leagueId, topTeams, matchRows);
+      const articles = await generateLeagueNews(leagueId, topTeams, matchRows);
+      return { articles, generatedAt: new Date().toISOString() };
+    });
 
-    const body = { articles, generatedAt: new Date().toISOString() };
-    cacheSet(cacheKey, body, 3600_000);
     res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
     return res.json(body);
   } catch (err) {

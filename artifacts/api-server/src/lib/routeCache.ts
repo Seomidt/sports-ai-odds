@@ -4,6 +4,7 @@ interface CacheEntry {
 }
 
 const store = new Map<string, CacheEntry>();
+const inFlight = new Map<string, Promise<unknown>>();
 
 export function cacheGet<T>(key: string): T | null {
   const entry = store.get(key);
@@ -21,6 +22,42 @@ export function cacheSet(key: string, body: unknown, ttlMs: number) {
 
 export function cacheDel(key: string) {
   store.delete(key);
+}
+
+/**
+ * getOrFetch — cache-then-dedup pattern.
+ *
+ * 1. If a fresh cached value exists → return it instantly (zero DB/AI work).
+ * 2. If a concurrent request for the same key is already in flight → await
+ *    that same Promise (all 100 waiters get one result, not 100 fetches).
+ * 3. Otherwise → run fn(), cache the result, then resolve all waiters.
+ *
+ * This means 100 simultaneous users hit one DB query / one Claude call.
+ */
+export async function getOrFetch<T>(
+  key: string,
+  ttlMs: number,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const cached = cacheGet<T>(key);
+  if (cached !== null) return cached;
+
+  const existing = inFlight.get(key);
+  if (existing) return existing as Promise<T>;
+
+  const promise = fn()
+    .then((result) => {
+      cacheSet(key, result, ttlMs);
+      inFlight.delete(key);
+      return result;
+    })
+    .catch((err) => {
+      inFlight.delete(key);
+      throw err;
+    });
+
+  inFlight.set(key, promise);
+  return promise;
 }
 
 // Periodically purge expired entries

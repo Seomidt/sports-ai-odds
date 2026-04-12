@@ -8,29 +8,9 @@ import { Router } from "express";
 import { db, pool } from "@workspace/db";
 import { fixtures, standings } from "@workspace/db/schema";
 import { and, or, eq, gte, lte } from "drizzle-orm";
+import { getOrFetch } from "../lib/routeCache.js";
 
 const router = Router();
-
-type CacheEntry<T> = {
-  value: T;
-  expiresAt: number;
-};
-
-const cache = new Map<string, CacheEntry<unknown>>();
-
-function getCached<T>(key: string): T | null {
-  const entry = cache.get(key);
-  if (!entry) return null;
-  if (Date.now() > entry.expiresAt) {
-    cache.delete(key);
-    return null;
-  }
-  return entry.value as T;
-}
-
-function setCached<T>(key: string, value: T, ttlMs: number) {
-  cache.set(key, { value, expiresAt: Date.now() + ttlMs });
-}
 
 function cacheHeaders(res: Parameters<typeof router.get>[1] extends (...args: infer P) => any ? P[1] : never, maxAgeSeconds: number) {
   res.setHeader("Cache-Control", `public, max-age=${maxAgeSeconds}, s-maxage=${maxAgeSeconds}, stale-while-revalidate=${Math.max(30, Math.floor(maxAgeSeconds / 2))}`);
@@ -176,52 +156,45 @@ function v3Response(endpoint: string, params: Record<string, string>, data: unkn
 
 router.get("/widget-proxy/fixtures", async (req, res) => {
   const { date, live, league, team, season, status } = req.query as Record<string, string | undefined>;
-  const cacheKey = `fixtures:${date ?? "today"}:${live ?? ""}:${league ?? ""}:${team ?? ""}:${season ?? ""}:${status ?? ""}`;
+  const cacheKey = `wp:fixtures:${date ?? "today"}:${live ?? ""}:${league ?? ""}:${team ?? ""}:${season ?? ""}:${status ?? ""}`;
   const ttlMs = live === "all" ? 15_000 : 300_000;
 
-  const cached = getCached<ReturnType<typeof v3Response>>(cacheKey);
-  if (cached) {
-    cacheHeaders(res, ttlMs / 1000);
-    return res.json(cached);
-  }
-
   try {
-    let response;
+    const response = await getOrFetch(cacheKey, ttlMs, async () => {
+      if (live === "all") {
+        const rows = await db.select().from(fixtures);
+        const liveRows = rows.filter((f) => LIVE_STATUSES.includes(f.statusShort ?? ""));
+        return v3Response("fixtures", { live: "all" }, liveRows.map(fixtureToV3));
+      } else if (date) {
+        const day = new Date(date);
+        const start = new Date(day); start.setUTCHours(0, 0, 0, 0);
+        const end = new Date(day); end.setUTCHours(23, 59, 59, 999);
+        const rows = await db.select().from(fixtures).where(and(gte(fixtures.kickoff, start), lte(fixtures.kickoff, end)));
+        let filtered = rows;
+        if (league) filtered = filtered.filter((f) => f.leagueId === Number(league));
+        if (status) filtered = filtered.filter((f) => f.statusShort === status);
+        return v3Response("fixtures", { date }, filtered.map(fixtureToV3));
+      } else if (team) {
+        const teamId = Number(team);
+        const rows = await db.select().from(fixtures).where(or(eq(fixtures.homeTeamId, teamId), eq(fixtures.awayTeamId, teamId)));
+        let filtered = rows;
+        if (league) filtered = filtered.filter((f) => f.leagueId === Number(league));
+        if (season) filtered = filtered.filter((f) => f.seasonYear === Number(season));
+        return v3Response("fixtures", { team }, filtered.map(fixtureToV3));
+      } else if (league) {
+        const rows = await db.select().from(fixtures).where(eq(fixtures.leagueId, Number(league)));
+        let filtered = rows;
+        if (season) filtered = filtered.filter((f) => f.seasonYear === Number(season));
+        return v3Response("fixtures", { league }, filtered.map(fixtureToV3));
+      } else {
+        const today = new Date();
+        const start = new Date(today); start.setUTCHours(0, 0, 0, 0);
+        const end = new Date(today); end.setUTCHours(23, 59, 59, 999);
+        const rows = await db.select().from(fixtures).where(and(gte(fixtures.kickoff, start), lte(fixtures.kickoff, end)));
+        return v3Response("fixtures", { date: today.toISOString().split("T")[0]! }, rows.map(fixtureToV3));
+      }
+    });
 
-    if (live === "all") {
-      const rows = await db.select().from(fixtures);
-      const liveRows = rows.filter((f) => LIVE_STATUSES.includes(f.statusShort ?? ""));
-      response = v3Response("fixtures", { live: "all" }, liveRows.map(fixtureToV3));
-    } else if (date) {
-      const day = new Date(date);
-      const start = new Date(day); start.setUTCHours(0, 0, 0, 0);
-      const end = new Date(day); end.setUTCHours(23, 59, 59, 999);
-      const rows = await db.select().from(fixtures).where(and(gte(fixtures.kickoff, start), lte(fixtures.kickoff, end)));
-      let filtered = rows;
-      if (league) filtered = filtered.filter((f) => f.leagueId === Number(league));
-      if (status) filtered = filtered.filter((f) => f.statusShort === status);
-      response = v3Response("fixtures", { date }, filtered.map(fixtureToV3));
-    } else if (team) {
-      const teamId = Number(team);
-      const rows = await db.select().from(fixtures).where(or(eq(fixtures.homeTeamId, teamId), eq(fixtures.awayTeamId, teamId)));
-      let filtered = rows;
-      if (league) filtered = filtered.filter((f) => f.leagueId === Number(league));
-      if (season) filtered = filtered.filter((f) => f.seasonYear === Number(season));
-      response = v3Response("fixtures", { team }, filtered.map(fixtureToV3));
-    } else if (league) {
-      const rows = await db.select().from(fixtures).where(eq(fixtures.leagueId, Number(league)));
-      let filtered = rows;
-      if (season) filtered = filtered.filter((f) => f.seasonYear === Number(season));
-      response = v3Response("fixtures", { league }, filtered.map(fixtureToV3));
-    } else {
-      const today = new Date();
-      const start = new Date(today); start.setUTCHours(0, 0, 0, 0);
-      const end = new Date(today); end.setUTCHours(23, 59, 59, 999);
-      const rows = await db.select().from(fixtures).where(and(gte(fixtures.kickoff, start), lte(fixtures.kickoff, end)));
-      response = v3Response("fixtures", { date: today.toISOString().split("T")[0]! }, rows.map(fixtureToV3));
-    }
-
-    setCached(cacheKey, response, ttlMs);
     cacheHeaders(res, ttlMs / 1000);
     return res.json(response);
   } catch (err) {
@@ -232,12 +205,6 @@ router.get("/widget-proxy/fixtures", async (req, res) => {
 
 router.get("/widget-proxy/fixtures/headtohead", async (req, res) => {
   const h2h = req.query["h2h"] as string | undefined;
-  const cacheKey = `h2h:${h2h ?? ""}`;
-  const cached = getCached<ReturnType<typeof v3Response>>(cacheKey);
-  if (cached) {
-    cacheHeaders(res, 3600);
-    return res.json(cached);
-  }
 
   if (!h2h || !h2h.includes("-")) {
     return res.status(400).json({ errors: { h2h: "Required: h2h=id1-id2" }, response: [] });
@@ -251,19 +218,21 @@ router.get("/widget-proxy/fixtures/headtohead", async (req, res) => {
   }
 
   try {
-    const rows = await db.select().from(fixtures).where(
-      or(
-        and(eq(fixtures.homeTeamId, idA), eq(fixtures.awayTeamId, idB)),
-        and(eq(fixtures.homeTeamId, idB), eq(fixtures.awayTeamId, idA))
-      )
-    );
-    rows.sort((a, b) => {
-      const ta = a.kickoff ? new Date(a.kickoff).getTime() : 0;
-      const tb = b.kickoff ? new Date(b.kickoff).getTime() : 0;
-      return tb - ta;
+    const response = await getOrFetch(`wp:h2h:${h2h}`, 3600_000, async () => {
+      const rows = await db.select().from(fixtures).where(
+        or(
+          and(eq(fixtures.homeTeamId, idA), eq(fixtures.awayTeamId, idB)),
+          and(eq(fixtures.homeTeamId, idB), eq(fixtures.awayTeamId, idA))
+        )
+      );
+      rows.sort((a, b) => {
+        const ta = a.kickoff ? new Date(a.kickoff).getTime() : 0;
+        const tb = b.kickoff ? new Date(b.kickoff).getTime() : 0;
+        return tb - ta;
+      });
+      return v3Response("fixtures/headtohead", { h2h }, rows.map(fixtureToV3));
     });
-    const response = v3Response("fixtures/headtohead", { h2h }, rows.map(fixtureToV3));
-    setCached(cacheKey, response, 3600_000);
+
     cacheHeaders(res, 3600);
     return res.json(response);
   } catch (err) {
@@ -275,91 +244,62 @@ router.get("/widget-proxy/fixtures/headtohead", async (req, res) => {
 router.get("/widget-proxy/standings", async (req, res) => {
   const leagueId = Number(req.query["league"] ?? 0);
   const seasonYear = Number(req.query["season"] ?? 2024);
-  const cacheKey = `standings:${leagueId}:${seasonYear}`;
-  const cached = getCached<ReturnType<typeof v3Response>>(cacheKey);
-  if (cached) {
-    cacheHeaders(res, 3600);
-    return res.json(cached);
-  }
 
   if (!leagueId) {
     return res.status(400).json({ errors: { league: "Required" }, response: [] });
   }
 
   try {
-    const { rows } = await pool.query(
-      `SELECT
-         s.team_id AS "teamId",
-         s.rank,
-         s.points,
-         s.played,
-         s.won,
-         s.drawn,
-         s.lost,
-         s.goals_for AS "goalsFor",
-         s.goals_against AS "goalsAgainst",
-         s.goals_diff AS "goalsDiff",
-         s.form,
-         s.updated_at AS "updatedAt",
-         COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
-         COALESCE(s.team_logo, t.logo) AS "teamLogo"
-       FROM standings s
-       LEFT JOIN teams t ON t.team_id = s.team_id
-       WHERE s.league_id = $1 AND s.season_year = $2
-       ORDER BY s.rank ASC`,
-      [leagueId, seasonYear]
-    );
+    const payload = await getOrFetch(`wp:standings:${leagueId}:${seasonYear}`, 3600_000, async () => {
+      const { rows } = await pool.query(
+        `SELECT
+           s.team_id AS "teamId", s.rank, s.points, s.played, s.won, s.drawn, s.lost,
+           s.goals_for AS "goalsFor", s.goals_against AS "goalsAgainst", s.goals_diff AS "goalsDiff",
+           s.form, s.updated_at AS "updatedAt",
+           COALESCE(s.team_name, t.name, s.team_id::text) AS "teamName",
+           COALESCE(s.team_logo, t.logo) AS "teamLogo"
+         FROM standings s
+         LEFT JOIN teams t ON t.team_id = s.team_id
+         WHERE s.league_id = $1 AND s.season_year = $2
+         ORDER BY s.rank ASC`,
+        [leagueId, seasonYear]
+      );
 
-    const meta = LEAGUE_META[leagueId] ?? { country: "Unknown", logo: "", flag: null };
-    const leagueNames: Record<number, string> = {
-      39: "Premier League", 140: "La Liga", 135: "Serie A", 78: "Bundesliga",
-      61: "Ligue 1", 2: "UEFA Champions League", 3: "UEFA Europa League", 848: "UEFA Conference League",
-      40: "Championship", 79: "2. Bundesliga", 88: "Eredivisie", 94: "Primeira Liga",
-      107: "Belgian Pro League", 113: "Allsvenskan", 119: "Superliga", 120: "1. Division",
-      179: "Scottish Premiership", 203: "Süper Lig", 218: "Bundesliga Austria",
-      235: "Eliteserien", 244: "Veikkausliiga", 271: "Ekstraklasa",
-      98: "J1 League", 188: "A-League Men", 253: "MLS", 262: "Liga MX", 292: "K League 1",
-    };
+      const meta = LEAGUE_META[leagueId] ?? { country: "Unknown", logo: "", flag: null };
+      const leagueNames: Record<number, string> = {
+        39: "Premier League", 140: "La Liga", 135: "Serie A", 78: "Bundesliga",
+        61: "Ligue 1", 2: "UEFA Champions League", 3: "UEFA Europa League", 848: "UEFA Conference League",
+        40: "Championship", 79: "2. Bundesliga", 88: "Eredivisie", 94: "Primeira Liga",
+        107: "Belgian Pro League", 113: "Allsvenskan", 119: "Superliga", 120: "1. Division",
+        179: "Scottish Premiership", 203: "Süper Lig", 218: "Bundesliga Austria",
+        235: "Eliteserien", 244: "Veikkausliiga", 271: "Ekstraklasa",
+        98: "J1 League", 188: "A-League Men", 253: "MLS", 262: "Liga MX", 292: "K League 1",
+      };
 
-    const standingsTable = rows.map((s: Record<string, unknown>) => ({
-      rank: s["rank"],
-      team: {
-        id: s["teamId"],
-        name: s["teamName"],
-        logo: s["teamLogo"] ?? "",
-      },
-      points: s["points"],
-      goalsDiff: s["goalsDiff"],
-      group: leagueNames[leagueId] ?? "League",
-      form: s["form"] ?? "",
-      status: "same",
-      description: null,
-      all: {
-        played: s["played"],
-        win: s["won"],
-        draw: s["drawn"],
-        lose: s["lost"],
-        goals: { for: s["goalsFor"], against: s["goalsAgainst"] },
-      },
-      home: { played: 0, win: 0, draw: 0, lose: 0, goals: { for: 0, against: 0 } },
-      away: { played: 0, win: 0, draw: 0, lose: 0, goals: { for: 0, against: 0 } },
-      update: s["updatedAt"] ? new Date(s["updatedAt"] as string).toISOString() : new Date().toISOString(),
-    }));
+      const standingsTable = rows.map((s: Record<string, unknown>) => ({
+        rank: s["rank"],
+        team: { id: s["teamId"], name: s["teamName"], logo: s["teamLogo"] ?? "" },
+        points: s["points"], goalsDiff: s["goalsDiff"],
+        group: leagueNames[leagueId] ?? "League", form: s["form"] ?? "",
+        status: "same", description: null,
+        all: {
+          played: s["played"], win: s["won"], draw: s["drawn"], lose: s["lost"],
+          goals: { for: s["goalsFor"], against: s["goalsAgainst"] },
+        },
+        home: { played: 0, win: 0, draw: 0, lose: 0, goals: { for: 0, against: 0 } },
+        away: { played: 0, win: 0, draw: 0, lose: 0, goals: { for: 0, against: 0 } },
+        update: s["updatedAt"] ? new Date(s["updatedAt"] as string).toISOString() : new Date().toISOString(),
+      }));
 
-    const response = [{
-      league: {
-        id: leagueId,
-        name: leagueNames[leagueId] ?? "League",
-        country: meta.country,
-        logo: meta.logo,
-        flag: meta.flag,
-        season: seasonYear,
-        standings: [standingsTable],
-      },
-    }];
+      return v3Response("standings", { league: String(leagueId), season: String(seasonYear) }, [{
+        league: {
+          id: leagueId, name: leagueNames[leagueId] ?? "League",
+          country: meta.country, logo: meta.logo, flag: meta.flag,
+          season: seasonYear, standings: [standingsTable],
+        },
+      }]);
+    });
 
-    const payload = v3Response("standings", { league: String(leagueId), season: String(seasonYear) }, response);
-    setCached(cacheKey, payload, 3600_000);
     cacheHeaders(res, 3600);
     return res.json(payload);
   } catch (err) {

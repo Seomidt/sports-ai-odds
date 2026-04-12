@@ -262,9 +262,9 @@ const LiveAnalysisSchema = z.object({
 type LiveAnalysis = z.infer<typeof LiveAnalysisSchema>;
 
 const FALLBACK_LIVE: LiveAnalysis = {
-  headline: "Analysis unavailable",
+  headline: "",
   narrative: "Live signal data is still being computed.",
-  momentum_verdict: "Unknown",
+  momentum_verdict: "",
   key_factors: [],
   alert_worthy: false,
 };
@@ -434,7 +434,15 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
     where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
   });
 
-  if (!fixture || fixture.homeGoals == null || fixture.awayGoals == null) return;
+  const FINISHED_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
+  if (!fixture || !FINISHED_STATUSES.includes(fixture.statusShort ?? "")) {
+    // Clear any tips that were incorrectly graded during a live match
+    await db.update(aiBettingTips)
+      .set({ outcome: null, reviewedAt: null, reviewHeadline: null, reviewSummary: null, accuracyNote: null })
+      .where(and(eq(aiBettingTips.fixtureId, fixtureId), isNotNull(aiBettingTips.outcome)));
+    return;
+  }
+  if (fixture.homeGoals == null || fixture.awayGoals == null) return;
 
   const hg = fixture.homeGoals;
   const ag = fixture.awayGoals;

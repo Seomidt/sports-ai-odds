@@ -171,19 +171,6 @@ export function Match() {
           </Tabs>
         </div>
 
-        {/* Head-to-Head history widget */}
-        <div className="mt-8 space-y-3">
-          <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
-            HEAD TO HEAD HISTORY
-          </h2>
-          <div className="glass-card rounded-xl overflow-hidden">
-            <api-sports-widget
-              data-type="h2h"
-              data-h2h={`${fixture.homeTeamId}-${fixture.awayTeamId}`}
-            />
-          </div>
-        </div>
-
       </div>
     </Layout>
   );

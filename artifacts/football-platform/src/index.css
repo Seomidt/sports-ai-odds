@@ -200,3 +200,9 @@ api-sports-widget {
   display: block;
   font-family: 'Inter', system-ui, sans-serif;
 }
+
+/* ─── League ticker scroll animation ─────────────────────────────────────── */
+@keyframes scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}

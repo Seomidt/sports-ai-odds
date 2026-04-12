@@ -6,7 +6,7 @@ import {
   useUpdateAdminUser 
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";

@@ -549,20 +549,39 @@ export interface ApiOddsMarket {
   markets: Record<string, Array<{ value: string; odd: string }>>;
 }
 
+// Bookmaker IDs we explicitly request to ensure coverage
+export const PRIORITY_BOOKMAKER_IDS: Record<number, string> = {
+  8: "Bet365",
+  6: "Bwin",
+  16: "Unibet",
+};
+
+/** Fetch odds for a specific bookmaker by ID (returns null if not available) */
+export async function fetchOddsForBookmaker(fixtureId: number, bookmakerId: number): Promise<ApiOddsExtended | null> {
+  const data = await apiFetch<ApiOdds[]>("/odds", { fixture: fixtureId, bookmaker: bookmakerId });
+  const raw = data?.[0] ?? null;
+  if (!raw || raw.bookmakers.length === 0) return null;
+  return { ...raw };
+}
+
+/** Fetch ALL markets for ALL bookmakers for a fixture — fixes bug where only first bookmaker was returned */
 export async function fetchOddsAllMarkets(fixtureId: number): Promise<ApiOddsMarket[] | null> {
   const data = await apiFetch<ApiOdds[]>("/odds", { fixture: fixtureId });
   if (!data || data.length === 0) return null;
 
-  return data.map((entry) => {
-    const markets: Record<string, Array<{ value: string; odd: string }>> = {};
+  const results: ApiOddsMarket[] = [];
+
+  for (const entry of data) {
     for (const bm of entry.bookmakers) {
+      const markets: Record<string, Array<{ value: string; odd: string }>> = {};
       for (const bet of bm.bets) {
         markets[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
       }
-      return { bookmaker: bm.name, markets };
+      results.push({ bookmaker: bm.name, markets });
     }
-    return { bookmaker: "unknown", markets };
-  });
+  }
+
+  return results.length > 0 ? results : null;
 }
 
 // ─── Ultra plan additional endpoints ──────────────────────────────────────────

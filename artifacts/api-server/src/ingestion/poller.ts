@@ -35,6 +35,8 @@ import {
   fetchFixturePlayerStats,
   fetchStandings,
   fetchOdds,
+  fetchOddsForBookmaker,
+  PRIORITY_BOOKMAKER_IDS,
   fetchPredictions,
   fetchLiveOdds,
   fetchTopScorers,
@@ -262,6 +264,47 @@ async function syncPreMatchData() {
   }
 }
 
+async function insertOddsSnapshot(
+  fixtureId: number,
+  bookmakerName: string,
+  bookmakers: Array<{ name: string; bets: Array<{ name: string; values: Array<{ value: string; odd: string }> }> }>,
+  extras?: { btts?: number | null; overUnder25?: number | null; handicapHome?: number | null }
+) {
+  const bm = bookmakers.find((b) => b.name === bookmakerName) ?? bookmakers[0];
+  if (!bm) return;
+  const market = bm.bets.find((b) => b.name === "Match Winner");
+  if (!market) return;
+  const homeVal = parseFloat(market.values.find((v) => v.value === "Home")?.odd ?? "0");
+  const drawVal = parseFloat(market.values.find((v) => v.value === "Draw")?.odd ?? "0");
+  const awayVal = parseFloat(market.values.find((v) => v.value === "Away")?.odd ?? "0");
+  if (!homeVal && !drawVal && !awayVal) return;
+
+  let btts = extras?.btts ?? null;
+  let overUnder25 = extras?.overUnder25 ?? null;
+  let handicapHome = extras?.handicapHome ?? null;
+
+  if (btts == null) {
+    const bttsMarket = bm.bets.find((b) => b.name === "Both Teams Score");
+    if (bttsMarket) btts = parseFloat(bttsMarket.values.find((v) => v.value === "Yes")?.odd ?? "0") || null;
+  }
+  if (overUnder25 == null) {
+    const ouMarket = bm.bets.find((b) => b.name === "Goals Over/Under");
+    if (ouMarket) overUnder25 = parseFloat(ouMarket.values.find((v) => v.value === "Over 2.5")?.odd ?? "0") || null;
+  }
+
+  await db.insert(oddsSnapshots).values({
+    fixtureId,
+    bookmaker: bm.name,
+    homeWin: homeVal || null,
+    draw: drawVal || null,
+    awayWin: awayVal || null,
+    btts,
+    overUnder25,
+    handicapHome: handicapHome ?? null,
+    snappedAt: new Date(),
+  });
+}
+
 async function syncOdds() {
   const now = new Date();
   const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
@@ -271,29 +314,30 @@ async function syncOdds() {
   });
 
   for (const fix of upcoming) {
+    const seen = new Set<string>();
+
+    // Fetch default — gets whatever bookmakers API returns (usually 10Bet, Marathonbet, William Hill)
     const odds = await fetchOdds(fix.fixtureId);
-    if (!odds) continue;
+    if (odds) {
+      for (const bm of odds.bookmakers) {
+        if (seen.has(bm.name)) continue;
+        seen.add(bm.name);
+        await insertOddsSnapshot(fix.fixtureId, bm.name, odds.bookmakers, {
+          btts: odds._btts,
+          overUnder25: odds._overUnder25,
+          handicapHome: odds._handicapHome,
+        });
+      }
+    }
 
-    for (const bm of odds.bookmakers) {
-      const market = bm.bets.find((b) => b.name === "Match Winner");
-      if (!market) continue;
-
-      const homeVal = parseFloat(market.values.find((v) => v.value === "Home")?.odd ?? "0");
-      const drawVal = parseFloat(market.values.find((v) => v.value === "Draw")?.odd ?? "0");
-      const awayVal = parseFloat(market.values.find((v) => v.value === "Away")?.odd ?? "0");
-
-      await db.insert(oddsSnapshots).values({
-        fixtureId: fix.fixtureId,
-        bookmaker: bm.name,
-        homeWin: homeVal || null,
-        draw: drawVal || null,
-        awayWin: awayVal || null,
-        btts: odds._btts ?? null,
-        overUnder25: odds._overUnder25 ?? null,
-        handicapHome: odds._handicapHome ?? null,
-        snappedAt: new Date(),
-      });
-      break;
+    // Explicitly fetch priority bookmakers (Bet365, Bwin, Unibet)
+    for (const [bmId, bmName] of Object.entries(PRIORITY_BOOKMAKER_IDS)) {
+      if (seen.has(bmName)) continue;
+      const bmOdds = await fetchOddsForBookmaker(fix.fixtureId, Number(bmId));
+      if (!bmOdds || bmOdds.bookmakers.length === 0) continue;
+      seen.add(bmName);
+      await insertOddsSnapshot(fix.fixtureId, bmOdds.bookmakers[0]!.name, bmOdds.bookmakers);
+      await new Promise((r) => setTimeout(r, 150));
     }
   }
 }
@@ -1030,16 +1074,42 @@ async function syncOddsAllMarketsForUpcoming() {
   });
 
   for (const fix of upcoming) {
-    const markets = await fetchOddsAllMarkets(fix.fixtureId);
-    if (!markets || markets.length === 0) continue;
+    const seen = new Set<string>();
+    const snappedAt = new Date();
 
-    for (const m of markets) {
+    // Default fetch — gets all bookmakers the API returns by default
+    const markets = await fetchOddsAllMarkets(fix.fixtureId);
+    if (markets) {
+      for (const m of markets) {
+        if (seen.has(m.bookmaker)) continue;
+        seen.add(m.bookmaker);
+        await db.insert(oddsMarkets).values({
+          fixtureId: fix.fixtureId,
+          bookmaker: m.bookmaker,
+          markets: m.markets as Record<string, unknown>,
+          snappedAt,
+        });
+      }
+    }
+
+    // Explicitly fetch priority bookmakers to ensure full coverage
+    for (const [bmId, bmName] of Object.entries(PRIORITY_BOOKMAKER_IDS)) {
+      if (seen.has(bmName)) continue;
+      const bmOdds = await fetchOddsForBookmaker(fix.fixtureId, Number(bmId));
+      if (!bmOdds || bmOdds.bookmakers.length === 0) continue;
+      const bm = bmOdds.bookmakers[0]!;
+      seen.add(bm.name);
+      const mkt: Record<string, Array<{ value: string; odd: string }>> = {};
+      for (const bet of bm.bets) {
+        mkt[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
+      }
       await db.insert(oddsMarkets).values({
         fixtureId: fix.fixtureId,
-        bookmaker: m.bookmaker,
-        markets: m.markets as Record<string, unknown>,
-        snappedAt: new Date(),
+        bookmaker: bm.name,
+        markets: mkt as Record<string, unknown>,
+        snappedAt,
       });
+      await new Promise((r) => setTimeout(r, 150));
     }
   }
   console.log(`[poller] Full odds markets synced for ${upcoming.length} upcoming fixtures`);

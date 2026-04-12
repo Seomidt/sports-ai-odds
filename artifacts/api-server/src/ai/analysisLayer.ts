@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { db } from "@workspace/db";
+import { db, pool } from "@workspace/db";
 import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
@@ -186,10 +186,22 @@ async function buildBettingContext(fixtureId: number): Promise<{
     }
   }
 
-  // Odds
-  const snap = await db.query.oddsSnapshots.findFirst({
-    where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId),
-  });
+  // Odds — use BEST available across all bookmakers for value analysis
+  const { rows: oddsRows } = await pool.query<{
+    bookmaker: string | null; homeWin: number | null; draw: number | null;
+    awayWin: number | null; btts: number | null; overUnder25: number | null;
+  }>(`
+    SELECT DISTINCT ON (bookmaker)
+      bookmaker, home_win AS "homeWin", draw, away_win AS "awayWin",
+      btts, over_under_25 AS "overUnder25"
+    FROM odds_snapshots WHERE fixture_id = $1
+    ORDER BY bookmaker, snapped_at DESC
+  `, [fixtureId]);
+
+  const bestHome = oddsRows.reduce((best, r) => (!best || (r.homeWin ?? 0) > best) ? (r.homeWin ?? 0) : best, 0) || null;
+  const bestDraw = oddsRows.reduce((best, r) => (!best || (r.draw ?? 0) > best) ? (r.draw ?? 0) : best, 0) || null;
+  const bestAway = oddsRows.reduce((best, r) => (!best || (r.awayWin ?? 0) > best) ? (r.awayWin ?? 0) : best, 0) || null;
+  const anyRow = oddsRows[0];
 
   // League standings
   let homeRank: number | null = null;
@@ -219,11 +231,11 @@ async function buildBettingContext(fixtureId: number): Promise<{
     statusShort: fixture.statusShort,
     signals,
     odds: {
-      home: snap?.homeWin ?? null,
-      draw: snap?.draw ?? null,
-      away: snap?.awayWin ?? null,
-      over25: snap?.overUnder25 ?? null,
-      btts: snap?.btts ?? null,
+      home: bestHome,
+      draw: bestDraw,
+      away: bestAway,
+      over25: anyRow?.overUnder25 ?? null,
+      btts: anyRow?.btts ?? null,
     },
     homeRank,
     awayRank,
@@ -535,7 +547,7 @@ Respond with ONLY valid JSON:
 // ─── Live analysis (kept for live tab) ───────────────────────────────────────
 
 async function buildLiveSignalContext(fixtureId: number): Promise<Record<string, number | boolean | string> | null> {
-  const [signals, fixture, latestOdds] = await Promise.all([
+  const [signals, fixture, { rows: liveOddsRows }] = await Promise.all([
     db.query.fixtureSignals.findMany({
       where: (s, { and: andFn, eq: eqFn }) =>
         andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, "live")),
@@ -543,11 +555,16 @@ async function buildLiveSignalContext(fixtureId: number): Promise<Record<string,
     db.query.fixtures.findFirst({
       where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
     }),
-    db.query.oddsSnapshots.findFirst({
-      where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId),
-      orderBy: (o, { desc: d }) => [d(o.snappedAt)],
-    }),
+    pool.query<{ homeWin: number | null; draw: number | null; awayWin: number | null }>(`
+      SELECT DISTINCT ON (bookmaker) home_win AS "homeWin", draw, away_win AS "awayWin"
+      FROM odds_snapshots WHERE fixture_id = $1 ORDER BY bookmaker, snapped_at DESC
+    `, [fixtureId]),
   ]);
+  const latestOdds = liveOddsRows.length > 0 ? {
+    homeWin: liveOddsRows.reduce((b, r) => Math.max(b, r.homeWin ?? 0), 0) || null,
+    draw: liveOddsRows.reduce((b, r) => Math.max(b, r.draw ?? 0), 0) || null,
+    awayWin: liveOddsRows.reduce((b, r) => Math.max(b, r.awayWin ?? 0), 0) || null,
+  } : null;
 
   if (!fixture) return null;
 

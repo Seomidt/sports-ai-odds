@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, sql } from "drizzle-orm";
 import {
   transfers,
 } from "@workspace/db/schema";
 import { cacheGet, cacheSet, TTL } from "../lib/routeCache.js";
+import { pool } from "@workspace/db";
 
 const router = Router();
 
@@ -33,24 +34,64 @@ router.get("/fixtures/:id/odds", async (req, res): Promise<void> => {
   const hit = cacheGet(ck);
   if (hit) { res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=60").set("X-Cache", "HIT").json(hit); return; }
 
-  const snap = await db.query.oddsSnapshots.findFirst({
-    where: (o, { eq: eqFn }) => eqFn(o.fixtureId, id),
-    orderBy: (o, { desc: d }) => [d(o.snappedAt)],
-  });
+  // Get latest snapshot per bookmaker using DISTINCT ON
+  type OddsRow = {
+    id: number; bookmaker: string | null;
+    homeWin: number | null; draw: number | null; awayWin: number | null;
+    btts: number | null; overUnder25: number | null; handicapHome: number | null;
+    snappedAt: string;
+  };
+  const { rows } = await pool.query<OddsRow>(`
+    SELECT DISTINCT ON (bookmaker)
+      id, bookmaker,
+      home_win AS "homeWin", draw, away_win AS "awayWin",
+      btts, over_under_25 AS "overUnder25", handicap_home AS "handicapHome",
+      snapped_at AS "snappedAt"
+    FROM odds_snapshots
+    WHERE fixture_id = $1
+    ORDER BY bookmaker, snapped_at DESC
+  `, [id]);
 
+  if (rows.length === 0) {
+    const body = { odds: null, allOdds: [], bestOdds: null };
+    cacheSet(ck, body, TTL.MIN2);
+    res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=60").set("X-Cache", "MISS").json(body);
+    return;
+  }
+
+  // Compute best odds per outcome across all bookmakers
+  let bestHome: { value: number; bookmaker: string } | null = null;
+  let bestDraw: { value: number; bookmaker: string } | null = null;
+  let bestAway: { value: number; bookmaker: string } | null = null;
+
+  for (const r of rows) {
+    const bm = r.bookmaker ?? "Unknown";
+    if (r.homeWin && (!bestHome || r.homeWin > bestHome.value)) bestHome = { value: r.homeWin, bookmaker: bm };
+    if (r.draw && (!bestDraw || r.draw > bestDraw.value)) bestDraw = { value: r.draw, bookmaker: bm };
+    if (r.awayWin && (!bestAway || r.awayWin > bestAway.value)) bestAway = { value: r.awayWin, bookmaker: bm };
+  }
+
+  const bestRow = rows[0]!;
   const body = {
-    odds: snap
-      ? {
-          bookmaker: snap.bookmaker ?? null,
-          homeWin: snap.homeWin ?? null,
-          draw: snap.draw ?? null,
-          awayWin: snap.awayWin ?? null,
-          btts: snap.btts ?? null,
-          overUnder25: snap.overUnder25 ?? null,
-          handicapHome: snap.handicapHome ?? null,
-          snappedAt: snap.snappedAt,
-        }
-      : null,
+    // Legacy single-snap field — backward compat
+    odds: {
+      bookmaker: bestRow.bookmaker ?? null,
+      homeWin: bestRow.homeWin ?? null,
+      draw: bestRow.draw ?? null,
+      awayWin: bestRow.awayWin ?? null,
+      btts: bestRow.btts ?? null,
+      overUnder25: bestRow.overUnder25 ?? null,
+      handicapHome: bestRow.handicapHome ?? null,
+      snappedAt: bestRow.snappedAt,
+    },
+    // All bookmakers with their latest odds
+    allOdds: rows,
+    // Best odds per outcome with bookmaker attribution
+    bestOdds: {
+      home: bestHome,
+      draw: bestDraw,
+      away: bestAway,
+    },
   };
   cacheSet(ck, body, TTL.MIN2);
   res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=60").set("X-Cache", "MISS").json(body);

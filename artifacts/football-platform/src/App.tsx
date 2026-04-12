@@ -151,7 +151,7 @@ function HomeRedirect() {
   return (
     <>
       <Show when="signed-in">
-        <Redirect to="/live" />
+        <Redirect to="/dashboard" />
       </Show>
       <Show when="signed-out">
         <Home />

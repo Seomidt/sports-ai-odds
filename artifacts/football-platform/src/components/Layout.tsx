@@ -158,22 +158,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             {children}
           </div>
         </main>
-
-        <nav className="md:hidden shrink-0 flex items-center justify-around border-t border-white/5 bg-black/40 backdrop-blur-xl" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
-          {navItems.map((item) => {
-            const isActive = location === item.href || location.startsWith(`${item.href}/`);
-            return (
-              <Link key={item.href} href={item.href}>
-                <div className="flex flex-col items-center gap-0.5 px-4 py-3">
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                  <span className={`text-[10px] font-mono tracking-wider ${isActive ? "text-primary" : "text-muted-foreground"}`}>
-                    {item.label.toUpperCase()}
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </nav>
       </div>
     </div>
   );

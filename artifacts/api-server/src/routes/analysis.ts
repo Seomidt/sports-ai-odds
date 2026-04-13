@@ -273,7 +273,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
 
         // Yesterday's finished fixtures with NO AI tips at all
         pool.query(`
-          SELECT f.id AS "fixtureId",
+          SELECT f.fixture_id AS "fixtureId",
                  f.home_team_name AS "homeTeam", f.away_team_name AS "awayTeam",
                  f.kickoff, f.league_name AS "leagueName", f.status_short AS "statusShort"
           FROM fixtures f
@@ -281,7 +281,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
             AND f.status_short IN ('FT','AET','PEN')
             AND NOT EXISTS (
               SELECT 1 FROM ai_betting_tips t
-              WHERE t.fixture_id = f.id AND t.bet_type != 'no_bet'
+              WHERE t.fixture_id = f.fixture_id AND t.bet_type != 'no_bet'
             )
           ORDER BY f.kickoff ASC
         `, [yesterdayStart, todayStart]),

@@ -6,6 +6,7 @@ import { Layout } from "@/components/Layout";
 import { Activity, Clock, Zap, TrendingUp, Target, ChevronDown, Wind, CloudRain, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
@@ -218,6 +219,7 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
 }
 
 export function PreMatch() {
+  useScrollRestoration("pre-match");
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
 
   const { data, isLoading } = useGetTodayFixtures({

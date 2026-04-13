@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Activity, CheckCircle2, Radio, ChevronDown, Thermometer, Wind, AlertTriangle } from "lucide-react";
 import { useState } from "react";
+import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 
 const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
 
@@ -16,6 +17,7 @@ interface LeagueSection {
 }
 
 export function PostMatch() {
+  useScrollRestoration("post-match");
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
 
   const { data, isLoading } = useGetTodayFixtures();

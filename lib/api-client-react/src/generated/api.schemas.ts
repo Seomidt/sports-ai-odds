@@ -35,7 +35,13 @@ export interface Fixture {
   homeGoals?: number | null;
   awayGoals?: number | null;
   venue?: string | null;
+  venueCity?: string | null;
   referee?: string | null;
+  weatherTemp?: number | null;
+  weatherDesc?: string | null;
+  weatherIcon?: string | null;
+  weatherWind?: number | null;
+  weatherHumidity?: number | null;
 }
 
 export interface LeagueGroup {

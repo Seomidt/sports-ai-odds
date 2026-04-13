@@ -720,8 +720,26 @@ components:
         venue:
           type: string
           nullable: true
+        venueCity:
+          type: string
+          nullable: true
         referee:
           type: string
+          nullable: true
+        weatherTemp:
+          type: number
+          nullable: true
+        weatherDesc:
+          type: string
+          nullable: true
+        weatherIcon:
+          type: string
+          nullable: true
+        weatherWind:
+          type: number
+          nullable: true
+        weatherHumidity:
+          type: integer
           nullable: true
       required:
         - fixtureId

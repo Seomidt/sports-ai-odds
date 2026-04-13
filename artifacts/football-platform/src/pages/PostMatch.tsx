@@ -3,7 +3,7 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, CheckCircle2, Radio, ChevronDown } from "lucide-react";
+import { Activity, CheckCircle2, Radio, ChevronDown, Thermometer, Wind, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 
 const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
@@ -106,6 +106,15 @@ export function PostMatch() {
                   {league.fixtures.map((fixture) => {
                     const homeWon = (fixture.homeGoals ?? 0) > (fixture.awayGoals ?? 0);
                     const awayWon = (fixture.awayGoals ?? 0) > (fixture.homeGoals ?? 0);
+                    const hasWeather = !!fixture.weatherDesc;
+                    const isAdverseWeather = hasWeather && (
+                      (fixture.weatherWind ?? 0) > 10 ||
+                      (fixture.weatherDesc ?? "").toLowerCase().includes("snow") ||
+                      (fixture.weatherDesc ?? "").toLowerCase().includes("heavy rain") ||
+                      (fixture.weatherDesc ?? "").toLowerCase().includes("thunderstorm") ||
+                      (fixture.weatherTemp ?? 15) < -5 ||
+                      (fixture.weatherTemp ?? 15) > 36
+                    );
                     return (
                       <Link key={fixture.fixtureId} href={`/match/${fixture.fixtureId}`}>
                         <div className="glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border border-white/5">
@@ -146,6 +155,24 @@ export function PostMatch() {
                               </span>
                             </div>
                           </div>
+                          {hasWeather && (
+                            <div className={`mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-xs font-mono ${isAdverseWeather ? "text-amber-400" : "text-violet-300"}`}>
+                              {fixture.weatherIcon
+                                ? <img src={`https://openweathermap.org/img/wn/${fixture.weatherIcon}.png`} className="w-4 h-4 object-contain shrink-0" alt={fixture.weatherDesc ?? ""} />
+                                : <Thermometer className="w-3.5 h-3.5 shrink-0" />
+                              }
+                              <span className="capitalize truncate">{fixture.weatherDesc}</span>
+                              <span className="shrink-0 ml-auto flex items-center gap-1">
+                                {Math.round(fixture.weatherTemp ?? 0)}°C
+                                {(fixture.weatherWind ?? 0) > 3 && (
+                                  <span className="opacity-70 flex items-center gap-0.5">
+                                    <Wind className="w-3 h-3" />{Math.round(fixture.weatherWind ?? 0)}m/s
+                                  </span>
+                                )}
+                                {isAdverseWeather && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </Link>
                     );

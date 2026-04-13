@@ -7,7 +7,8 @@ import { Activity, Clock, CheckCircle2, Zap } from "lucide-react";
 import { useState } from "react";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
-const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
+// PST (Postponed) and SUSP (Suspended) treated as finished — never show in prematch
+const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO", "PST", "SUSP"]);
 
 type Phase = "live" | "prematch" | "postmatch";
 
@@ -17,6 +18,16 @@ function getPhase(statusShort: string | null | undefined): Phase {
   if (POST_STATUSES.has(statusShort)) return "postmatch";
   return "prematch";
 }
+
+const STATUS_LABEL: Record<string, string> = {
+  NS: "Upcoming", TBD: "TBD",
+  "1H": "1st Half", HT: "Half Time", "2H": "2nd Half",
+  ET: "Extra Time", BT: "Break", P: "Penalties",
+  SUSP: "Suspended", INT: "Interrupted", LIVE: "Live",
+  FT: "Full Time", AET: "AET", PEN: "Penalties",
+  ABD: "Abandoned", CANC: "Cancelled", AWD: "Awarded", WO: "Walkover",
+  PST: "Postponed",
+};
 
 function LiveBadge({ elapsed }: { elapsed?: number | null }) {
   return (
@@ -37,10 +48,13 @@ function PrematchBadge({ kickoff }: { kickoff?: string | null }) {
 }
 
 function PostMatchBadge({ statusShort }: { statusShort?: string | null }) {
+  const isCancelled = statusShort === "PST" || statusShort === "CANC" || statusShort === "ABD";
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-white/5 px-2.5 py-1 rounded font-mono">
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded font-mono ${
+      isCancelled ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground bg-white/5"
+    }`}>
       <CheckCircle2 className="w-3 h-3 shrink-0" />
-      {statusShort ?? "FT"}
+      {STATUS_LABEL[statusShort ?? ""] ?? statusShort ?? "FT"}
     </span>
   );
 }

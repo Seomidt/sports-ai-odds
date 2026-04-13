@@ -99,6 +99,17 @@ export function Match() {
 
   const { fixture } = fixtureData;
   const isLive = ["1H", "2H", "HT", "ET", "P", "LIVE", "SUSP", "INT", "BT"].includes(fixture.statusShort || "");
+  const isPostponed = fixture.statusShort === "PST";
+  const isCancelled = fixture.statusShort === "CANC" || fixture.statusShort === "ABD";
+  const STATUS_LABEL: Record<string, string> = {
+    NS: "Upcoming", TBD: "TBD",
+    "1H": "1st Half", HT: "Half Time", "2H": "2nd Half",
+    ET: "Extra Time", BT: "Break", P: "Penalties",
+    SUSP: "Suspended", INT: "Interrupted", LIVE: "Live",
+    FT: "Full Time", AET: "After Extra Time", PEN: "Penalties",
+    ABD: "Abandoned", CANC: "Cancelled", AWD: "Awarded", WO: "Walkover",
+    PST: "Postponed",
+  };
 
   return (
     <Layout>
@@ -133,8 +144,14 @@ export function Match() {
                   <span className="text-sm font-bold tracking-widest">LIVE {fixture.statusElapsed}'</span>
                 </div>
               ) : (
-                <div className="px-3 py-1 rounded bg-white/5 border border-white/10 text-muted-foreground">
-                  <span className="text-sm font-bold tracking-widest">{fixture.statusShort}</span>
+                <div className={`px-3 py-1 rounded border font-mono ${
+                  isPostponed || isCancelled
+                    ? "bg-amber-400/10 border-amber-400/30 text-amber-400"
+                    : "bg-white/5 border-white/10 text-muted-foreground"
+                }`}>
+                  <span className="text-sm font-bold tracking-widest">
+                    {STATUS_LABEL[fixture.statusShort ?? ""] ?? fixture.statusShort ?? "NS"}
+                  </span>
                 </div>
               )}
               {fixture.weatherDesc ? (
@@ -174,7 +191,7 @@ export function Match() {
 
         {/* Tabs section for Analysis + Odds */}
         <div className="mt-8">
-          <Tabs defaultValue={isLive ? "live" : fixture.statusShort === "FT" ? "post" : "pre"} className="w-full">
+          <Tabs defaultValue={isLive ? "live" : (fixture.statusShort === "FT" || fixture.statusShort === "AET" || fixture.statusShort === "PEN") ? "post" : "pre"} className="w-full">
             <TabsList className="bg-black/40 border border-white/10 p-1 flex-wrap h-auto gap-1">
               <TabsTrigger value="pre" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">PRE-MATCH</TabsTrigger>
               <TabsTrigger value="live" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">IN-PLAY</TabsTrigger>
@@ -184,7 +201,23 @@ export function Match() {
             </TabsList>
             
             <TabsContent value="pre" className="mt-4">
-              <BettingIntelTab fixtureId={id} />
+              {(isPostponed || isCancelled) ? (
+                <div className="glass-card rounded-xl p-10 flex flex-col items-center text-center border border-amber-400/15">
+                  <div className="w-10 h-10 rounded-full bg-amber-400/10 flex items-center justify-center mb-4">
+                    <span className="text-amber-400 text-xl">!</span>
+                  </div>
+                  <h3 className="text-base font-semibold text-amber-400 font-mono mb-2">
+                    {isPostponed ? "Match Postponed" : "Match Cancelled"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground max-w-xs">
+                    {isPostponed
+                      ? "This match has been postponed by the league or clubs. No pre-match analysis is available."
+                      : "This match has been cancelled. No pre-match analysis is available."}
+                  </p>
+                </div>
+              ) : (
+                <BettingIntelTab fixtureId={id} />
+              )}
             </TabsContent>
             <TabsContent value="live" className="mt-4">
               <LiveAnalysisTab fixtureId={id} />

@@ -62,7 +62,7 @@ import {
   type ApiStatItem,
   type ApiLineup,
 } from "./apiFootballClient.js";
-import { initAiStats } from "../ai/analysisLayer.js";
+import { initAiStats, getBettingTips } from "../ai/analysisLayer.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
@@ -1659,6 +1659,9 @@ async function dailySignalPrecompute() {
   }
 
   console.log(`[signal-cron] Done — ${computed}/${upcoming.length} fixtures pre-computed`);
+
+  // After computing signals, generate AI tips for any fixture still missing them
+  await bulkGenerateAiTips(50);
 }
 
 /**
@@ -1694,7 +1697,8 @@ async function startupSignalCompute() {
   const toCompute = upcoming.filter((f) => !alreadyComputed.has(f.fixtureId));
 
   if (toCompute.length === 0) {
-    console.log(`[signal-startup] All ${upcoming.length} upcoming fixtures already have signals — skipping`);
+    console.log(`[signal-startup] All ${upcoming.length} upcoming fixtures already have signals — generating AI tips`);
+    await bulkGenerateAiTips(50);
     return;
   }
 
@@ -1712,6 +1716,67 @@ async function startupSignalCompute() {
   }
 
   console.log(`[signal-startup] Done — ${computed}/${toCompute.length} newly computed`);
+
+  // Generate AI tips for all upcoming fixtures missing picks
+  await bulkGenerateAiTips(50);
+}
+
+/**
+ * Generates AI betting tips (via Claude) for all upcoming fixtures that have
+ * odds data but are missing tips in the DB. Safe to call multiple times —
+ * getBettingTips() skips fixtures already having ≥3 tips.
+ * Processes up to BATCH_SIZE per call to avoid hammering the AI API.
+ */
+async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
+  const now = new Date();
+  const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(
+        gte(f.kickoff, now),
+        lte(f.kickoff, in7Days),
+        inArray(f.statusShort, ["NS", "TBD"])
+      ),
+    columns: { fixtureId: true, homeTeamName: true, awayTeamName: true },
+  });
+
+  if (upcoming.length === 0) return;
+
+  // Find fixtures that already have ≥3 tips — skip those
+  const existingTips = await db.query.aiBettingTips.findMany({
+    where: (t, { inArray: inArr }) =>
+      inArr(t.fixtureId, upcoming.map((f) => f.fixtureId)),
+    columns: { fixtureId: true },
+  });
+  const tipCount = new Map<number, number>();
+  for (const t of existingTips) {
+    tipCount.set(t.fixtureId, (tipCount.get(t.fixtureId) ?? 0) + 1);
+  }
+  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 3);
+
+  if (missing.length === 0) {
+    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have tips`);
+    return;
+  }
+
+  const batch = missing.slice(0, batchSize);
+  console.log(`[ai-tips] Generating tips for ${batch.length} of ${missing.length} fixtures missing picks`);
+  let ok = 0;
+  let skipped = 0;
+
+  for (const fix of batch) {
+    try {
+      const tips = await getBettingTips(fix.fixtureId);
+      if (tips) ok++;
+      else skipped++;
+    } catch (err) {
+      console.error(`[ai-tips] Error for fixture ${fix.fixtureId}:`, err);
+      skipped++;
+    }
+  }
+
+  console.log(`[ai-tips] Done — ${ok} generated, ${skipped} skipped (no odds/error)`);
 }
 
 /**
@@ -1799,6 +1864,9 @@ export function startPoller() {
 
   // H2H: every 6 hours (changes only before a new fixture)
   setInterval(() => syncH2HForUpcomingFixtures().catch(console.error), 6 * 60 * 60 * 1000);
+
+  // AI tips: every 6 hours — catches newly added fixtures and refreshes missing picks
+  setInterval(() => bulkGenerateAiTips(50).catch(console.error), 6 * 60 * 60 * 1000);
 
   // Team season stats: every 2 hours (more frequent = fresher form indicators)
   setInterval(() => syncTeamSeasonStats().catch(console.error), 2 * 60 * 60 * 1000);

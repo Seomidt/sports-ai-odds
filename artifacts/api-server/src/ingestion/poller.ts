@@ -55,6 +55,7 @@ import {
   fetchSquad,
   fetchFixtureInjuries,
   fetchFixturesBySeason,
+  fetchFixtureById,
   initApiStats,
   type ApiFixture,
   type ApiStatItem,
@@ -1243,6 +1244,39 @@ async function adaptiveLiveLoop() {
           console.log(`[poller] Post-match processing for fixture ${f.fixture.id}`);
           await runPostMatchFeatures(f.fixture.id);
           await runSignalEngine(f.fixture.id, "post");
+        }
+      }
+
+      // ── Stale-live cleanup ─────────────────────────────────────────────────
+      // Fixtures can get stuck in a live status if the poller restarts mid-match
+      // or misses the final FT update. Re-fetch any that the API no longer reports
+      // as live but are still stored with a live status in the DB.
+      const STALE_LIVE_STATUSES = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'INT', 'LIVE', 'SUSP'];
+      const currentLiveIds = new Set(tracked.map((f) => f.fixture.id));
+      const cutoff = new Date(Date.now() - 95 * 60 * 1000); // 95 min ago
+
+      const staleLive = await db.query.fixtures.findMany({
+        where: (t, { inArray, lte, and: andFn }) =>
+          andFn(inArray(t.statusShort, STALE_LIVE_STATUSES), lte(t.kickoff!, cutoff)),
+        columns: { fixtureId: true, statusShort: true, kickoff: true },
+        limit: 15,
+      });
+
+      for (const stale of staleLive) {
+        if (currentLiveIds.has(stale.fixtureId)) continue; // still live — skip
+        console.log(`[poller] Stale-live fixture ${stale.fixtureId} (${stale.statusShort}) — re-fetching final status`);
+        const fresh = await fetchFixtureById(stale.fixtureId);
+        if (fresh) {
+          await upsertFixture(fresh);
+          cacheDel(`fixture:${stale.fixtureId}`);
+          const finalStatus = fresh.fixture.status.short;
+          const isFinished = ['FT', 'AET', 'PEN', 'ABD', 'CANC', 'AWD', 'WO'].includes(finalStatus);
+          if (isFinished && !postMatchProcessed.has(stale.fixtureId)) {
+            postMatchProcessed.add(stale.fixtureId);
+            runPostMatchFeatures(stale.fixtureId).catch(console.error);
+            runSignalEngine(stale.fixtureId, "post").catch(console.error);
+          }
+          console.log(`[poller] Stale fixture ${stale.fixtureId} resolved → ${finalStatus}`);
         }
       }
 

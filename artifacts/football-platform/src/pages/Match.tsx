@@ -31,7 +31,7 @@ export function Match() {
   const { sessionId } = useSession();
   const queryClient = useQueryClient();
 
-  const LIVE_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE', 'NS']);
+  const LIVE_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE']);
   const { data: fixtureData, isLoading: isLoadingFixture } = useGetFixture(id, { 
     query: { 
       enabled: !!id, 

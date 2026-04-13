@@ -276,6 +276,11 @@ export async function fetchLiveFixtures(): Promise<ApiFixture[] | null> {
   return apiFetch<ApiFixture[]>("/fixtures", { live: "all" });
 }
 
+export async function fetchFixtureById(fixtureId: number): Promise<ApiFixture | null> {
+  const results = await apiFetch<ApiFixture[]>("/fixtures", { id: fixtureId });
+  return results?.[0] ?? null;
+}
+
 export async function fetchFixtureEvents(fixtureId: number): Promise<ApiEvent[] | null> {
   return apiFetch<ApiEvent[]>("/fixtures/events", { fixture: fixtureId });
 }

@@ -43,6 +43,7 @@ export const fixtures = pgTable(
     homeGoals: integer("home_goals"),
     awayGoals: integer("away_goals"),
     venue: text("venue"),
+    venueCity: text("venue_city"),
     referee: text("referee"),
     weatherTemp: real("weather_temp"),
     weatherDesc: text("weather_desc"),

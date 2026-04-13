@@ -55,8 +55,10 @@ export async function runSignalEngine(fixtureId: number, phase: Phase) {
     const hf = await getFeatures(fixtureId, homeId, "pre");
     const af = await getFeatures(fixtureId, awayId, "pre");
 
-    // Weather signal — use stored weather if fresh, otherwise fetch live
-    const venueCity = fixture.venue?.split(",")[0]?.trim();
+    // Weather signal — use stored weather if available.
+    // Only fetch live if we have an explicit city name (not a stadium name).
+    // The dedicated weather sync job handles fetching with correct city names.
+    const venueCity = fixture.venueCity?.trim();
     let weatherDesc = fixture.weatherDesc;
     let weatherWind = fixture.weatherWind;
     let weatherTemp = fixture.weatherTemp;

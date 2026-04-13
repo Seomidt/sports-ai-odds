@@ -23,7 +23,7 @@ import {
   oddsMarkets,
   fixtureSignals,
 } from "@workspace/db/schema";
-import { eq, and, inArray, lt, sql } from "drizzle-orm";
+import { eq, and, inArray, lt, sql, isNull, isNotNull } from "drizzle-orm";
 import {
   TRACKED_LEAGUES,
   fetchTodayFixtures,
@@ -103,6 +103,7 @@ async function upsertFixture(f: ApiFixture) {
       homeGoals: f.goals.home,
       awayGoals: f.goals.away,
       venue: f.fixture.venue?.name ?? null,
+      venueCity: f.fixture.venue?.city ?? null,
       referee: f.fixture.referee,
       updatedAt: new Date(),
     })
@@ -113,6 +114,8 @@ async function upsertFixture(f: ApiFixture) {
         statusElapsed: f.fixture.status.elapsed,
         homeGoals: f.goals.home,
         awayGoals: f.goals.away,
+        venue: f.fixture.venue?.name ?? null,
+        venueCity: f.fixture.venue?.city ?? null,
         updatedAt: new Date(),
       },
     });
@@ -1299,6 +1302,18 @@ async function syncWeatherForUpcomingFixtures() {
   const in5Days = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
   const staleThreshold = new Date(now.getTime() - 3 * 60 * 60 * 1000);
 
+  // Reset stale weather for fixtures that have no city yet (venueCity was added later)
+  // so they will be re-fetched using the correct city name
+  await db
+    .update(fixtures)
+    .set({ weatherFetchedAt: null })
+    .where(
+      and(
+        isNotNull(fixtures.weatherFetchedAt),
+        isNull(fixtures.venueCity)
+      )
+    );
+
   const upcoming = await db.query.fixtures.findMany({
     where: (f, { and, gte, lte, inArray }) =>
       and(
@@ -1321,10 +1336,10 @@ async function syncWeatherForUpcomingFixtures() {
 
   for (const f of stale) {
     try {
-      const city = f.venue ?? null;
-      if (!city) continue;
+      // Prefer the explicit city name; fall back to first segment of venue name
+      const cityName = f.venueCity?.trim() || (f.venue ?? "").split(",")[0]?.trim();
+      if (!cityName) continue;
 
-      const cityName = city.split(",")[0]?.trim() ?? city;
       const unixTs = f.kickoff ? Math.floor(f.kickoff.getTime() / 1000) : Math.floor(Date.now() / 1000);
       const w = await fetchWeatherForCity(cityName, unixTs);
       if (!w) continue;

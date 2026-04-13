@@ -1143,3 +1143,94 @@ export async function generateLeagueNews(
 
   return articles;
 }
+
+// ─── Pre-match AI Synthesis ───────────────────────────────────────────────────
+
+export interface PrematchSynthesis {
+  headline: string;
+  summary: string;
+  keyFactors: string[];
+  bestBet: string | null;
+  bestBetOdds: number | null;
+  generatedAt: string;
+}
+
+/**
+ * Generates a short pre-match AI synthesis (headline + summary + key factors)
+ * by synthesising the existing betting tips for a fixture.
+ * Cached in memory for 2 hours — regenerated on each server restart.
+ */
+export async function generatePrematchSynthesis(fixtureId: number): Promise<PrematchSynthesis | null> {
+  const cacheKey = `prematch-synthesis:${fixtureId}`;
+  const cached = getCached<PrematchSynthesis>(cacheKey);
+  if (cached) return cached;
+
+  // Fetch existing tips from DB
+  const tips = await db.query.aiBettingTips.findMany({
+    where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
+    orderBy: (t, { desc: d }) => [d(t.trustScore)],
+    limit: 8,
+  });
+
+  if (!tips.length) return null;
+
+  const fixture = await db.query.fixtures.findFirst({
+    where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
+    columns: { homeTeamName: true, awayTeamName: true, leagueName: true, kickoff: true, homeTeamId: true, awayTeamId: true },
+  });
+
+  const pred = await db.query.predictions.findFirst({ where: (p, { eq: eqFn }) => eqFn(p.fixtureId, fixtureId) });
+  const homeTeam = fixture?.homeTeamName ?? "Home";
+  const awayTeam = fixture?.awayTeamName ?? "Away";
+  const matchLabel = `${homeTeam} vs ${awayTeam}`;
+  const leagueName = fixture?.leagueName ?? "";
+
+  // Build tip summary for the prompt
+  const tipLines = tips.map(t => {
+    const edge = t.edge != null ? ` (edge: ${(Number(t.edge) * 100).toFixed(1)}%)` : "";
+    return `- ${t.betType}: ${t.recommendation} @ ${t.marketOdds ?? "?"} | trust ${t.trustScore}/10${edge} | ${t.valueRating ?? "fair"} | ${t.reasoning?.slice(0, 120) ?? ""}`;
+  }).join("\n");
+
+  const predLine = pred
+    ? `Algorithm prediction: ${homeTeam} ${pred.homeWinPct ?? "?"}% win / Draw ${pred.drawPct ?? "?"}% / ${awayTeam} ${pred.awayWinPct ?? "?"}% win. Predicted score: ${pred.goalsHome ?? "?"}–${pred.goalsAway ?? "?"}. Advice: ${pred.advice ?? "—"}`
+    : "";
+
+  const bestTip = tips[0];
+
+  const prompt = `You are an expert football betting analyst. Write a concise pre-match briefing for ${matchLabel} (${leagueName}).
+
+${predLine ? predLine + "\n\n" : ""}AI Betting Tips generated:
+${tipLines}
+
+Return ONLY valid JSON (no markdown) with this exact structure:
+{
+  "headline": "One punchy sentence (max 15 words) capturing the key angle",
+  "summary": "2-3 sentences synthesising the overall match picture and where the value lies",
+  "keyFactors": ["factor 1", "factor 2", "factor 3"]
+}
+
+Rules: No emoji. Be direct and analytical. Focus on the bet with the most edge.`;
+
+  const raw = await callClaude(prompt);
+  if (!raw) return null;
+
+  const schema = z.object({
+    headline: z.string(),
+    summary: z.string(),
+    keyFactors: z.array(z.string()),
+  });
+
+  const parsed = parseJson(raw, schema, { headline: matchLabel, summary: "", keyFactors: [] });
+
+  const result: PrematchSynthesis = {
+    headline: parsed.headline,
+    summary: parsed.summary,
+    keyFactors: parsed.keyFactors,
+    bestBet: bestTip ? `${bestTip.recommendation}` : null,
+    bestBetOdds: bestTip?.marketOdds ? Number(bestTip.marketOdds) : null,
+    generatedAt: new Date().toISOString(),
+  };
+
+  setCached(cacheKey, result, 2 * 60 * 60 * 1000); // 2 hours
+  return result;
+}

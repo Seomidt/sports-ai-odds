@@ -62,7 +62,15 @@ interface DailySummary {
 const betTypeLabel = (t: string) => {
   if (t === 'match_result') return 'Match Result';
   if (t === 'over_under') return 'Goals Market';
-  if (t === 'btts') return 'BTTS';
+  if (t === 'btts') return 'Both Teams Score';
+  if (t === 'corners') return 'Corners Market';
+  if (t === 'asian_handicap') return 'Asian Handicap';
+  if (t === 'total_cards') return 'Cards Market';
+  if (t === 'double_chance') return 'Double Chance';
+  if (t === 'draw_no_bet') return 'Draw No Bet';
+  if (t === 'win_to_nil') return 'Win to Nil';
+  if (t === 'first_half_goals') return '1st Half Goals';
+  if (t === 'no_bet') return 'No Bet';
   return t;
 };
 
@@ -313,6 +321,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
 // ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
+  const [expanded, setExpanded] = useState(false);
   const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
   const borderClass = isTopValue
     ? 'border-teal-400/30 shadow-[0_0_20px_rgba(0,255,200,0.06)]'
@@ -320,15 +329,19 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
 
   return (
-    <Link href={`/match/${tip.fixtureId}`}>
-      <div className={`glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border ${borderClass} group`}>
+    <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden`}>
+      {/* ── Clickable main area ── */}
+      <button
+        onClick={() => setExpanded(o => !o)}
+        className="w-full text-left p-5 hover:bg-white/3 transition-colors"
+      >
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(tip.betType)}</span>
             <ValueBadge rating={tip.valueRating} />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {tip.edge != null && (
               <div className={`px-2 py-0.5 rounded text-xs font-mono font-bold tabular-nums border ${
                 tip.edge >= 0.15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
@@ -347,7 +360,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
 
         <div className="flex items-center justify-between mb-3">
           <div className="text-lg font-bold text-white leading-tight">{tip.recommendation}</div>
-          <div className="flex flex-col items-end gap-0.5">
+          <div className="flex flex-col items-end gap-0.5 shrink-0 ml-2">
             <div className="flex items-center gap-1">
               <span className={`text-xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
                 {tip.trustScore}
@@ -373,15 +386,19 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 mb-3 text-sm text-white/60">
+        <div className="flex items-center gap-2 mb-2 text-sm text-white/60">
           <span className="font-medium">{tip.homeTeam}</span>
           <span className="text-white/20">vs</span>
           <span className="font-medium">{tip.awayTeam}</span>
         </div>
 
-        <p className="text-xs text-white/50 leading-relaxed line-clamp-2 mb-3">{tip.reasoning}</p>
+        {/* Reasoning: clipped when collapsed, full when expanded */}
+        <p className={`text-xs text-white/50 leading-relaxed ${expanded ? '' : 'line-clamp-2'}`}>
+          {tip.reasoning}
+        </p>
 
-        <div className="flex items-center justify-between pt-2 border-t border-white/5">
+        {/* Expand indicator */}
+        <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-white/5">
           <div className="flex items-center gap-2">
             {tip.leagueName && (
               <span className="text-[10px] text-muted-foreground/40 font-mono truncate">{tip.leagueName}</span>
@@ -393,10 +410,39 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
               </>
             )}
           </div>
-          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25 group-hover:text-primary/50 transition-colors" />
+          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground/30 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
         </div>
-      </div>
-    </Link>
+      </button>
+
+      {/* ── Expanded detail panel ── */}
+      {expanded && (
+        <div className="border-t border-white/6 px-5 py-4 space-y-3 bg-white/2">
+          {/* Edge formula breakdown */}
+          {tip.aiProbability != null && tip.marketOdds != null && (
+            <div className="bg-white/4 rounded-lg p-3 space-y-1">
+              <div className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-wider">Edge Calculation</div>
+              <div className="text-xs font-mono text-white/70">
+                ({(tip.aiProbability * 100).toFixed(0)}% × {tip.marketOdds.toFixed(2)}) − 1 ={' '}
+                <span className={`font-bold ${(tip.edge ?? 0) >= 0.05 ? 'text-teal-400' : (tip.edge ?? 0) >= -0.05 ? 'text-violet-400' : 'text-amber-400'}`}>
+                  {tip.edge != null ? `${tip.edge >= 0 ? '+' : ''}${(tip.edge * 100).toFixed(1)}%` : '—'}
+                </span>
+              </div>
+              <div className="text-[9px] font-mono text-muted-foreground/30">
+                AI prob × odds − 1 · &ge;15% = Strong Value · &ge;5% = Value · &lt;0% = Overpriced
+              </div>
+            </div>
+          )}
+
+          {/* View Match link */}
+          <Link href={`/match/${tip.fixtureId}`}>
+            <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
+              <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">View Full Match Analysis</span>
+              <ChevronRight className="w-3.5 h-3.5 text-primary/60" />
+            </div>
+          </Link>
+        </div>
+      )}
+    </div>
   );
 }
 

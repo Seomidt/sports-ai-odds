@@ -219,7 +219,13 @@ export function Match() {
                   </p>
                 </div>
               ) : (
-                <BettingIntelTab fixtureId={id} />
+                <BettingIntelTab
+                  fixtureId={id}
+                  homeTeamId={fixture.homeTeamId ?? 0}
+                  awayTeamId={fixture.awayTeamId ?? 0}
+                  homeTeam={fixture.homeTeamName ?? "Home"}
+                  awayTeam={fixture.awayTeamName ?? "Away"}
+                />
               )}
             </TabsContent>
             <TabsContent value="live" className="mt-4">
@@ -446,7 +452,25 @@ function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLab
   );
 }
 
-function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
+interface PrematchSynthesis {
+  headline: string;
+  summary: string;
+  keyFactors: string[];
+  bestBet: string | null;
+  bestBetOdds: number | null;
+  generatedAt: string;
+}
+
+interface IntelData {
+  prediction: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null; goalsHome: number | null; goalsAway: number | null; advice: string | null } | null;
+  homeCoach: { name: string | null } | null;
+  awayCoach: { name: string | null } | null;
+  homeSidelined: Array<{ playerName: string | null; reason: string | null }>;
+  awaySidelined: Array<{ playerName: string | null; reason: string | null }>;
+  topScorers: Array<{ playerName: string | null; teamId: number | null; goals: number | null; assists: number | null }>;
+}
+
+function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: { fixtureId: number; homeTeamId: number; awayTeamId: number; homeTeam: string; awayTeam: string }) {
   const { data, isLoading } = useQuery<{ tips: BettingTip[]; tip: BettingTip | null; message?: string }>({
     queryKey: ['bettingTip', fixtureId],
     queryFn: async () => {
@@ -456,6 +480,29 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     },
     staleTime: 15 * 60_000,
     gcTime: 30 * 60_000,
+  });
+
+  const { data: synthesisData, isLoading: isSynthesisLoading } = useQuery<{ synthesis: PrematchSynthesis | null; message?: string }>({
+    queryKey: ['prematchSynthesis', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/analysis/${fixtureId}/prematch-synthesis`);
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    enabled: !isLoading,
+    staleTime: 60 * 60_000,
+    gcTime: 2 * 60 * 60_000,
+  });
+
+  const { data: intelData } = useQuery<IntelData>({
+    queryKey: ['intel', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/fixtures/${fixtureId}/intel`);
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    staleTime: 30 * 60_000,
+    gcTime: 60 * 60_000,
   });
 
   const { data: oddsData } = useGetFixtureOdds(fixtureId, { query: { queryKey: getGetFixtureOddsQueryKey(fixtureId), staleTime: 10 * 60_000 } });
@@ -473,7 +520,7 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
 
   const tips = data?.tips ?? [];
 
-  const betTypeLabel = (t: string) => {
+  const betTypeLabelFn = (t: string) => {
     if (t === 'match_result') return 'Match Result';
     if (t === 'over_under') return 'Goals Market';
     if (t === 'btts') return 'Both Teams to Score';
@@ -488,14 +535,12 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     return t;
   };
 
-  const bestTip = tips.reduce<BettingTip | null>((best, tip) => {
-    if (!best) return tip;
-    const bestValueScore = best.valueRating === 'strong_value' ? 3 : best.valueRating === 'value' ? 2 : best.valueRating === 'fair' ? 1 : 0;
-    const tipValueScore = tip.valueRating === 'strong_value' ? 3 : tip.valueRating === 'value' ? 2 : tip.valueRating === 'fair' ? 1 : 0;
-    if (tipValueScore > bestValueScore) return tip;
-    if (tipValueScore === bestValueScore && tip.trustScore > best.trustScore) return tip;
-    return best;
-  }, null);
+  const synthesis = synthesisData?.synthesis ?? null;
+  const pred = intelData?.prediction ?? null;
+  const homeSidelined = intelData?.homeSidelined ?? [];
+  const awaySidelined = intelData?.awaySidelined ?? [];
+  const homeTopScorer = intelData?.topScorers?.find(p => p.teamId === homeTeamId);
+  const awayTopScorer = intelData?.topScorers?.find(p => p.teamId === awayTeamId);
 
   return (
     <div className="space-y-4">
@@ -535,20 +580,131 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
         </div>
       ) : (
         <>
-          {bestTip && (bestTip.valueRating === 'value' || bestTip.valueRating === 'strong_value') && (
-            <div className="glass-card p-4 rounded-xl border border-teal-400/20 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-teal-400/10 border border-teal-400/20 flex items-center justify-center">
-                <Zap className="w-4 h-4 text-teal-400" />
+          {/* ── AI Pre-Match Synthesis ── */}
+          {isSynthesisLoading && !synthesis ? (
+            <div className="glass-card p-4 rounded-xl border border-violet-400/15 flex items-center gap-3">
+              <Activity className="w-4 h-4 text-violet-400 animate-pulse shrink-0" />
+              <span className="text-xs font-mono text-muted-foreground">Generating AI match briefing…</span>
+            </div>
+          ) : synthesis ? (
+            <div className="glass-card rounded-xl border border-violet-400/20 overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-white/6 flex items-center gap-2">
+                <Zap className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-xs font-mono text-violet-400 uppercase tracking-widest">AI Match Briefing</span>
+                <span className="ml-auto text-[9px] font-mono text-muted-foreground/30">
+                  {format(new Date(synthesis.generatedAt), 'HH:mm')}
+                </span>
               </div>
-              <div>
-                <div className="text-xs font-mono text-teal-400 uppercase tracking-wider">Best Value Pick</div>
-                <div className="text-sm font-bold text-white">{bestTip.recommendation} @ {bestTip.marketOdds?.toFixed(2)}</div>
+              <div className="p-5 space-y-3">
+                <p className="text-base font-bold text-white leading-snug">{synthesis.headline}</p>
+                {synthesis.summary && (
+                  <p className="text-sm text-white/65 leading-relaxed">{synthesis.summary}</p>
+                )}
+                {synthesis.keyFactors.length > 0 && (
+                  <div className="space-y-1.5 pt-1">
+                    {synthesis.keyFactors.map((f, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="w-1.5 h-1.5 rounded-full bg-violet-400/50 mt-1.5 shrink-0" />
+                        <span className="text-xs text-white/55 leading-relaxed">{f}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
+
+          {/* ── Compact Intel Panel: prediction + injuries + top scorer ── */}
+          {(pred || homeSidelined.length > 0 || awaySidelined.length > 0 || homeTopScorer || awayTopScorer) && (
+            <div className="glass-card rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5 text-teal-400/70" />
+                <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Match Context</span>
+              </div>
+              <div className="p-4 space-y-3">
+                {/* Win probability */}
+                {pred && (pred.homeWinPct != null || pred.drawPct != null || pred.awayWinPct != null) && (
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 uppercase tracking-wider">
+                      <span>{homeTeam}</span>
+                      <span>Draw</span>
+                      <span>{awayTeam}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <div className="flex-1 h-6 rounded-l flex items-center justify-center bg-teal-400/20 border border-teal-400/20">
+                        <span className="text-xs font-mono font-bold text-teal-300">{pred.homeWinPct ?? 0}%</span>
+                      </div>
+                      <div className="flex-shrink-0 px-2 h-6 flex items-center justify-center bg-white/5 border border-white/10 rounded">
+                        <span className="text-xs font-mono text-white/50">{pred.drawPct ?? 0}%</span>
+                      </div>
+                      <div className="flex-1 h-6 rounded-r flex items-center justify-center bg-violet-400/20 border border-violet-400/20">
+                        <span className="text-xs font-mono font-bold text-violet-300">{pred.awayWinPct ?? 0}%</span>
+                      </div>
+                    </div>
+                    {(pred.goalsHome != null || pred.goalsAway != null) && (
+                      <div className="text-center text-xs font-mono text-muted-foreground/50">
+                        Predicted {pred.goalsHome ?? '?'}–{pred.goalsAway ?? '?'}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Top scorers from each team */}
+                {(homeTopScorer || awayTopScorer) && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {homeTopScorer && (
+                      <div className="bg-white/3 rounded-lg p-2.5 space-y-0.5">
+                        <div className="text-[9px] font-mono text-teal-400/60 uppercase tracking-wider truncate">{homeTeam} — Top Scorer</div>
+                        <div className="text-xs font-mono text-white truncate">{homeTopScorer.playerName}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold font-mono text-teal-400">{homeTopScorer.goals ?? 0}G</span>
+                          {homeTopScorer.assists != null && <span className="text-xs font-mono text-violet-400/70">{homeTopScorer.assists}A</span>}
+                        </div>
+                      </div>
+                    )}
+                    {awayTopScorer && (
+                      <div className="bg-white/3 rounded-lg p-2.5 space-y-0.5">
+                        <div className="text-[9px] font-mono text-violet-400/60 uppercase tracking-wider truncate">{awayTeam} — Top Scorer</div>
+                        <div className="text-xs font-mono text-white truncate">{awayTopScorer.playerName}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold font-mono text-teal-400">{awayTopScorer.goals ?? 0}G</span>
+                          {awayTopScorer.assists != null && <span className="text-xs font-mono text-violet-400/70">{awayTopScorer.assists}A</span>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Injuries */}
+                {(homeSidelined.length > 0 || awaySidelined.length > 0) && (
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    {[{ label: homeTeam, players: homeSidelined }, { label: awayTeam, players: awaySidelined }].map(({ label, players }) =>
+                      players.length > 0 ? (
+                        <div key={label} className="space-y-1">
+                          <div className="text-[9px] font-mono text-red-400/60 uppercase tracking-wider flex items-center gap-1">
+                            <UserX className="w-3 h-3" />{label} — Out
+                          </div>
+                          {players.slice(0, 4).map((p, i) => (
+                            <div key={i} className="text-[10px] font-mono text-white/50 truncate">
+                              {p.playerName ?? 'Unknown'}
+                              {p.reason && <span className="text-white/25 ml-1">({p.reason})</span>}
+                            </div>
+                          ))}
+                          {players.length > 4 && (
+                            <div className="text-[9px] font-mono text-muted-foreground/30">+{players.length - 4} more</div>
+                          )}
+                        </div>
+                      ) : null
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           )}
 
+          {/* ── Tip Cards ── */}
           {tips.map((tip) => (
-            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabel(tip.betType)} bookmaker={bookmaker} />
+            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} />
           ))}
 
           {tips[0] && (

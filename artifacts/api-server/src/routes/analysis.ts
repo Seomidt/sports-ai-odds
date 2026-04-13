@@ -8,6 +8,7 @@ import {
   getAiAccuracyStats,
   generateAlertText,
   generateLeagueNews,
+  generatePrematchSynthesis,
 } from "../ai/analysisLayer.js";
 import { cacheGet, cacheSet, getOrFetch, TTL } from "../lib/routeCache.js";
 
@@ -51,6 +52,33 @@ router.get("/analysis/:fixtureId/betting-tip", async (req, res) => {
   } catch (err) {
     console.error("[analysis] betting-tip error:", err);
     return res.status(500).json({ error: "Tip generation failed" });
+  }
+});
+
+// GET /api/analysis/:fixtureId/prematch-synthesis — AI pre-match headline + summary + key factors
+router.get("/analysis/:fixtureId/prematch-synthesis", async (req, res) => {
+  const id = parseInt(req.params["fixtureId"] ?? "0");
+  if (!id) return res.status(400).json({ error: "Invalid fixture id" });
+
+  const cacheKey = `prematch-synthesis-route:${id}`;
+  const cached = cacheGet<object>(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
+    return res.json(cached);
+  }
+
+  try {
+    const synthesis = await generatePrematchSynthesis(id);
+    if (!synthesis) {
+      return res.json({ synthesis: null, message: "No tips available for synthesis." });
+    }
+    const body = { synthesis };
+    cacheSet(cacheKey, body, TTL.HOUR2);
+    res.set("Cache-Control", "public, max-age=3600, stale-while-revalidate=600");
+    return res.json(body);
+  } catch (err) {
+    console.error("[analysis] prematch-synthesis error:", err);
+    return res.status(500).json({ error: "Synthesis generation failed" });
   }
 });
 

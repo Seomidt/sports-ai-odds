@@ -1569,19 +1569,16 @@ async function upsertFixtureEventsAndStats(fixtureId: number): Promise<void> {
  */
 async function backfillMissingEdge(): Promise<void> {
   try {
-    const { rowCount } = await pool.query(`
-      UPDATE ai_betting_tips
-      SET
-        ai_probability = ROUND((trust_score / 10.0)::numeric, 4),
-        edge = CASE
-          WHEN market_odds IS NOT NULL AND market_odds > 1
-          THEN ROUND(((trust_score / 10.0 * market_odds) - 1)::numeric, 4)
-          ELSE NULL
-        END
-      WHERE edge IS NULL
-    `);
-    if (rowCount && rowCount > 0) {
-      console.log(`[edge-backfill] Populated edge for ${rowCount} tips`);
+    const updated = await db
+      .update(aiBettingTips)
+      .set({
+        aiProbability: sql`ROUND((trust_score / 10.0)::numeric, 4)`,
+        edge: sql`CASE WHEN market_odds IS NOT NULL AND market_odds > 1 THEN ROUND(((trust_score / 10.0 * market_odds) - 1)::numeric, 4) ELSE NULL END`,
+      })
+      .where(isNull(aiBettingTips.edge))
+      .returning({ id: aiBettingTips.id });
+    if (updated.length > 0) {
+      console.log(`[edge-backfill] Populated edge for ${updated.length} tips`);
     }
   } catch (err) {
     console.warn("[edge-backfill] Failed:", err);

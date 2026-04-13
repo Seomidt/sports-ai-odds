@@ -308,11 +308,22 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
           AND f.status_short IN ('NS','TBD','1H','HT','2H','ET','BT','P','SUSP','INT','LIVE')
       `, [cutoff]);
 
-      const byFixture: Record<number, typeof rows> = {};
+      const byFixture: Record<number, object[]> = {};
       for (const tip of rows) {
-        const fid = tip.fixture_id as number;
+        const fid = tip["fixture_id"] as number;
         if (!byFixture[fid]) byFixture[fid] = [];
-        byFixture[fid]!.push(tip);
+        byFixture[fid]!.push({
+          id: tip["id"],
+          fixtureId: tip["fixture_id"],
+          betType: tip["bet_type"],
+          betSide: tip["bet_side"],
+          recommendation: tip["recommendation"],
+          trustScore: tip["trust_score"],
+          aiProbability: tip["ai_probability"],
+          edge: tip["edge"],
+          marketOdds: tip["market_odds"],
+          valueRating: tip["value_rating"],
+        });
       }
       return { tips: byFixture };
     });

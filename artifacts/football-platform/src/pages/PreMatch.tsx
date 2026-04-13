@@ -38,6 +38,8 @@ type StoredTip = {
   betSide: string | null;
   recommendation: string;
   trustScore: number;
+  aiProbability: number | null;
+  edge: number | null;
   marketOdds: number | null;
   valueRating: string | null;
 };
@@ -103,9 +105,20 @@ function TipPreview({ fixtureId, allTips }: { fixtureId: number; allTips: Record
         </span>
       </div>
       <div className="flex items-center gap-1.5 shrink-0">
-        <span className="text-[10px] font-mono text-muted-foreground/50">
-          T{matchTip.trustScore}/10
-        </span>
+        {matchTip.edge != null ? (
+          <span className={`text-[10px] font-mono font-bold tabular-nums ${
+            matchTip.edge >= 0.15 ? 'text-teal-300' :
+            matchTip.edge >= 0.05 ? 'text-teal-400' :
+            matchTip.edge >= -0.05 ? 'text-violet-400' :
+            'text-amber-400'
+          }`}>
+            {matchTip.edge >= 0 ? '+' : ''}{(matchTip.edge * 100).toFixed(0)}%
+          </span>
+        ) : (
+          <span className="text-[10px] font-mono text-muted-foreground/50">
+            {matchTip.trustScore}/10
+          </span>
+        )}
         <ValueBadge rating={matchTip.valueRating} />
       </div>
     </div>

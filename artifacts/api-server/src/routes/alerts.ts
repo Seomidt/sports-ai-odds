@@ -102,6 +102,53 @@ router.get("/alerts/unread", async (req, res): Promise<void> => {
   res.json(body);
 });
 
+// GET /api/alerts/recent — all broadcast signals from the last N hours (default 1h)
+router.get("/alerts/recent", async (req, res): Promise<void> => {
+  const sessionId = req.headers["x-session-id"] as string | undefined;
+  if (!sessionId) {
+    res.status(400).json({ error: "Missing x-session-id header" });
+    return;
+  }
+
+  const hours = Math.min(parseInt((req.query.hours as string) ?? "1", 10) || 1, 24);
+  const cacheKey = `alerts:recent:${hours}h`;
+  const cached = cacheGet(cacheKey);
+  if (cached) {
+    res.set("Cache-Control", "public, max-age=30");
+    res.set("X-Cache", "HIT");
+    res.json(cached);
+    return;
+  }
+
+  const { rows } = await pool.query(
+    `SELECT
+       a.id,
+       a.fixture_id    AS "fixtureId",
+       a.session_id    AS "sessionId",
+       a.signal_key    AS "signalKey",
+       a.alert_text    AS "alertText",
+       a.is_read       AS "isRead",
+       a.created_at    AS "createdAt",
+       f.home_team_name AS "homeTeamName",
+       f.away_team_name AS "awayTeamName",
+       f.status_short  AS "statusShort",
+       f.league_name   AS "leagueName"
+     FROM alert_log a
+     LEFT JOIN fixtures f ON f.fixture_id = a.fixture_id
+     WHERE a.session_id IS NULL
+       AND a.created_at > NOW() - ($1 || ' hours')::INTERVAL
+     ORDER BY a.created_at DESC
+     LIMIT 200`,
+    [hours],
+  );
+
+  const body = { alerts: rows, hours };
+  cacheSet(cacheKey, body, 30);
+  res.set("Cache-Control", "public, max-age=30");
+  res.set("X-Cache", "MISS");
+  res.json(body);
+});
+
 // POST /api/alerts/:id/read
 router.post("/alerts/:id/read", async (req, res) => {
   const id = parseInt(req.params.id ?? "0");

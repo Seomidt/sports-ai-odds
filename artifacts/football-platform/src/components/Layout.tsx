@@ -1,9 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper } from "lucide-react";
+import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper, Zap } from "lucide-react";
 import { useClerk, useUser } from "@clerk/react";
 import { useGetMe } from "@workspace/api-client-react";
 import { keepPreviousData } from "@tanstack/react-query";
-import { AlertPoller } from "./AlertPoller";
+import { TopSignalBanner } from "./TopSignalBanner";
 import { useState } from "react";
 
 const appLogo = "/logo.png";
@@ -25,6 +25,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/live", label: "Live", icon: Radio },
     { href: "/pre-match", label: "Pre-Match", icon: Clock },
     { href: "/post-match", label: "Post-Match", icon: CheckCircle2 },
+    { href: "/signals", label: "Signals", icon: Zap },
     { href: "/standings", label: "Standings", icon: ListOrdered },
     { href: "/news", label: "News", icon: Newspaper },
     { href: "/following", label: "Following", icon: Star },
@@ -36,7 +37,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden text-foreground">
-      <AlertPoller />
 
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
         <div className="h-16 flex items-center px-6 border-b border-white/5">
@@ -159,6 +159,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </header>
 
+        <TopSignalBanner />
         <main className="flex-1 overflow-y-auto">
           <div className="p-4 md:p-8 max-w-7xl mx-auto">
             {children}

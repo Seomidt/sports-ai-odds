@@ -18,6 +18,7 @@ import { Standings } from "./pages/Standings";
 import { Following } from "./pages/Following";
 import { News } from "./pages/News";
 import { Admin } from "./pages/Admin";
+import { Signals } from "./pages/Signals";
 import NotFound from "./pages/not-found";
 import accessPendingImage from "@assets/IMG_3621_1775934471623.png";
 import { ShieldAlert, Activity } from "lucide-react";
@@ -216,6 +217,7 @@ function ClerkProviderWithRoutes() {
             <Route path="/pre-match"><ProtectedRoute component={PreMatch} /></Route>
             <Route path="/post-match"><ProtectedRoute component={PostMatch} /></Route>
             <Route path="/match/:id"><ProtectedRoute component={Match} /></Route>
+            <Route path="/signals"><ProtectedRoute component={Signals} /></Route>
             <Route path="/standings"><ProtectedRoute component={Standings} /></Route>
             <Route path="/following"><ProtectedRoute component={Following} /></Route>
             <Route path="/news"><ProtectedRoute component={News} /></Route>

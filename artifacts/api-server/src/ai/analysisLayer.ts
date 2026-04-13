@@ -286,6 +286,7 @@ const SingleTipSchema = z.object({
   bet_type: z.enum(["match_result", "over_under", "btts", "no_bet"]),
   bet_side: z.string().nullable().optional(),
   trust_score: z.number().min(1).max(10),
+  estimated_probability: z.number().min(0.01).max(0.99).optional(),
   reasoning: z.string(),
 });
 
@@ -318,13 +319,21 @@ const FALLBACK_LIVE: LiveAnalysis = {
   alert_worthy: false,
 };
 
-// ─── Value calculation ────────────────────────────────────────────────────────
+// ─── Value / Edge calculation ─────────────────────────────────────────────────
 
-function calcValueRating(trustScore: number, marketOdds: number | null): string {
-  if (!marketOdds || marketOdds <= 1) return "neutral";
-  const impliedProb = 1 / marketOdds;
-  const aiProb = trustScore / 10;
-  const edge = aiProb - impliedProb;
+/**
+ * edge = (ai_probability * market_odds) - 1
+ * Positive = expected profit per unit staked; negative = expected loss.
+ * e.g. 60% confidence × 2.10 odds = 1.26 - 1 = +0.26 (+26% edge)
+ */
+function calcEdge(aiProb: number, marketOdds: number | null): number | null {
+  if (!marketOdds || marketOdds <= 1) return null;
+  return Math.round(((aiProb * marketOdds) - 1) * 10000) / 10000; // 4dp
+}
+
+function calcValueRating(aiProb: number, marketOdds: number | null): string {
+  const edge = calcEdge(aiProb, marketOdds);
+  if (edge === null) return "neutral";
   if (edge >= 0.15) return "strong_value";
   if (edge >= 0.05) return "value";
   if (edge >= -0.05) return "fair";
@@ -386,9 +395,11 @@ ${accuracy.totalReviewed > 0 ? `Calibrate your trust scores to reflect your ${ac
 INSTRUCTIONS:
 - Give exactly 3 tips: one for match_result, one for over_under, one for btts
 - For each, pick the side with the best edge
-- Trust score 1-4 = weak edge, 5-7 = reasonable edge, 8-10 = strong edge
-- Compare your confidence against the market odds — if you think home win probability is 60% but market odds imply 50%, that's value
-- Reasoning: max 50 words per tip, mention the odds and specific signals
+- Trust score 1-4 = weak, 5-7 = reasonable, 8-10 = strong
+- estimated_probability: your true belief in this outcome winning (0.01–0.99). This is used to calculate edge = (probability × odds) - 1
+- Implied probability from odds = 1/odds. If your estimated_probability > implied probability, there is value
+- Example: odds 2.10 → implied 47.6%. If you think 60% → edge = (0.60 × 2.10) - 1 = +26%
+- Reasoning: max 50 words per tip, state your probability and the edge
 
 Respond with ONLY valid JSON:
 {
@@ -398,21 +409,24 @@ Respond with ONLY valid JSON:
       "bet_type": "match_result",
       "bet_side": "home",
       "trust_score": 7,
-      "reasoning": "Strong home form (W4 in last 5) and H2H dominance. Odds of 2.14 imply 47% probability but signals suggest ~60% — clear value."
+      "estimated_probability": 0.60,
+      "reasoning": "Strong home form (W4 in last 5) and H2H dominance. Odds of 2.14 imply 47% but signals suggest 60% — edge +26%."
     },
     {
       "recommendation": "Over 2.5 Goals",
       "bet_type": "over_under",
       "bet_side": "over",
       "trust_score": 6,
-      "reasoning": "H2H avg 3.2 goals, both teams attack-minded. Odds of 1.90 represent fair price for this matchup."
+      "estimated_probability": 0.52,
+      "reasoning": "H2H avg 3.2 goals, both teams attack-minded. Odds of 1.90 imply 53% — slight edge at 52%, fair price."
     },
     {
       "recommendation": "BTTS Yes",
       "bet_type": "btts",
       "bet_side": "yes",
       "trust_score": 5,
-      "reasoning": "Both teams score in 70% of recent matches. Odds of 1.83 slightly overpriced given defensive records."
+      "estimated_probability": 0.55,
+      "reasoning": "Both teams score in 70% of recent matches. Odds of 1.83 imply 55% — fair edge, slight lean."
     }
   ]
 }
@@ -430,7 +444,10 @@ bet_side for btts: "yes", "no"`;
   for (const tip of parsed.tips) {
     if (tip.bet_type === "no_bet") continue;
     const marketOdds = getMarketOddsForTip(tip, ctx.odds);
-    const valueRating = calcValueRating(tip.trust_score, marketOdds);
+    // Use AI's explicit probability estimate; fall back to trust score / 10
+    const aiProb = tip.estimated_probability ?? (tip.trust_score / 10);
+    const edge = calcEdge(aiProb, marketOdds);
+    const valueRating = calcValueRating(aiProb, marketOdds);
 
     const [stored] = await db.insert(aiBettingTips).values({
       fixtureId,
@@ -442,6 +459,8 @@ bet_side for btts: "yes", "no"`;
       betType: tip.bet_type,
       betSide: tip.bet_side ?? null,
       trustScore: Math.round(tip.trust_score),
+      aiProbability: aiProb,
+      edge,
       reasoning: tip.reasoning,
       marketOdds,
       valueRating,
@@ -451,6 +470,8 @@ bet_side for btts: "yes", "no"`;
         recommendation: tip.recommendation,
         betSide: tip.bet_side ?? null,
         trustScore: Math.round(tip.trust_score),
+        aiProbability: aiProb,
+        edge,
         reasoning: tip.reasoning,
         marketOdds,
         valueRating,

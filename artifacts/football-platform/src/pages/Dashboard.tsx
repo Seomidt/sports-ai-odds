@@ -20,6 +20,8 @@ interface ValueTip {
   betType: string;
   betSide: string | null;
   trustScore: number;
+  aiProbability: number | null;
+  edge: number | null;
   reasoning: string;
   marketOdds: number | null;
   valueRating: string | null;
@@ -326,18 +328,35 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(tip.betType)}</span>
             <ValueBadge rating={tip.valueRating} />
           </div>
-          {tip.marketOdds != null && (
-            <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
-          )}
+          <div className="flex items-center gap-2">
+            {tip.edge != null && (
+              <div className={`px-2 py-0.5 rounded text-xs font-mono font-bold tabular-nums border ${
+                tip.edge >= 0.15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
+                tip.edge >= 0.05 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
+                tip.edge >= -0.05 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
+                'text-amber-400 bg-amber-400/10 border-amber-400/20'
+              }`}>
+                {tip.edge >= 0 ? '+' : ''}{(tip.edge * 100).toFixed(1)}% edge
+              </div>
+            )}
+            {tip.marketOdds != null && (
+              <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center justify-between mb-3">
           <div className="text-lg font-bold text-white leading-tight">{tip.recommendation}</div>
-          <div className="flex items-center gap-1">
-            <span className={`text-xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
-              {tip.trustScore}
-            </span>
-            <span className="text-xs text-muted-foreground font-mono">/10</span>
+          <div className="flex flex-col items-end gap-0.5">
+            <div className="flex items-center gap-1">
+              <span className={`text-xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
+                {tip.trustScore}
+              </span>
+              <span className="text-xs text-muted-foreground font-mono">/10</span>
+            </div>
+            {tip.aiProbability != null && (
+              <div className="text-[10px] font-mono text-muted-foreground/40">{(tip.aiProbability * 100).toFixed(0)}% prob</div>
+            )}
           </div>
         </div>
 

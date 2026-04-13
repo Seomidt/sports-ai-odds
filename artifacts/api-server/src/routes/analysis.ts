@@ -128,6 +128,8 @@ router.get("/analysis/value-odds", async (_req, res) => {
       const ranked = rows.map((t: Record<string, unknown>) => {
         const valueRating = t["value_rating"] as string | null;
         const valueScore = valueRating === 'strong_value' ? 4 : valueRating === 'value' ? 3 : valueRating === 'fair' ? 2 : 1;
+        const edge = t["edge"] as number | null;
+        const aiProbability = t["ai_probability"] as number | null;
         return {
           id: t["id"],
           fixtureId: t["fixture_id"],
@@ -139,12 +141,15 @@ router.get("/analysis/value-odds", async (_req, res) => {
           betType: t["bet_type"],
           betSide: t["bet_side"],
           trustScore: t["trust_score"],
+          aiProbability,
+          edge,
           reasoning: t["reasoning"],
           marketOdds: t["market_odds"],
           valueRating,
           createdAt: t["created_at"],
           valueScore,
-          combinedScore: valueScore * 10 + (t["trust_score"] as number),
+          // Rank by edge first (best expected value), then trust score as tiebreaker
+          combinedScore: edge != null ? edge * 100 + (t["trust_score"] as number) : valueScore * 10 + (t["trust_score"] as number),
         };
       }).sort((a, b) => b.combinedScore - a.combinedScore);
 

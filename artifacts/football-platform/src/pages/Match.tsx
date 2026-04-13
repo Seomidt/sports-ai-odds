@@ -262,6 +262,8 @@ interface BettingTip {
   betType: string;
   betSide: string | null;
   trustScore: number;
+  aiProbability: number | null;
+  edge: number | null;
   reasoning: string;
   marketOdds: number | null;
   valueRating: string | null;
@@ -380,20 +382,39 @@ function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLab
             </div>
           )}
         </div>
-        <div className="shrink-0 flex items-center gap-1.5">
-          <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white'}`}>
-            {tip.trustScore}
-          </span>
-          <div className="flex flex-col items-start gap-0.5">
-            <span className="text-xs text-muted-foreground font-mono">/10</span>
-            <HelpTooltip side="left" iconClassName="w-3 h-3">
-              <p className="font-bold text-white mb-1">AI Confidence Score</p>
-              <p className="text-muted-foreground/80">1–4 · Low — limited or conflicting data</p>
-              <p className="text-muted-foreground/80">5–6 · Moderate — some supporting evidence</p>
-              <p className="text-amber-400">7–8 · High — strong data alignment</p>
-              <p className="text-teal-400">9–10 · Very high — multiple strong signals</p>
-            </HelpTooltip>
+        <div className="shrink-0 flex flex-col items-end gap-1">
+          {tip.edge != null && (
+            <div className={`px-2 py-0.5 rounded text-xs font-mono font-bold tabular-nums border ${
+              tip.edge >= 0.15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
+              tip.edge >= 0.05 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
+              tip.edge >= -0.05 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
+              'text-amber-400 bg-amber-400/10 border-amber-400/20'
+            }`}>
+              {tip.edge >= 0 ? '+' : ''}{(tip.edge * 100).toFixed(1)}% edge
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white'}`}>
+              {tip.trustScore}
+            </span>
+            <div className="flex flex-col items-start gap-0.5">
+              <span className="text-xs text-muted-foreground font-mono">/10</span>
+              <HelpTooltip side="left" iconClassName="w-3 h-3">
+                <p className="font-bold text-white mb-1">AI Edge Analysis</p>
+                <p className="text-muted-foreground/80 mb-1">edge = (AI probability × odds) − 1</p>
+                {tip.aiProbability != null && tip.marketOdds != null && (
+                  <p className="text-teal-400 font-mono text-xs mb-1">({(tip.aiProbability * 100).toFixed(0)}% × {tip.marketOdds.toFixed(2)}) − 1 = {tip.edge != null ? (tip.edge >= 0 ? '+' : '') + (tip.edge * 100).toFixed(1) + '%' : '—'}</p>
+                )}
+                <p className="text-muted-foreground/80">≥15% = Strong Value · ≥5% = Value</p>
+                <p className="text-muted-foreground/80">0–5% = Fair Price · &lt;0% = Overpriced</p>
+              </HelpTooltip>
+            </div>
           </div>
+          {tip.aiProbability != null && (
+            <div className="text-[10px] font-mono text-muted-foreground/50">
+              {(tip.aiProbability * 100).toFixed(0)}% prob
+            </div>
+          )}
         </div>
       </div>
 

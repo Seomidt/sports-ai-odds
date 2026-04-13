@@ -575,6 +575,8 @@ export const aiBettingTips = pgTable(
     betType: text("bet_type").notNull(),
     betSide: text("bet_side"),
     trustScore: integer("trust_score").notNull(),
+    aiProbability: real("ai_probability"),
+    edge: real("edge"),
     reasoning: text("reasoning").notNull(),
     marketOdds: real("market_odds"),
     valueRating: text("value_rating"),

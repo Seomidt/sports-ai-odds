@@ -11,6 +11,8 @@ import {
   getGetFixtureOddsMarketsQueryKey,
   getGetFixtureH2HQueryKey,
   getGetTeamStatisticsQueryKey,
+  type FixtureEvent,
+  type FixtureStats,
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
@@ -223,7 +225,15 @@ export function Match() {
               <LiveAnalysisTab fixtureId={id} />
             </TabsContent>
             <TabsContent value="post" className="mt-4">
-              <PostReviewTab fixtureId={id} />
+              <PostReviewTab
+                fixtureId={id}
+                events={fixtureData?.events ?? []}
+                stats={fixtureData?.stats ?? []}
+                homeTeamId={fixture.homeTeamId ?? 0}
+                awayTeamId={fixture.awayTeamId ?? 0}
+                homeTeamName={fixture.homeTeamName ?? "Home"}
+                awayTeamName={fixture.awayTeamName ?? "Away"}
+              />
             </TabsContent>
             <TabsContent value="odds" className="mt-4">
               <OddsErrorBoundary>
@@ -594,7 +604,58 @@ function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
 
 // ─── Post Match Review Tab ────────────────────────────────────────────────────
 
-function PostReviewTab({ fixtureId }: { fixtureId: number }) {
+interface PostReviewTabProps {
+  fixtureId: number;
+  events: FixtureEvent[];
+  stats: FixtureStats[];
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeamName: string;
+  awayTeamName: string;
+}
+
+function StatBar({ label, home, away }: { label: string; home: number | null | undefined; away: number | null | undefined }) {
+  const h = home ?? 0;
+  const a = away ?? 0;
+  const total = h + a;
+  if (total === 0) return null;
+  const hPct = Math.round((h / total) * 100);
+  const aPct = 100 - hPct;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs font-mono text-muted-foreground">
+        <span className="text-teal-400 font-bold">{h}</span>
+        <span className="text-white/40 uppercase tracking-wider text-[10px]">{label}</span>
+        <span className="text-violet-300 font-bold">{a}</span>
+      </div>
+      <div className="flex h-1.5 rounded-full overflow-hidden bg-white/5">
+        <div className="bg-teal-400/60 transition-all" style={{ width: `${hPct}%` }} />
+        <div className="bg-violet-400/60 transition-all" style={{ width: `${aPct}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function PossessionBar({ home, away }: { home: number | null | undefined; away: number | null | undefined }) {
+  if (home == null && away == null) return null;
+  const h = home ?? 50;
+  const a = away ?? 50;
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs font-mono text-muted-foreground">
+        <span className="text-teal-400 font-bold">{h}%</span>
+        <span className="text-white/40 uppercase tracking-wider text-[10px]">Possession</span>
+        <span className="text-violet-300 font-bold">{a}%</span>
+      </div>
+      <div className="flex h-2 rounded-full overflow-hidden bg-white/5">
+        <div className="bg-teal-400/70 transition-all" style={{ width: `${h}%` }} />
+        <div className="bg-violet-400/70 transition-all" style={{ width: `${a}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeTeamName, awayTeamName }: PostReviewTabProps) {
   const { data, isLoading } = useQuery<{ reviews: BettingTip[]; review: BettingTip | null; message?: string }>({
     queryKey: ['postReview', fixtureId],
     queryFn: async () => {
@@ -607,6 +668,28 @@ function PostReviewTab({ fixtureId }: { fixtureId: number }) {
   });
 
   const reviews = data?.reviews ?? [];
+  const homeStat = stats.find(s => s.teamId === homeTeamId);
+  const awayStat = stats.find(s => s.teamId === awayTeamId);
+  const hasStats = !!homeStat || !!awayStat;
+
+  const keyEvents = events.filter(e =>
+    e.type === "Goal" || e.type === "Card" || e.type === "subst"
+  );
+
+  const eventIcon = (ev: FixtureEvent) => {
+    if (ev.type === "Goal") {
+      if (ev.detail?.includes("Penalty")) return <span className="text-[10px] font-bold font-mono text-teal-400 bg-teal-400/10 px-1.5 py-0.5 rounded">PEN</span>;
+      if (ev.detail?.includes("Own Goal")) return <span className="text-[10px] font-bold font-mono text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded">OG</span>;
+      return <span className="w-3.5 h-3.5 rounded-full bg-white inline-block shrink-0" />;
+    }
+    if (ev.type === "Card") {
+      return ev.detail?.includes("Red")
+        ? <span className="w-2.5 h-3.5 rounded-sm bg-red-500 inline-block shrink-0" />
+        : <span className="w-2.5 h-3.5 rounded-sm bg-yellow-400 inline-block shrink-0" />;
+    }
+    if (ev.type === "subst") return <span className="text-[10px] font-bold font-mono text-white/40 bg-white/10 px-1.5 py-0.5 rounded">SUB</span>;
+    return null;
+  };
 
   const outcomeConfig = {
     hit: { label: 'HIT', color: 'text-teal-400 bg-teal-400/10 border-teal-400/30', icon: CheckCircle2 },
@@ -623,17 +706,74 @@ function PostReviewTab({ fixtureId }: { fixtureId: number }) {
 
   return (
     <div className="space-y-4">
+      {/* Match Events Timeline */}
+      {keyEvents.length > 0 && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Match Events</div>
+          <div className="space-y-2">
+            {keyEvents.map((ev, i) => {
+              const isHome = ev.teamId === homeTeamId;
+              return (
+                <div key={i} className={`flex items-center gap-3 text-sm ${isHome ? "flex-row" : "flex-row-reverse"}`}>
+                  <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground shrink-0 w-10 justify-center">
+                    {ev.minute != null ? `${ev.minute}'` : ""}
+                    {ev.extraMinute ? `+${ev.extraMinute}` : ""}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">{eventIcon(ev)}</div>
+                  <div className={`text-xs ${ev.type === "Goal" ? "text-white font-semibold" : "text-white/60"} truncate ${isHome ? "text-left" : "text-right"}`}>
+                    {ev.playerName}
+                    {ev.assistName && ev.type === "Goal" && (
+                      <span className="text-white/40 ml-1.5 font-normal">({ev.assistName})</span>
+                    )}
+                    {ev.type === "subst" && ev.assistName && (
+                      <span className="text-white/40 ml-1.5 font-normal">out</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Stats Comparison */}
+      {hasStats && (
+        <div className="glass-card p-5 rounded-xl space-y-4">
+          <div className="flex justify-between text-xs font-mono font-bold">
+            <span className="text-teal-400 truncate">{homeTeamName}</span>
+            <span className="text-white/30 uppercase tracking-wider text-[10px]">Stats</span>
+            <span className="text-violet-300 truncate text-right">{awayTeamName}</span>
+          </div>
+          <PossessionBar home={homeStat?.ballPossession} away={awayStat?.ballPossession} />
+          <StatBar label="Shots on Target" home={homeStat?.shotsOnGoal} away={awayStat?.shotsOnGoal} />
+          <StatBar label="Total Shots" home={homeStat?.totalShots} away={awayStat?.totalShots} />
+          <StatBar label="Corners" home={homeStat?.cornerKicks} away={awayStat?.cornerKicks} />
+          <StatBar label="Fouls" home={homeStat?.fouls} away={awayStat?.fouls} />
+          {(homeStat?.expectedGoals != null || awayStat?.expectedGoals != null) && (
+            <StatBar label="xG" home={homeStat?.expectedGoals} away={awayStat?.expectedGoals} />
+          )}
+        </div>
+      )}
+
+      {/* AI Prediction Reviews */}
       {isLoading ? (
         <div className="glass-card p-10 rounded-xl flex items-center justify-center">
           <Activity className="w-6 h-6 text-primary animate-pulse" />
         </div>
       ) : reviews.length === 0 ? (
-        <div className="glass-card p-8 rounded-xl text-center space-y-2">
-          <Target className="w-8 h-8 text-white/20 mx-auto" />
-          <p className="text-muted-foreground text-sm">
-            {data?.message ?? "No prediction was made for this fixture."}
-          </p>
-        </div>
+        keyEvents.length === 0 && !hasStats ? (
+          <div className="glass-card p-8 rounded-xl text-center space-y-2">
+            <Target className="w-8 h-8 text-white/20 mx-auto" />
+            <p className="text-muted-foreground text-sm">
+              {data?.message ?? "No match data available yet — data is being fetched in the background."}
+            </p>
+          </div>
+        ) : (
+          <div className="glass-card p-5 rounded-xl border border-white/5">
+            <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider mb-1">AI Signal</p>
+            <p className="text-sm text-muted-foreground">No pre-match prediction was made for this fixture.</p>
+          </div>
+        )
       ) : (
         <>
           {reviews.map((review) => (

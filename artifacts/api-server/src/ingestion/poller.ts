@@ -1277,6 +1277,8 @@ async function adaptiveLiveLoop() {
         } else if (isFinished && !postMatchProcessed.has(f.fixture.id)) {
           postMatchProcessed.add(f.fixture.id);
           console.log(`[poller] Post-match processing for fixture ${f.fixture.id}`);
+          await upsertFixtureEventsAndStats(f.fixture.id);
+          cacheDel(`fixture:${f.fixture.id}`);
           await runPostMatchFeatures(f.fixture.id);
           await runSignalEngine(f.fixture.id, "post");
         }
@@ -1392,6 +1394,161 @@ async function syncWeatherForUpcomingFixtures() {
       await new Promise((r) => setTimeout(r, 200));
     } catch (err) {
       console.warn(`[weather] Error for fixture ${f.fixtureId}:`, err);
+    }
+  }
+}
+
+// ─── Post-match events + stats upsert helper ─────────────────────────────────
+/**
+ * Fetches events, stats, and lineups for a finished fixture and upserts them
+ * into the DB. Called both by the live loop (on FT transition) and the
+ * backfill job (for fixtures that were missed).
+ */
+async function upsertFixtureEventsAndStats(fixtureId: number): Promise<void> {
+  const [events, stats, lineups] = await Promise.all([
+    fetchFixtureEvents(fixtureId),
+    fetchFixtureStats(fixtureId),
+    fetchFixtureLineups(fixtureId),
+  ]);
+
+  if (events && events.length > 0) {
+    await db.delete(fixtureEvents).where(eq(fixtureEvents.fixtureId, fixtureId));
+    for (const ev of events) {
+      await db.insert(fixtureEvents).values({
+        fixtureId,
+        minute: ev.time.elapsed,
+        extraMinute: ev.time.extra,
+        teamId: ev.team.id,
+        playerId: ev.player?.id ?? null,
+        playerName: ev.player?.name ?? null,
+        assistId: ev.assist?.id ?? null,
+        assistName: ev.assist?.name ?? null,
+        type: ev.type,
+        detail: ev.detail,
+        comments: ev.comments,
+      });
+    }
+  }
+
+  if (stats) {
+    for (const teamStat of stats) {
+      const getValue = (type: string): number | null => {
+        const item = teamStat.statistics.find((s: ApiStatItem) => s.type === type);
+        if (!item || item.value === null || item.value === undefined) return null;
+        const val = String(item.value).replace("%", "");
+        const num = parseFloat(val);
+        return isNaN(num) ? null : num;
+      };
+      await db
+        .insert(fixtureStats)
+        .values({
+          fixtureId,
+          teamId: teamStat.team.id,
+          shotsOnGoal: getValue("Shots on Goal"),
+          shotsOffGoal: getValue("Shots off Goal"),
+          totalShots: getValue("Total Shots"),
+          blockedShots: getValue("Blocked Shots"),
+          cornerKicks: getValue("Corner Kicks"),
+          fouls: getValue("Fouls"),
+          yellowCards: getValue("Yellow Cards"),
+          redCards: getValue("Red Cards"),
+          ballPossession: getValue("Ball Possession"),
+          passAccuracy: getValue("Passes %"),
+          totalPasses: getValue("Total passes"),
+          expectedGoals: getValue("expected_goals"),
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [fixtureStats.fixtureId, fixtureStats.teamId],
+          set: {
+            shotsOnGoal: getValue("Shots on Goal"),
+            shotsOffGoal: getValue("Shots off Goal"),
+            totalShots: getValue("Total Shots"),
+            blockedShots: getValue("Blocked Shots"),
+            cornerKicks: getValue("Corner Kicks"),
+            fouls: getValue("Fouls"),
+            yellowCards: getValue("Yellow Cards"),
+            redCards: getValue("Red Cards"),
+            ballPossession: getValue("Ball Possession"),
+            passAccuracy: getValue("Passes %"),
+            totalPasses: getValue("Total passes"),
+            expectedGoals: getValue("expected_goals"),
+            updatedAt: new Date(),
+          },
+        });
+    }
+  }
+
+  if (lineups) {
+    for (const lineup of lineups) {
+      await db
+        .insert(fixtureLineups)
+        .values({
+          fixtureId,
+          teamId: lineup.team.id,
+          formation: lineup.formation ?? null,
+          startingXI: lineup.startXI ?? [],
+          substitutes: lineup.substitutes ?? [],
+          updatedAt: new Date(),
+        })
+        .onConflictDoUpdate({
+          target: [fixtureLineups.fixtureId, fixtureLineups.teamId],
+          set: {
+            formation: lineup.formation ?? null,
+            startingXI: lineup.startXI ?? [],
+            substitutes: lineup.substitutes ?? [],
+            updatedAt: new Date(),
+          },
+        });
+    }
+  }
+}
+
+// ─── Post-match data backfill ─────────────────────────────────────────────────
+/**
+ * Finds finished fixtures from the last 14 days that have no events in the DB
+ * and fetches their events, stats, and lineups. Processes up to 20 per run to
+ * stay within API rate limits. Runs at startup and every 2h.
+ */
+async function backfillPostMatchData(): Promise<void> {
+  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+  const FINISHED = ["FT", "AET", "PEN"] as const;
+
+  // Find finished fixtures in the last 14 days
+  const finished = await db.query.fixtures.findMany({
+    where: (f, { inArray, gte, and }) =>
+      and(inArray(f.statusShort, [...FINISHED]), gte(f.kickoff!, cutoff)),
+    columns: { fixtureId: true, homeTeamName: true, awayTeamName: true },
+    limit: 200,
+  });
+
+  if (finished.length === 0) return;
+
+  // Find which ones already have events
+  const finishedIds = finished.map((f) => f.fixtureId);
+  const withEvents = await db.query.fixtureEvents.findMany({
+    where: (e, { inArray }) => inArray(e.fixtureId, finishedIds),
+    columns: { fixtureId: true },
+  });
+  const hasEventsSet = new Set(withEvents.map((e) => e.fixtureId));
+
+  const missing = finished.filter((f) => !hasEventsSet.has(f.fixtureId));
+  if (missing.length === 0) {
+    console.log("[backfill] All finished fixtures have event data");
+    return;
+  }
+
+  const batch = missing.slice(0, 20);
+  console.log(`[backfill] Fetching events+stats for ${batch.length} of ${missing.length} finished fixtures missing data`);
+
+  for (const f of batch) {
+    try {
+      await upsertFixtureEventsAndStats(f.fixtureId);
+      cacheDel(`fixture:${f.fixtureId}`);
+      console.log(`[backfill] ${f.homeTeamName} vs ${f.awayTeamName} (${f.fixtureId}) done`);
+      await new Promise((r) => setTimeout(r, 300)); // rate-limit friendly
+    } catch (err) {
+      console.warn(`[backfill] Failed for fixture ${f.fixtureId}:`, err);
     }
   }
 }
@@ -1609,6 +1766,8 @@ export function startPoller() {
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
   setTimeout(() => syncWeatherForUpcomingFixtures().catch(console.error), 13 * 60 * 1000);
+  // Post-match events+stats backfill: starts 20 min after boot (after fixtures are synced)
+  setTimeout(() => backfillPostMatchData().catch(console.error), 20 * 60 * 1000);
   // Historical weather backfill: starts 15 min after boot (after venue cities are fresh)
   setTimeout(() => backfillHistoricalWeather().catch(console.error), 15 * 60 * 1000);
   // After all sync jobs finish, compute signals for all upcoming fixtures (next 7 days)
@@ -1672,6 +1831,9 @@ export function startPoller() {
 
   // Historical weather backfill: every hour (100 fixtures/run) until all finished fixtures have data
   setInterval(() => backfillHistoricalWeather().catch(console.error), 60 * 60 * 1000);
+
+  // Post-match events+stats backfill: every 2 hours (20 fixtures/run) until all caught up
+  setInterval(() => backfillPostMatchData().catch(console.error), 2 * 60 * 60 * 1000);
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);

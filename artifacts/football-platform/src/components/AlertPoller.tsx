@@ -6,7 +6,7 @@ import { useSession } from "@/lib/session";
 import { useQuery } from "@tanstack/react-query";
 
 const STORAGE_KEY = "signal_terminal_seen_alerts";
-const AUTO_DISMISS_MS = 9_000;
+const AUTO_DISMISS_MS = 10_000;
 
 function getSeenIds(): Set<number> {
   try {
@@ -20,7 +20,6 @@ function getSeenIds(): Set<number> {
 
 function saveSeenIds(ids: Set<number>) {
   try {
-    // Keep only last 200 IDs to prevent unbounded growth
     const arr = Array.from(ids).slice(-200);
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(arr));
   } catch {}
@@ -28,6 +27,7 @@ function saveSeenIds(ids: Set<number>) {
 
 interface SignalAlertProps {
   alert: Alert;
+  count: number;
   onDismiss: (id: number) => void;
 }
 
@@ -63,7 +63,7 @@ function resolveStyle(alertText: string) {
   return SIGNAL_COLORS.default!;
 }
 
-function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
+function SignalAlert({ alert, count, onDismiss }: SignalAlertProps) {
   const [, navigate] = useLocation();
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
@@ -88,45 +88,53 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
       ? `${alert.homeTeamName} vs ${alert.awayTeamName}`
       : `Match ${alert.fixtureId}`;
 
+  const accentColor = style.badge.includes("primary")
+    ? "bg-gradient-to-r from-transparent via-primary/60 to-transparent"
+    : style.badge.includes("amber")
+    ? "bg-gradient-to-r from-transparent via-amber-400/60 to-transparent"
+    : "bg-gradient-to-r from-transparent via-destructive/60 to-transparent";
+
+  const barColor = style.badge.includes("primary")
+    ? "bg-primary/60"
+    : style.badge.includes("amber")
+    ? "bg-amber-400/60"
+    : "bg-destructive/60";
+
   return (
     <div
       className={`relative overflow-hidden rounded-xl border backdrop-blur-xl transition-all duration-350 ease-out ${style.border} ${style.glow} ${
-        visible && !exiting
-          ? "opacity-100 translate-x-0"
-          : "opacity-0 translate-x-8"
+        visible && !exiting ? "opacity-100 translate-x-0" : "opacity-0 translate-x-8"
       }`}
       style={{
         background: "linear-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%)",
         transitionProperty: "opacity, transform",
       }}
     >
-      {/* Top accent line */}
-      <div className={`absolute top-0 left-0 right-0 h-[2px] ${style.badge.includes("primary") ? "bg-gradient-to-r from-transparent via-primary/60 to-transparent" : style.badge.includes("amber") ? "bg-gradient-to-r from-transparent via-amber-400/60 to-transparent" : "bg-gradient-to-r from-transparent via-destructive/60 to-transparent"}`} />
+      <div className={`absolute top-0 left-0 right-0 h-[2px] ${accentColor}`} />
 
       <div className="p-4 pr-10">
-        {/* Header row */}
         <div className="flex items-center gap-2 mb-2">
           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono font-bold uppercase tracking-wider border ${style.badge}`}>
             <Zap className="w-3 h-3" />
             Signal
           </span>
-          <span className="text-[11px] font-mono text-muted-foreground/60 ml-auto">
-            LIVE
-          </span>
+          {count > 1 && (
+            <span className="text-[10px] font-mono text-muted-foreground/50 bg-white/6 border border-white/10 px-1.5 py-0.5 rounded">
+              {count} bookmakers
+            </span>
+          )}
+          <span className="text-[11px] font-mono text-muted-foreground/60 ml-auto">LIVE</span>
           <Activity className={`w-3 h-3 ${style.icon} animate-pulse`} />
         </div>
 
-        {/* Match label */}
         <p className="text-[13px] font-semibold text-white/90 font-mono mb-1 leading-tight">
           {matchLabel}
         </p>
 
-        {/* Alert text */}
         <p className="text-[12px] text-muted-foreground leading-relaxed mb-3">
           {alert.alertText}
         </p>
 
-        {/* Action */}
         <button
           onClick={() => { dismiss(); navigate(`/match/${alert.fixtureId}`); }}
           className={`inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold tracking-wider uppercase transition-colors ${style.icon} hover:opacity-80`}
@@ -135,7 +143,6 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
         </button>
       </div>
 
-      {/* Dismiss button */}
       <button
         onClick={dismiss}
         className="absolute top-3 right-3 text-muted-foreground/40 hover:text-white/70 transition-colors"
@@ -144,13 +151,10 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
         <X className="w-4 h-4" />
       </button>
 
-      {/* Progress bar */}
       <div className="absolute bottom-0 left-0 h-[2px] bg-white/10 w-full overflow-hidden">
         <div
-          className={`h-full ${style.badge.includes("primary") ? "bg-primary/60" : style.badge.includes("amber") ? "bg-amber-400/60" : "bg-destructive/60"}`}
-          style={{
-            animation: `shrink ${AUTO_DISMISS_MS}ms linear forwards`,
-          }}
+          className={`h-full ${barColor}`}
+          style={{ animation: `shrink ${AUTO_DISMISS_MS}ms linear forwards` }}
         />
       </div>
     </div>
@@ -159,7 +163,10 @@ function SignalAlert({ alert, onDismiss }: SignalAlertProps) {
 
 export function AlertPoller() {
   const seenIdsRef = useRef<Set<number>>(getSeenIds());
-  const [activeAlerts, setActiveAlerts] = useState<Alert[]>([]);
+  // Key = fixtureId, value = { alert (latest), count (how many bookmakers), id (for dismiss) }
+  const [activeByFixture, setActiveByFixture] = useState<
+    Map<number, { alert: Alert; count: number }>
+  >(new Map());
   const { sessionId } = useSession();
 
   const { data } = useQuery<{ alerts: Alert[] }>({
@@ -178,25 +185,53 @@ export function AlertPoller() {
 
   useEffect(() => {
     const alerts: Alert[] = data?.alerts ?? [];
-    const newAlerts: Alert[] = [];
+    let changed = false;
 
-    for (const alert of alerts) {
-      if (seenIdsRef.current.has(alert.id)) continue;
-      seenIdsRef.current.add(alert.id);
-      newAlerts.push(alert);
-    }
+    setActiveByFixture(prev => {
+      const next = new Map(prev);
+      for (const alert of alerts) {
+        if (seenIdsRef.current.has(alert.id)) {
+          // Already seen — but still count it if same fixture is active
+          if (next.has(alert.fixtureId ?? -1)) {
+            const entry = next.get(alert.fixtureId ?? -1)!;
+            if (alert.id !== entry.alert.id) {
+              next.set(alert.fixtureId ?? -1, { alert: entry.alert, count: entry.count + 1 });
+              changed = true;
+            }
+          }
+          continue;
+        }
+        seenIdsRef.current.add(alert.id);
+        changed = true;
+        const fid = alert.fixtureId ?? -1;
+        const existing = next.get(fid);
+        if (existing) {
+          // Same fixture already showing — just bump count
+          next.set(fid, { alert: alert, count: existing.count + 1 });
+        } else {
+          // New fixture — add if under 3 concurrent
+          if (next.size < 3) {
+            next.set(fid, { alert, count: 1 });
+          }
+        }
+      }
+      return changed ? next : prev;
+    });
 
-    if (newAlerts.length > 0) {
+    if (alerts.some(a => !seenIdsRef.current.has(a.id) || true)) {
       saveSeenIds(seenIdsRef.current);
-      setActiveAlerts((prev) => [...prev, ...newAlerts].slice(-5)); // max 5 at once
     }
   }, [data]);
 
-  const dismiss = useCallback((id: number) => {
-    setActiveAlerts((prev) => prev.filter((a) => a.id !== id));
+  const dismiss = useCallback((fixtureId: number) => {
+    setActiveByFixture(prev => {
+      const next = new Map(prev);
+      next.delete(fixtureId);
+      return next;
+    });
   }, []);
 
-  if (activeAlerts.length === 0) return null;
+  if (activeByFixture.size === 0) return null;
 
   return (
     <>
@@ -207,9 +242,13 @@ export function AlertPoller() {
         }
       `}</style>
       <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 w-80 pointer-events-none">
-        {activeAlerts.map((alert) => (
-          <div key={alert.id} className="pointer-events-auto">
-            <SignalAlert alert={alert} onDismiss={dismiss} />
+        {Array.from(activeByFixture.entries()).map(([fid, { alert, count }]) => (
+          <div key={fid} className="pointer-events-auto">
+            <SignalAlert
+              alert={alert}
+              count={count}
+              onDismiss={() => dismiss(fid)}
+            />
           </div>
         ))}
       </div>

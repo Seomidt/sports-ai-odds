@@ -6,7 +6,7 @@ import { Layout } from "@/components/Layout";
 import {
   Activity, TrendingUp, Zap, ChevronRight, ChevronDown,
   Target, Flame, Trophy, TrendingDown, BarChart3, CalendarCheck, Star,
-  CheckCircle2, XCircle, MinusCircle
+  CheckCircle2, XCircle, MinusCircle, HelpCircle
 } from "lucide-react";
 
 interface ValueTip {
@@ -100,6 +100,93 @@ function ValueBadge({ rating }: { rating: string | null }) {
     <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold tracking-wider ${c.color} ${c.bg} border ${c.border}`}>
       {c.label}
     </span>
+  );
+}
+
+// ─── StreakRoiCard ────────────────────────────────────────────────────────────
+
+type BadgeCfg = { label: string; icon: React.ElementType; color: string; bg: string; border: string };
+type StreakState = { current: number; type: "win" | "loss" | "none"; badge: "warming" | "hot" | "elite" | null };
+type RoiState = { total: number; totalBets: number; netReturn: number };
+
+function StreakRoiCard({ streak, roi, badge }: { streak: StreakState; roi: RoiState; badge: BadgeCfg | null }) {
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+
+  return (
+    <div className="glass-card rounded-xl p-4 border border-white/8 relative">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {streak.type === 'win' ? (
+            <Flame className="w-3.5 h-3.5 text-amber-400" />
+          ) : streak.type === 'loss' ? (
+            <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
+          ) : (
+            <Star className="w-3.5 h-3.5 text-muted-foreground" />
+          )}
+          <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Streak & ROI</span>
+
+          <button
+            onClick={() => setTooltipOpen(o => !o)}
+            className="text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
+            aria-label="Hvad er dette?"
+          >
+            <HelpCircle className="w-3.5 h-3.5" />
+          </button>
+
+          {badge && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border ${badge.color} ${badge.bg} ${badge.border}`}>
+              <badge.icon className="w-2.5 h-2.5" />
+              {badge.label}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-6">
+          {streak.current > 0 && streak.type !== 'none' ? (
+            <div className="text-right">
+              <span className={`text-xl font-bold font-mono tabular-nums ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
+                {streak.current}
+              </span>
+              <span className={`text-xs font-mono ml-1 ${streak.type === 'win' ? 'text-teal-400/70' : 'text-amber-400/70'}`}>
+                {streak.type === 'win' ? 'win' : 'loss'}{streak.current !== 1 ? 's' : ''}
+              </span>
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground/50 font-mono">No streak</span>
+          )}
+
+          {roi.totalBets > 0 && (
+            <div className="text-right">
+              <span className={`text-xl font-bold font-mono tabular-nums ${roi.total >= 0 ? 'text-teal-400' : 'text-amber-400'}`}>
+                {roi.total >= 0 ? '+' : ''}{roi.total}%
+              </span>
+              <span className="text-xs text-muted-foreground/50 font-mono ml-1">ROI</span>
+              <div className="text-[10px] text-muted-foreground/40 font-mono">{roi.totalBets} bets</div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {tooltipOpen && (
+        <div className="mt-3 pt-3 border-t border-white/6 space-y-2">
+          <div className="flex gap-3">
+            <div className="flex-1 bg-white/3 rounded-lg px-3 py-2.5">
+              <div className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider mb-1">Streak</div>
+              <p className="text-xs text-white/60 leading-relaxed">
+                Antal på hinanden følgende hit eller miss i AI's seneste gennemgåede tips. En vinstreak viser at modellen rammer rigtigt i træk.
+              </p>
+            </div>
+            <div className="flex-1 bg-white/3 rounded-lg px-3 py-2.5">
+              <div className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-wider mb-1">ROI</div>
+              <p className="text-xs text-white/60 leading-relaxed">
+                Return on Investment over alle <span className="text-white/80 font-mono">{roi.totalBets}</span> gennemgåede tips. Beregnes som om du sætter 1 enhed per tip til de viste odds. +18% = 18 øre profit per krone satset.
+              </p>
+            </div>
+          </div>
+          <p className="text-[10px] text-muted-foreground/30 font-mono">Baseret på AI's egne post-match reviews. Kun til reference.</p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -266,54 +353,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
       </div>
 
       {/* Row 2: Streak & ROI (full width) */}
-      <div className="glass-card rounded-xl p-4 border border-white/8">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {streak.type === 'win' ? (
-              <Flame className="w-3.5 h-3.5 text-amber-400" />
-            ) : streak.type === 'loss' ? (
-              <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
-            ) : (
-              <Star className="w-3.5 h-3.5 text-muted-foreground" />
-            )}
-            <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Streak & ROI</span>
-
-            {badge && (
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border ${badge.color} ${badge.bg} ${badge.border}`}>
-                <badge.icon className="w-2.5 h-2.5" />
-                {badge.label}
-              </span>
-            )}
-          </div>
-
-          <div className="flex items-center gap-6">
-            {/* Streak */}
-            {streak.current > 0 && streak.type !== 'none' ? (
-              <div className="text-right">
-                <span className={`text-xl font-bold font-mono tabular-nums ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
-                  {streak.current}
-                </span>
-                <span className={`text-xs font-mono ml-1 ${streak.type === 'win' ? 'text-teal-400/70' : 'text-amber-400/70'}`}>
-                  {streak.type === 'win' ? 'win' : 'loss'}{streak.current !== 1 ? 's' : ''}
-                </span>
-              </div>
-            ) : (
-              <span className="text-xs text-muted-foreground/50 font-mono">No streak</span>
-            )}
-
-            {/* ROI */}
-            {roi.totalBets > 0 && (
-              <div className="text-right">
-                <span className={`text-xl font-bold font-mono tabular-nums ${roi.total >= 0 ? 'text-teal-400' : 'text-amber-400'}`}>
-                  {roi.total >= 0 ? '+' : ''}{roi.total}%
-                </span>
-                <span className="text-xs text-muted-foreground/50 font-mono ml-1">ROI</span>
-                <div className="text-[10px] text-muted-foreground/40 font-mono">{roi.totalBets} bets</div>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <StreakRoiCard streak={streak} roi={roi} badge={badge} />
     </div>
   );
 }

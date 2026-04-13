@@ -219,7 +219,6 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
 }
 
 export function PreMatch() {
-  useScrollRestoration("pre-match");
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
 
   const { data, isLoading } = useGetTodayFixtures({
@@ -245,6 +244,8 @@ export function PreMatch() {
       const tb = b.kickoff ? new Date(b.kickoff).getTime() : 0;
       return ta - tb;
     });
+
+  useScrollRestoration("pre-match", !isLoading && all.length > 0);
 
   const byLeague = new Map<number, LeagueSection>();
   for (const f of prematch) {

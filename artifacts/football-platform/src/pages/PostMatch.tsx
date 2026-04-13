@@ -17,12 +17,13 @@ interface LeagueSection {
 }
 
 export function PostMatch() {
-  useScrollRestoration("post-match");
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
 
   const { data, isLoading } = useGetTodayFixtures();
 
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);
+  const postmatch_ready = !isLoading && all.length > 0;
+  useScrollRestoration("post-match", postmatch_ready);
   const postmatch = all
     .filter((f) => POST_STATUSES.has(f.statusShort ?? ""))
     .sort((a, b) => {

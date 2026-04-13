@@ -383,6 +383,63 @@ async function syncOdds() {
   }
 }
 
+/**
+ * Light odds sweep for fixtures 48h–7 days ahead.
+ * syncOdds() covers 0-48h at high frequency; this fills the gap so
+ * bulkGenerateAiTips() has odds data for the full upcoming week.
+ * One API call per fixture (default bookmaker only). ~100-200 calls/run.
+ */
+async function syncOddsForUpcomingWeek(): Promise<void> {
+  const now = new Date();
+  const from = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const to = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(gte(f.kickoff, from), lte(f.kickoff, to), inArray(f.statusShort, ["NS", "TBD"])),
+    columns: { fixtureId: true, homeTeamName: true, awayTeamName: true },
+  });
+
+  if (upcoming.length === 0) return;
+
+  // Find fixtures that already have at least one snapshot — skip them to save API quota
+  const existing = await db.query.oddsSnapshots.findMany({
+    where: (s, { inArray: inArr }) => inArr(s.fixtureId, upcoming.map((f) => f.fixtureId)),
+    columns: { fixtureId: true },
+  });
+  const alreadyHave = new Set(existing.map((r) => r.fixtureId));
+  const missing = upcoming.filter((f) => !alreadyHave.has(f.fixtureId));
+
+  if (missing.length === 0) {
+    console.log(`[odds-week] All ${upcoming.length} fixtures (48h-7d) already have odds`);
+    return;
+  }
+
+  console.log(`[odds-week] Fetching odds for ${missing.length} fixtures (48h–7d window)`);
+  let ok = 0;
+
+  for (const fix of missing) {
+    try {
+      const odds = await fetchOdds(fix.fixtureId);
+      if (odds && odds.bookmakers.length > 0) {
+        for (const bm of odds.bookmakers) {
+          await insertOddsSnapshot(fix.fixtureId, bm.name, odds.bookmakers, {
+            btts: odds._btts,
+            overUnder25: odds._overUnder25,
+            handicapHome: odds._handicapHome,
+          });
+        }
+        ok++;
+      }
+      await new Promise((r) => setTimeout(r, 200)); // rate-limit friendly
+    } catch (err) {
+      console.error(`[odds-week] Error for fixture ${fix.fixtureId}:`, err);
+    }
+  }
+
+  console.log(`[odds-week] Done — odds fetched for ${ok}/${missing.length} fixtures`);
+}
+
 async function syncPredictionForFixture(fixtureId: number) {
   const data = await fetchPredictions(fixtureId);
   if (!data || data.length === 0) return;
@@ -1661,7 +1718,7 @@ async function dailySignalPrecompute() {
   console.log(`[signal-cron] Done — ${computed}/${upcoming.length} fixtures pre-computed`);
 
   // After computing signals, generate AI tips for any fixture still missing them
-  await bulkGenerateAiTips(50);
+  await bulkGenerateAiTips(200);
 }
 
 /**
@@ -1698,7 +1755,7 @@ async function startupSignalCompute() {
 
   if (toCompute.length === 0) {
     console.log(`[signal-startup] All ${upcoming.length} upcoming fixtures already have signals — generating AI tips`);
-    await bulkGenerateAiTips(50);
+    await bulkGenerateAiTips(200);
     return;
   }
 
@@ -1718,7 +1775,7 @@ async function startupSignalCompute() {
   console.log(`[signal-startup] Done — ${computed}/${toCompute.length} newly computed`);
 
   // Generate AI tips for all upcoming fixtures missing picks
-  await bulkGenerateAiTips(50);
+  await bulkGenerateAiTips(200);
 }
 
 /**
@@ -1827,6 +1884,8 @@ export function startPoller() {
   setTimeout(() => syncTrophiesForKnownTeams().catch(console.error), 7 * 60 * 1000);
   setTimeout(() => syncPlayerProfilesForTopPlayers().catch(console.error), 8 * 60 * 1000);
   setTimeout(() => syncOddsAllMarketsForUpcoming().catch(console.error), 9 * 60 * 1000);
+  // Week-ahead odds sweep: runs after near-term sync is done, before AI tips at 16min
+  setTimeout(() => syncOddsForUpcomingWeek().catch(console.error), 9.5 * 60 * 1000);
   setTimeout(() => syncSquadsForUpcomingTeams().catch(console.error), 10 * 60 * 1000);
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
@@ -1865,8 +1924,12 @@ export function startPoller() {
   // H2H: every 6 hours (changes only before a new fixture)
   setInterval(() => syncH2HForUpcomingFixtures().catch(console.error), 6 * 60 * 60 * 1000);
 
+  // Week-ahead odds sweep: every 12 hours (fills odds for fixtures 2-7 days out)
+  setInterval(() => syncOddsForUpcomingWeek().catch(console.error), 12 * 60 * 60 * 1000);
+
   // AI tips: every 6 hours — catches newly added fixtures and refreshes missing picks
-  setInterval(() => bulkGenerateAiTips(50).catch(console.error), 6 * 60 * 60 * 1000);
+  // Batch size 200 = covers the full 7-day window (~155 fixtures) in one pass
+  setInterval(() => bulkGenerateAiTips(200).catch(console.error), 6 * 60 * 60 * 1000);
 
   // Team season stats: every 2 hours (more frequent = fresher form indicators)
   setInterval(() => syncTeamSeasonStats().catch(console.error), 2 * 60 * 60 * 1000);

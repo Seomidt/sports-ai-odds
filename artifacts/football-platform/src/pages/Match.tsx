@@ -127,14 +127,14 @@ export function Match() {
                   <span className="text-sm font-bold tracking-widest">{fixture.statusShort}</span>
                 </div>
               )}
-              {fixture.weatherDesc && (
+              {fixture.weatherDesc ? (
                 <WeatherBadge
                   temp={fixture.weatherTemp ?? null}
                   desc={fixture.weatherDesc}
                   wind={fixture.weatherWind ?? null}
                   icon={fixture.weatherIcon ?? null}
                 />
-              )}
+              ) : null}
             </div>
 
             <div className="flex items-center justify-between w-full max-w-3xl">
@@ -245,6 +245,14 @@ function WeatherBadge({ temp, desc, wind, icon }: { temp: number | null; desc: s
         {(wind ?? 0) > 5 && <span className="ml-1 opacity-70">{Math.round(wind ?? 0)}m/s</span>}
       </span>
       {isAdverse && <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />}
+    </div>
+  );
+}
+
+function WeatherSourceHint({ desc }: { desc: string }) {
+  return (
+    <div className="mt-2 text-xs text-muted-foreground font-mono">
+      Weather: {desc}
     </div>
   );
 }

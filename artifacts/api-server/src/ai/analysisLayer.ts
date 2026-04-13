@@ -184,6 +184,7 @@ interface BettingContext {
   awaySidelined: string[];
   homeCoach: string | null;
   awayCoach: string | null;
+  weather: { temp: number | null; desc: string | null; wind: number | null; humidity: number | null; isAdverse: boolean; adverseReason?: string } | null;
 }
 
 async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
@@ -202,7 +203,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       homeRank: null, awayRank: null,
       prediction: null, homeSeasonStats: null, awaySeasonStats: null,
       homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
-      homeCoach: null, awayCoach: null,
+      homeCoach: null, awayCoach: null, weather: null,
     };
   }
 
@@ -483,6 +484,22 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     awaySidelined: awaySidelinedRows.map(sp => sp.playerName ?? "Unknown"),
     homeCoach: homeCoachRow?.name ?? null,
     awayCoach: awayCoachRow?.name ?? null,
+    weather: fixture.weatherTemp != null ? (() => {
+      const temp  = fixture.weatherTemp!;
+      const wind  = fixture.weatherWind ?? 0;
+      const desc  = fixture.weatherDesc ?? "";
+      const humidity = fixture.weatherHumidity ?? null;
+      const adverseWeatherWords = ["heavy rain", "snow", "thunderstorm", "hail", "blizzard", "fog"];
+      const wmoAdverse = adverseWeatherWords.some(w => desc.toLowerCase().includes(w));
+      let isAdverse = wmoAdverse;
+      let adverseReason: string | undefined;
+      if (wind > 14)  { isAdverse = true; adverseReason = `Storm (${Math.round(wind)} m/s vind)`; }
+      else if (wind > 10) { isAdverse = true; adverseReason = `Hård vind (${Math.round(wind)} m/s)`; }
+      else if (temp < -5) { isAdverse = true; adverseReason = `Ekstrem kulde (${Math.round(temp)}°C)`; }
+      else if (temp > 36) { isAdverse = true; adverseReason = `Ekstrem varme (${Math.round(temp)}°C)`; }
+      else if (wmoAdverse) adverseReason = desc;
+      return { temp, desc, wind, humidity, isAdverse, adverseReason };
+    })() : null,
   };
 }
 
@@ -637,6 +654,10 @@ export async function getBettingTips(fixtureId: number) {
     ? `Coaches: ${ctx.homeTeam}: ${ctx.homeCoach ?? "Unknown"} | ${ctx.awayTeam}: ${ctx.awayCoach ?? "Unknown"}`
     : "";
 
+  const weatherSection = ctx.weather
+    ? `Match conditions: ${Math.round(ctx.weather.temp ?? 0)}°C, ${ctx.weather.desc}, wind ${Math.round(ctx.weather.wind ?? 0)} m/s${ctx.weather.humidity != null ? `, humidity ${ctx.weather.humidity}%` : ""}${ctx.weather.isAdverse ? ` — ADVERSE CONDITIONS (${ctx.weather.adverseReason})` : ""}\nNote: Adverse weather suppresses goals and corners; adjust Over/Under and BTTS trust accordingly. Strong winds reduce accurate passing and set pieces.`
+    : "";
+
   const prompt = `You are a professional football betting analyst. Analyse ALL 8 markets below for this upcoming match and return your best tips.
 
 Match: ${ctx.matchLabel}
@@ -665,7 +686,7 @@ ${homeScorersSection}
 ${awayScorersSection}
 
 ${sidelinedSection}
-
+${weatherSection ? "\n" + weatherSection : ""}
 Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}
 
@@ -808,6 +829,16 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
   for (const s of postSignals) {
     if (s.signalBool !== null) signalCtx[s.signalKey] = s.signalBool;
     else if (s.signalValue !== null) signalCtx[s.signalKey] = Math.round(s.signalValue * 1000) / 1000;
+  }
+  // Include match-day weather so AI can assess if conditions affected outcomes
+  if (fixture.weatherTemp != null) {
+    signalCtx["weather_temp_c"] = Math.round(fixture.weatherTemp);
+    signalCtx["weather_desc"] = fixture.weatherDesc ?? "";
+    signalCtx["weather_wind_ms"] = Math.round(fixture.weatherWind ?? 0);
+    const adverseWords = ["heavy rain", "snow", "thunderstorm", "hail", "blizzard"];
+    const isAdverse = adverseWords.some(w => (fixture.weatherDesc ?? "").toLowerCase().includes(w)) ||
+      (fixture.weatherWind ?? 0) > 10 || (fixture.weatherTemp ?? 15) < -5 || (fixture.weatherTemp ?? 15) > 36;
+    signalCtx["weather_adverse"] = isAdverse;
   }
 
   const resultStr = `${fixture.homeTeamName} ${hg} - ${ag} ${fixture.awayTeamName} (FT)`;

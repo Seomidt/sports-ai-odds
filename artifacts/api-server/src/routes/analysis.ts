@@ -119,6 +119,7 @@ router.get("/analysis/value-odds", async (_req, res) => {
         INNER JOIN fixtures f ON f.fixture_id = t.fixture_id
         WHERE t.outcome IS NULL
           AND t.bet_type != 'no_bet'
+          AND t.trust_score >= 5
           AND (t.kickoff IS NULL OR t.kickoff >= $1)
           AND f.status_short IN ('NS','TBD','1H','HT','2H','ET','BT','P','SUSP','INT','LIVE')
         ORDER BY t.trust_score DESC

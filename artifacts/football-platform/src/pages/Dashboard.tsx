@@ -418,6 +418,7 @@ export function Dashboard() {
   });
 
   const tips = data?.tips ?? [];
+  const uniqueFixtures = new Set(tips.map(t => t.fixtureId)).size;
   const valueTips = tips.filter(t => t.valueRating === 'strong_value' || t.valueRating === 'value');
   const fairTips  = tips.filter(t => t.valueRating === 'fair');
   const otherTips = tips.filter(t => t.valueRating !== 'strong_value' && t.valueRating !== 'value' && t.valueRating !== 'fair');
@@ -446,10 +447,10 @@ export function Dashboard() {
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">hit rate</div>
               </div>
             )}
-            {!isLoading && tips.length > 0 && (
+            {!isLoading && uniqueFixtures > 0 && (
               <div className="text-right">
-                <div className="text-lg font-bold font-mono text-white tabular-nums">{tips.length}</div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">tips</div>
+                <div className="text-lg font-bold font-mono text-white tabular-nums">{uniqueFixtures}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">fixtures</div>
               </div>
             )}
           </div>

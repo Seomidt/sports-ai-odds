@@ -152,7 +152,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
       const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
       const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
 
-      const [todayRows, yesterdayRow, dailyRows, roiRow] = await Promise.all([
+      const [todayRows, yesterdayRow, yesterdayTipsRow, dailyRows, roiRow] = await Promise.all([
         // Today's top picks (upcoming, not yet resolved)
         pool.query(`
           SELECT id, fixture_id AS "fixtureId", home_team AS "homeTeam", away_team AS "awayTeam",
@@ -176,6 +176,18 @@ router.get("/analysis/daily-summary", async (_req, res) => {
             COUNT(*) FILTER (WHERE outcome IS NOT NULL AND bet_type != 'no_bet') AS total
           FROM ai_betting_tips
           WHERE kickoff >= $1 AND kickoff < $2
+        `, [yesterdayStart, todayStart]),
+
+        // Yesterday's individual tips (for expandable panel)
+        pool.query(`
+          SELECT id, fixture_id AS "fixtureId", home_team AS "homeTeam", away_team AS "awayTeam",
+                 kickoff, league_name AS "leagueName", recommendation, bet_type AS "betType",
+                 trust_score AS "trustScore", market_odds AS "marketOdds", value_rating AS "valueRating",
+                 outcome, review_headline AS "reviewHeadline"
+          FROM ai_betting_tips
+          WHERE kickoff >= $1 AND kickoff < $2
+            AND bet_type != 'no_bet'
+          ORDER BY kickoff ASC, trust_score DESC
         `, [yesterdayStart, todayStart]),
 
         // Daily hit/miss per day for streak calculation (most recent 60 days)
@@ -232,6 +244,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
 
       return {
         todayPicks: todayRows.rows,
+        yesterdayTips: yesterdayTipsRow.rows,
         yesterdayResults: {
           wins:   Number(yr.wins   ?? 0),
           losses: Number(yr.losses ?? 0),

@@ -1,10 +1,12 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import {
-  Activity, TrendingUp, Zap, ChevronRight, Target,
-  Flame, Trophy, TrendingDown, BarChart3, CalendarCheck, Star
+  Activity, TrendingUp, Zap, ChevronRight, ChevronDown,
+  Target, Flame, Trophy, TrendingDown, BarChart3, CalendarCheck, Star,
+  CheckCircle2, XCircle, MinusCircle
 } from "lucide-react";
 
 interface ValueTip {
@@ -26,43 +28,62 @@ interface ValueTip {
   createdAt: string;
 }
 
+interface TipSummary {
+  id: number;
+  fixtureId: number;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  kickoff: string | null;
+  leagueName: string | null;
+  recommendation: string;
+  betType: string;
+  trustScore: number;
+  marketOdds: number | null;
+  valueRating: string | null;
+}
+
+interface YesterdayTip extends TipSummary {
+  outcome: string | null;
+  reviewHeadline: string | null;
+}
+
 interface DailySummary {
-  todayPicks: Array<{
-    id: number;
-    fixtureId: number;
-    homeTeam: string | null;
-    awayTeam: string | null;
-    kickoff: string | null;
-    recommendation: string;
-    trustScore: number;
-    marketOdds: number | null;
-    valueRating: string | null;
-  }>;
-  yesterdayResults: {
-    wins: number;
-    losses: number;
-    pushes: number;
-    total: number;
-  };
-  streak: {
-    current: number;
-    type: "win" | "loss" | "none";
-    badge: "warming" | "hot" | "elite" | null;
-  };
-  roi: {
-    total: number;
-    totalBets: number;
-    netReturn: number;
-  };
+  todayPicks: TipSummary[];
+  yesterdayTips: YesterdayTip[];
+  yesterdayResults: { wins: number; losses: number; pushes: number; total: number };
+  streak: { current: number; type: "win" | "loss" | "none"; badge: "warming" | "hot" | "elite" | null };
+  roi: { total: number; totalBets: number; netReturn: number };
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const betTypeLabel = (t: string) => {
+  if (t === 'match_result') return 'Match Result';
+  if (t === 'over_under') return 'Goals Market';
+  if (t === 'btts') return 'BTTS';
+  return t;
+};
+
+const BADGE_CONFIG = {
+  warming: { label: '3+ WIN STREAK', icon: Flame, color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/30' },
+  hot:     { label: '7+ WIN STREAK', icon: Flame, color: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' },
+  elite:   { label: 'ELITE STREAK',  icon: Trophy, color: 'text-teal-300',  bg: 'bg-teal-400/10',  border: 'border-teal-400/30' },
+};
+
+function OutcomeIcon({ outcome }: { outcome: string | null }) {
+  if (outcome === 'hit') return <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />;
+  if (outcome === 'miss') return <XCircle className="w-4 h-4 text-amber-400 shrink-0" />;
+  if (outcome === 'partial') return <MinusCircle className="w-4 h-4 text-violet-400 shrink-0" />;
+  return <MinusCircle className="w-4 h-4 text-white/20 shrink-0" />;
 }
 
 function ValueBadge({ rating }: { rating: string | null }) {
   if (!rating) return null;
   const config: Record<string, { label: string; color: string; bg: string; border: string }> = {
     strong_value: { label: 'STRONG VALUE', color: 'text-teal-300', bg: 'bg-teal-400/10', border: 'border-teal-400/30' },
-    value: { label: 'VALUE', color: 'text-teal-400', bg: 'bg-teal-400/10', border: 'border-teal-400/20' },
-    fair: { label: 'FAIR PRICE', color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20' },
-    overpriced: { label: 'OVERPRICED', color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20' },
+    value:        { label: 'VALUE',        color: 'text-teal-400', bg: 'bg-teal-400/10', border: 'border-teal-400/20' },
+    fair:         { label: 'FAIR PRICE',   color: 'text-violet-400', bg: 'bg-violet-400/10', border: 'border-violet-400/20' },
+    overpriced:   { label: 'OVERPRICED',   color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/20' },
   };
   const c = config[rating] ?? config.fair!;
   return (
@@ -72,88 +93,172 @@ function ValueBadge({ rating }: { rating: string | null }) {
   );
 }
 
-const betTypeLabel = (t: string) => {
-  if (t === 'match_result') return 'Match Result';
-  if (t === 'over_under') return 'Goals Market';
-  if (t === 'btts') return 'Both Teams to Score';
-  return t;
-};
-
-const BADGE_CONFIG = {
-  warming: { label: '3+ WIN STREAK', icon: Flame, color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/30' },
-  hot: { label: '7+ WIN STREAK', icon: Flame, color: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' },
-  elite: { label: 'ELITE STREAK', icon: Trophy, color: 'text-teal-300', bg: 'bg-teal-400/10', border: 'border-teal-400/30' },
-};
+// ─── DailyLoopBar ────────────────────────────────────────────────────────────
 
 function DailyLoopBar({ summary }: { summary: DailySummary }) {
-  const { todayPicks, yesterdayResults, streak, roi } = summary;
+  const { todayPicks, yesterdayTips, yesterdayResults, streak, roi } = summary;
+  const [todayOpen, setTodayOpen] = useState(false);
+  const [yesterdayOpen, setYesterdayOpen] = useState(false);
+
   const yr = yesterdayResults;
   const yrHitRate = yr.total > 0 ? Math.round((yr.wins / yr.total) * 100) : null;
   const topPick = todayPicks[0];
   const badge = streak.badge ? BADGE_CONFIG[streak.badge] : null;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
-      {/* Today's Picks panel */}
-      <div className="glass-card rounded-xl p-4 border border-white/8">
-        <div className="flex items-center gap-2 mb-3">
-          <CalendarCheck className="w-3.5 h-3.5 text-violet-400" />
-          <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest">Today's Picks</span>
-        </div>
-        {todayPicks.length === 0 ? (
-          <div className="text-sm text-muted-foreground/50">No high-confidence tips yet today</div>
-        ) : (
-          <>
-            <div className="flex items-baseline gap-2 mb-2">
-              <span className="text-3xl font-bold font-mono text-white tabular-nums">{todayPicks.length}</span>
-              <span className="text-xs text-muted-foreground font-mono">tip{todayPicks.length !== 1 ? 's' : ''}</span>
-            </div>
-            {topPick && (
-              <div className="text-xs text-muted-foreground/70 truncate">
-                Top: <span className="text-white/80">{topPick.recommendation}</span>
-                {topPick.marketOdds != null && (
-                  <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
-                )}
+    <div className="space-y-3 mb-8">
+      {/* Row 1: Today + Yesterday side by side */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+        {/* Today's Picks */}
+        <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
+          <button
+            onClick={() => setTodayOpen(o => !o)}
+            className="w-full text-left p-4 hover:bg-white/3 transition-colors"
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="w-3.5 h-3.5 text-violet-400" />
+                <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest">Today's Picks</span>
               </div>
+              {todayPicks.length > 0 && (
+                todayOpen
+                  ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40" />
+                  : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
+              )}
+            </div>
+            {todayPicks.length === 0 ? (
+              <div className="text-sm text-muted-foreground/50">No high-confidence tips yet today</div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className="text-3xl font-bold font-mono text-white tabular-nums">{todayPicks.length}</span>
+                  <span className="text-xs text-muted-foreground font-mono">tip{todayPicks.length !== 1 ? 's' : ''}</span>
+                </div>
+                {topPick && !todayOpen && (
+                  <div className="text-xs text-muted-foreground/70 truncate">
+                    Top: <span className="text-white/80">{topPick.recommendation}</span>
+                    {topPick.marketOdds != null && (
+                      <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
+                    )}
+                  </div>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
+          </button>
 
-      {/* Yesterday's Results panel */}
-      <div className="glass-card rounded-xl p-4 border border-white/8">
-        <div className="flex items-center gap-2 mb-3">
-          <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
-          <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Yesterday</span>
+          {/* Expanded today's picks list */}
+          {todayOpen && todayPicks.length > 0 && (
+            <div className="border-t border-white/5 divide-y divide-white/5">
+              {todayPicks.map(tip => (
+                <Link key={tip.id} href={`/match/${tip.fixtureId}`}>
+                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-[10px] font-mono text-muted-foreground/50 uppercase">{betTypeLabel(tip.betType)}</span>
+                        <ValueBadge rating={tip.valueRating} />
+                      </div>
+                      <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
+                      <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
+                        {tip.homeTeam} vs {tip.awayTeam}
+                        {tip.kickoff && <span className="ml-1.5 opacity-60">{format(new Date(tip.kickoff), 'HH:mm')}</span>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {tip.marketOdds != null && (
+                        <span className="font-mono text-sm font-bold text-teal-400">{tip.marketOdds.toFixed(2)}</span>
+                      )}
+                      <span className={`text-sm font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : 'text-amber-400'}`}>
+                        {tip.trustScore}<span className="text-[10px] text-muted-foreground/40">/10</span>
+                      </span>
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
-        {yr.total === 0 ? (
-          <div className="text-sm text-muted-foreground/50">No results from yesterday</div>
-        ) : (
-          <>
-            <div className="flex items-baseline gap-3 mb-2">
-              <span className={`text-3xl font-bold font-mono tabular-nums ${yrHitRate != null && yrHitRate >= 50 ? 'text-teal-400' : 'text-amber-400'}`}>
-                {yrHitRate != null ? `${yrHitRate}%` : '—'}
-              </span>
-              <span className="text-xs text-muted-foreground font-mono">hit rate</span>
+
+        {/* Yesterday */}
+        <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
+          <button
+            onClick={() => setYesterdayOpen(o => !o)}
+            className="w-full text-left p-4 hover:bg-white/3 transition-colors"
+            disabled={yr.total === 0}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Yesterday</span>
+              </div>
+              {yr.total > 0 && (
+                yesterdayOpen
+                  ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40" />
+                  : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
+              )}
             </div>
-            <div className="flex items-center gap-2 text-[11px] font-mono">
-              <span className="text-teal-400">{yr.wins}W</span>
-              <span className="text-white/20">·</span>
-              <span className="text-amber-400">{yr.losses}L</span>
-              {yr.pushes > 0 && <>
-                <span className="text-white/20">·</span>
-                <span className="text-muted-foreground">{yr.pushes}P</span>
-              </>}
-              <span className="text-white/20 ml-1">of {yr.total}</span>
+            {yr.total === 0 ? (
+              <div className="text-sm text-muted-foreground/50">No results from yesterday</div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-3 mb-1">
+                  <span className={`text-3xl font-bold font-mono tabular-nums ${yrHitRate != null && yrHitRate >= 50 ? 'text-teal-400' : 'text-amber-400'}`}>
+                    {yrHitRate != null ? `${yrHitRate}%` : '—'}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono">hit rate</span>
+                </div>
+                <div className="flex items-center gap-2 text-[11px] font-mono">
+                  <span className="text-teal-400">{yr.wins}W</span>
+                  <span className="text-white/20">·</span>
+                  <span className="text-amber-400">{yr.losses}L</span>
+                  {yr.pushes > 0 && (
+                    <>
+                      <span className="text-white/20">·</span>
+                      <span className="text-violet-400">{yr.pushes}P</span>
+                    </>
+                  )}
+                  <span className="text-white/20 ml-1">of {yr.total}</span>
+                </div>
+              </>
+            )}
+          </button>
+
+          {/* Expanded yesterday's tips */}
+          {yesterdayOpen && yesterdayTips.length > 0 && (
+            <div className="border-t border-white/5 divide-y divide-white/5">
+              {yesterdayTips.map(tip => (
+                <Link key={tip.id} href={`/match/${tip.fixtureId}`}>
+                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer">
+                    <OutcomeIcon outcome={tip.outcome} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs text-muted-foreground/50 font-mono uppercase mb-0.5">{betTypeLabel(tip.betType)}</div>
+                      <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
+                      <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
+                        {tip.homeTeam} vs {tip.awayTeam}
+                      </div>
+                      {tip.reviewHeadline && (
+                        <div className="text-[11px] text-muted-foreground/40 truncate mt-0.5 italic">{tip.reviewHeadline}</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {tip.marketOdds != null && (
+                        <span className="font-mono text-xs text-muted-foreground/60">{tip.marketOdds.toFixed(2)}</span>
+                      )}
+                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
             </div>
-          </>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Streak + ROI panel */}
+      {/* Row 2: Streak & ROI (full width) */}
       <div className="glass-card rounded-xl p-4 border border-white/8">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
             {streak.type === 'win' ? (
               <Flame className="w-3.5 h-3.5 text-amber-400" />
             ) : streak.type === 'loss' ? (
@@ -162,44 +267,48 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
               <Star className="w-3.5 h-3.5 text-muted-foreground" />
             )}
             <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Streak & ROI</span>
-          </div>
-          {badge && (
-            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border ${badge.color} ${badge.bg} ${badge.border}`}>
-              <badge.icon className="w-2.5 h-2.5" />
-              {badge.label}
-            </span>
-          )}
-        </div>
 
-        <div className="flex items-baseline gap-3 mb-2">
-          {streak.current > 0 && streak.type !== 'none' ? (
-            <>
-              <span className={`text-3xl font-bold font-mono tabular-nums ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
-                {streak.current}
+            {badge && (
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border ${badge.color} ${badge.bg} ${badge.border}`}>
+                <badge.icon className="w-2.5 h-2.5" />
+                {badge.label}
               </span>
-              <span className={`text-xs font-mono ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
-                {streak.type === 'win' ? 'winning day' : 'losing day'}{streak.current !== 1 ? 's' : ''}
-              </span>
-            </>
-          ) : (
-            <span className="text-sm text-muted-foreground/50">No streak yet</span>
-          )}
-        </div>
-
-        {roi.totalBets > 0 && (
-          <div className="flex items-center gap-2 text-[11px] font-mono">
-            <span className="text-muted-foreground">ROI</span>
-            <span className={`font-bold ${roi.total >= 0 ? 'text-teal-400' : 'text-amber-400'}`}>
-              {roi.total >= 0 ? '+' : ''}{roi.total}%
-            </span>
-            <span className="text-white/20">·</span>
-            <span className="text-muted-foreground/50">{roi.totalBets} bets</span>
+            )}
           </div>
-        )}
+
+          <div className="flex items-center gap-6">
+            {/* Streak */}
+            {streak.current > 0 && streak.type !== 'none' ? (
+              <div className="text-right">
+                <span className={`text-xl font-bold font-mono tabular-nums ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
+                  {streak.current}
+                </span>
+                <span className={`text-xs font-mono ml-1 ${streak.type === 'win' ? 'text-teal-400/70' : 'text-amber-400/70'}`}>
+                  {streak.type === 'win' ? 'win' : 'loss'}{streak.current !== 1 ? 's' : ''}
+                </span>
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground/50 font-mono">No streak</span>
+            )}
+
+            {/* ROI */}
+            {roi.totalBets > 0 && (
+              <div className="text-right">
+                <span className={`text-xl font-bold font-mono tabular-nums ${roi.total >= 0 ? 'text-teal-400' : 'text-amber-400'}`}>
+                  {roi.total >= 0 ? '+' : ''}{roi.total}%
+                </span>
+                <span className="text-xs text-muted-foreground/50 font-mono ml-1">ROI</span>
+                <div className="text-[10px] text-muted-foreground/40 font-mono">{roi.totalBets} bets</div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
 }
+
+// ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
@@ -272,6 +381,8 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   );
 }
 
+// ─── Dashboard ───────────────────────────────────────────────────────────────
+
 export function Dashboard() {
   const { data, isLoading } = useQuery<{ tips: ValueTip[] }>({
     queryKey: ['valueOdds'],
@@ -308,7 +419,7 @@ export function Dashboard() {
 
   const tips = data?.tips ?? [];
   const valueTips = tips.filter(t => t.valueRating === 'strong_value' || t.valueRating === 'value');
-  const fairTips = tips.filter(t => t.valueRating === 'fair');
+  const fairTips  = tips.filter(t => t.valueRating === 'fair');
   const otherTips = tips.filter(t => t.valueRating !== 'strong_value' && t.valueRating !== 'value' && t.valueRating !== 'fair');
 
   let globalRank = 0;
@@ -344,7 +455,7 @@ export function Dashboard() {
           </div>
         </header>
 
-        {/* Daily Loop bar — Today / Yesterday / Streak & ROI */}
+        {/* Daily Loop — Today / Yesterday / Streak & ROI */}
         {summary && <DailyLoopBar summary={summary} />}
 
         {isLoading ? (
@@ -365,16 +476,11 @@ export function Dashboard() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <Zap className="w-4 h-4 text-teal-400" />
-                  <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">
-                    Best Value Picks
-                  </h2>
+                  <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">Best Value Picks</h2>
                   <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{valueTips.length} tips</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {valueTips.map((t) => {
-                    globalRank++;
-                    return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />;
-                  })}
+                  {valueTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
                 </div>
               </div>
             )}
@@ -383,16 +489,11 @@ export function Dashboard() {
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
                   <TrendingUp className="w-4 h-4 text-violet-400" />
-                  <h2 className="text-sm font-mono font-bold text-violet-400 tracking-widest uppercase">
-                    Fair Price
-                  </h2>
+                  <h2 className="text-sm font-mono font-bold text-violet-400 tracking-widest uppercase">Fair Price</h2>
                   <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{fairTips.length} tips</span>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {fairTips.map((t) => {
-                    globalRank++;
-                    return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />;
-                  })}
+                  {fairTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
                 </div>
               </div>
             )}
@@ -403,10 +504,7 @@ export function Dashboard() {
                   Other Markets — {otherTips.length}
                 </h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {otherTips.map((t) => {
-                    globalRank++;
-                    return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />;
-                  })}
+                  {otherTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
                 </div>
               </div>
             )}

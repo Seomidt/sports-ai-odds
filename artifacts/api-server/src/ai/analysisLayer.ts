@@ -189,6 +189,7 @@ interface BettingContext {
   awayRecentXg: number | null;
   homeRecentStats: { avgCorners: number | null; avgCards: number | null; avgShots: number | null; avgPossession: number | null; avgFouls: number | null } | null;
   awayRecentStats: { avgCorners: number | null; avgCards: number | null; avgShots: number | null; avgPossession: number | null; avgFouls: number | null } | null;
+  h2hAiNotes: Array<{ kickoff: string; result: string; betType: string; outcome: string; note: string }>;
   oddsMovement: { homeOpen: number | null; homeNow: number | null; homeShift: number | null; awayOpen: number | null; awayNow: number | null; awayShift: number | null } | null;
   weather: { temp: number | null; desc: string | null; wind: number | null; humidity: number | null; isAdverse: boolean; adverseReason?: string } | null;
 }
@@ -209,7 +210,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       homeRank: null, awayRank: null,
       prediction: null, homeSeasonStats: null, awaySeasonStats: null,
       homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
-      homeCoach: null, awayCoach: null, referee: null, homeRecentXg: null, awayRecentXg: null, homeRecentStats: null, awayRecentStats: null, oddsMovement: null, weather: null,
+      homeCoach: null, awayCoach: null, referee: null, homeRecentXg: null, awayRecentXg: null, homeRecentStats: null, awayRecentStats: null, h2hAiNotes: [], oddsMovement: null, weather: null,
     };
   }
 
@@ -313,7 +314,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
   awayRank = awayStanding?.rank ?? null;
 
   // Fetch recent xG, match stats (corners/cards/shots), and odds movement in parallel
-  const [homeXgRows, awayXgRows, homeStatsRows, awayStatsRows, oldestOdds, newestOdds] = await Promise.all([
+  const [homeXgRows, awayXgRows, homeStatsRows, awayStatsRows, oldestOdds, newestOdds, h2hNotesRows] = await Promise.all([
     // Home team xG: avg from last 5 completed matches
     fixture.homeTeamId ? db.execute(sql`
       SELECT AVG(fs."expected_goals") as avg_xg
@@ -390,6 +391,34 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId),
       orderBy: (o, { desc: d }) => [d(o.snappedAt)],
     }),
+    // H2H AI notes: reviewed tips from previous matches between these two teams
+    (fixture.homeTeamId && fixture.awayTeamId) ? db.execute(sql`
+      SELECT
+        t.bet_type,
+        t.outcome,
+        t.accuracy_note,
+        t.review_headline,
+        t.trust_score,
+        f.kickoff,
+        f.home_team_name,
+        f.away_team_name,
+        f.home_goals,
+        f.away_goals
+      FROM ai_betting_tips t
+      JOIN fixtures f ON f.fixture_id = t.fixture_id
+      WHERE
+        t.outcome IS NOT NULL
+        AND t.accuracy_note IS NOT NULL
+        AND f.status_short IN ('FT','AET','PEN')
+        AND f.fixture_id != ${fixtureId}
+        AND (
+          (f.home_team_id = ${fixture.homeTeamId} AND f.away_team_id = ${fixture.awayTeamId})
+          OR
+          (f.home_team_id = ${fixture.awayTeamId} AND f.away_team_id = ${fixture.homeTeamId})
+        )
+      ORDER BY f.kickoff DESC, t.trust_score DESC
+      LIMIT 10
+    `) : Promise.resolve({ rows: [] }),
   ]);
 
   const r2n = (v: unknown) => v != null && !isNaN(Number(v)) ? Math.round(Number(v) * 10) / 10 : null;
@@ -414,6 +443,17 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
   };
   const homeRecentStats = parseMatchStats(homeStatsRows as { rows: unknown[] });
   const awayRecentStats = parseMatchStats(awayStatsRows as { rows: unknown[] });
+
+  type H2HNoteRow = { bet_type: string; outcome: string; accuracy_note: string; review_headline: string | null; trust_score: number; kickoff: string | null; home_team_name: string | null; away_team_name: string | null; home_goals: number | null; away_goals: number | null };
+  const h2hAiNotes = ((h2hNotesRows as { rows: unknown[] }).rows as H2HNoteRow[])
+    .filter(r => r.accuracy_note && r.outcome)
+    .map(r => ({
+      kickoff: r.kickoff ? new Date(r.kickoff).toISOString().split("T")[0] : "unknown date",
+      result: `${r.home_team_name ?? "?"} ${r.home_goals ?? "?"}-${r.away_goals ?? "?"} ${r.away_team_name ?? "?"}`,
+      betType: r.bet_type,
+      outcome: r.outcome,
+      note: r.accuracy_note,
+    }));
 
   let oddsMovement: BettingContext["oddsMovement"] = null;
   if (oldestOdds && newestOdds && oldestOdds.id !== newestOdds.id) {
@@ -624,6 +664,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     awayRecentXg: awayRecentXg && awayRecentXg > 0 ? awayRecentXg : null,
     homeRecentStats,
     awayRecentStats,
+    h2hAiNotes,
     oddsMovement,
     weather: fixture.weatherTemp != null ? (() => {
       const temp  = fixture.weatherTemp!;
@@ -801,6 +842,13 @@ export async function getBettingTips(fixtureId: number) {
 
   const fmtStat = (v: number | null, suffix = "") => v != null ? `${v}${suffix}` : "N/A";
 
+  const h2hAiNotesSection = ctx.h2hAiNotes.length > 0
+    ? `Previous AI analysis of matches between these teams (learn from these):\n` +
+      ctx.h2hAiNotes.map(n =>
+        `  [${n.kickoff}] ${n.result} | ${n.betType} → ${n.outcome.toUpperCase()} | ${n.note}`
+      ).join("\n")
+    : "";
+
   const recentMatchStatsSection = (ctx.homeRecentStats || ctx.awayRecentStats) ? `Recent match stats (last 7 games avg per team):
 ${ctx.homeTeam}: corners ${fmtStat(ctx.homeRecentStats?.avgCorners)}/game | cards ${fmtStat(ctx.homeRecentStats?.avgCards)}/game | shots ${fmtStat(ctx.homeRecentStats?.avgShots)}/game | possession ${fmtStat(ctx.homeRecentStats?.avgPossession, "%")} | fouls ${fmtStat(ctx.homeRecentStats?.avgFouls)}/game
 ${ctx.awayTeam}: corners ${fmtStat(ctx.awayRecentStats?.avgCorners)}/game | cards ${fmtStat(ctx.awayRecentStats?.avgCards)}/game | shots ${fmtStat(ctx.awayRecentStats?.avgShots)}/game | possession ${fmtStat(ctx.awayRecentStats?.avgPossession, "%")} | fouls ${fmtStat(ctx.awayRecentStats?.avgFouls)}/game
@@ -859,6 +907,7 @@ ${awayScorersSection}
 
 ${recentMatchStatsSection ? recentMatchStatsSection + "\n" : ""}${sidelinedSection}
 ${oddsMovementSection ? "\n" + oddsMovementSection : ""}${weatherSection ? "\n" + weatherSection : ""}
+${h2hAiNotesSection ? "\n" + h2hAiNotesSection : ""}
 Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}
 

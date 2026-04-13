@@ -94,7 +94,7 @@ async function callClaude(prompt: string): Promise<string | null> {
   try {
     const msg = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 900,
+      max_tokens: 1200,
       messages: [{ role: "user", content: prompt }],
     });
     const inputTok = msg.usage?.input_tokens ?? 0;
@@ -161,7 +161,18 @@ interface BettingContext {
   awayGoals: number | null;
   statusShort: string | null;
   signals: Record<string, number | boolean | string>;
-  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null; cornersOver: number | null; totalCardsOver: number | null; asianHandicapHome: number | null };
+  odds: {
+    home: number | null; draw: number | null; away: number | null;
+    over25: number | null; over15: number | null; over35: number | null;
+    btts: number | null;
+    cornersOver: number | null;
+    totalCardsOver: number | null;
+    asianHandicapHome: number | null;
+    doubleChance1X: number | null; doubleChanceX2: number | null; doubleChance12: number | null;
+    drawNoBetHome: number | null; drawNoBetAway: number | null;
+    winToNilHome: number | null; winToNilAway: number | null;
+    firstHalfOver15: number | null; firstHalfBtts: number | null;
+  };
   homeRank: number | null;
   awayRank: number | null;
   prediction: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null; goalsHome: number | null; goalsAway: number | null; advice: string | null; winner: string | null } | null;
@@ -187,7 +198,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       kickoff: null, leagueName: null, leagueId: null,
       homeTeamId: null, awayTeamId: null,
       homeGoals: null, awayGoals: null, statusShort: null,
-      signals: {}, odds: { home: null, draw: null, away: null, over25: null, btts: null, cornersOver: null, totalCardsOver: null, asianHandicapHome: null },
+      signals: {}, odds: { home: null, draw: null, away: null, over25: null, over15: null, over35: null, btts: null, cornersOver: null, totalCardsOver: null, asianHandicapHome: null, doubleChance1X: null, doubleChanceX2: null, doubleChance12: null, drawNoBetHome: null, drawNoBetAway: null, winToNilHome: null, winToNilAway: null, firstHalfOver15: null, firstHalfBtts: null },
       homeRank: null, awayRank: null,
       prediction: null, homeSeasonStats: null, awaySeasonStats: null,
       homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
@@ -320,25 +331,87 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     awayTopScorers = awayScorers.map(p => ({ name: p.playerName ?? "Unknown", goals: p.goals, assists: p.assists }));
   }
 
-  // Extract corners/cards odds from oddsMarkets JSON
+  // Extract all market odds from oddsMarkets JSON
   let cornersOver: number | null = null;
   let totalCardsOver: number | null = null;
   let asianHandicapHome: number | null = null;
+  let doubleChance1X: number | null = null;
+  let doubleChanceX2: number | null = null;
+  let doubleChance12: number | null = null;
+  let drawNoBetHome: number | null = null;
+  let drawNoBetAway: number | null = null;
+  let winToNilHome: number | null = null;
+  let winToNilAway: number | null = null;
+  let firstHalfOver15: number | null = null;
+  let firstHalfBtts: number | null = null;
+  let over15: number | null = null;
+  let over35: number | null = null;
+
   if (marketsRow?.markets) {
     const mkt = marketsRow.markets as Record<string, Array<{ value: string; odd: string }>>;
+    const parseOdd = (e: { value: string; odd: string }) => parseFloat(e.odd) || null;
+
     for (const [name, entries] of Object.entries(mkt)) {
       const n = name.toLowerCase();
-      if (n.includes("corner") && n.includes("over") && !cornersOver) {
+
+      // Corners Over/Under
+      if (n.includes("corner") && (n.includes("over") || n.includes("under")) && !cornersOver) {
         const over = entries.find(e => e.value.toLowerCase().includes("over"));
-        if (over) cornersOver = parseFloat(over.odd) || null;
+        if (over) cornersOver = parseOdd(over);
       }
+      // Cards Over/Under
       if ((n.includes("card") || n.includes("booking")) && !totalCardsOver) {
         const over = entries.find(e => e.value.toLowerCase().includes("over"));
-        if (over) totalCardsOver = parseFloat(over.odd) || null;
+        if (over) totalCardsOver = parseOdd(over);
       }
-      if (n.includes("handicap") && n.includes("asian") && !asianHandicapHome) {
+      // Asian Handicap
+      if (n.includes("handicap") && n.includes("asian") && !n.includes("corner") && !n.includes("card") && !asianHandicapHome) {
         const home = entries.find(e => e.value.toLowerCase().includes("home") || e.value === "-1" || e.value === "-0.5");
-        if (home) asianHandicapHome = parseFloat(home.odd) || null;
+        if (home) asianHandicapHome = parseOdd(home);
+      }
+      // Double Chance
+      if (n === "double chance" || n.startsWith("double chance")) {
+        const dc1X = entries.find(e => e.value === "Home/Draw" || e.value === "1X");
+        const dcX2 = entries.find(e => e.value === "Draw/Away" || e.value === "X2");
+        const dc12 = entries.find(e => e.value === "Home/Away" || e.value === "12");
+        if (dc1X && !doubleChance1X) doubleChance1X = parseOdd(dc1X);
+        if (dcX2 && !doubleChanceX2) doubleChanceX2 = parseOdd(dcX2);
+        if (dc12 && !doubleChance12) doubleChance12 = parseOdd(dc12);
+      }
+      // Draw No Bet / European Handicap (0)
+      if ((n === "draw no bet" || (n.includes("european handicap") && !n.includes("corner") && !n.includes("card"))) && !drawNoBetHome) {
+        const home = entries.find(e => e.value.toLowerCase() === "home" || e.value === "1" || e.value === "0");
+        const away = entries.find(e => e.value.toLowerCase() === "away" || e.value === "2");
+        if (home) drawNoBetHome = parseOdd(home);
+        if (away && !drawNoBetAway) drawNoBetAway = parseOdd(away);
+      }
+      // Win to Nil (home team wins + clean sheet)
+      if (n.includes("win to nil") || n.includes("win to nil - home") || n.includes("clean sheet")) {
+        if (!winToNilHome && (n.includes("home") || n === "win to nil")) {
+          const yes = entries.find(e => e.value.toLowerCase() === "yes" || e.value.toLowerCase() === "home");
+          if (yes) winToNilHome = parseOdd(yes);
+        }
+        if (!winToNilAway && n.includes("away")) {
+          const yes = entries.find(e => e.value.toLowerCase() === "yes" || e.value.toLowerCase() === "away");
+          if (yes) winToNilAway = parseOdd(yes);
+        }
+      }
+      // First Half Goals Over/Under
+      if ((n.includes("first half") || n.includes("1st half") || n.includes("half time")) && (n.includes("goal") || n.includes("over/under")) && !firstHalfOver15) {
+        const over = entries.find(e => e.value.toLowerCase().includes("over") && (e.value.includes("1.5") || e.value.includes("0.5")));
+        if (over) firstHalfOver15 = parseOdd(over);
+      }
+      // First Half BTTS
+      if ((n.includes("first half") || n.includes("1st half")) && n.includes("score") && !firstHalfBtts) {
+        const yes = entries.find(e => e.value.toLowerCase() === "yes");
+        if (yes) firstHalfBtts = parseOdd(yes);
+      }
+      // Goals Over/Under 1.5 and 3.5
+      if ((n === "goals over/under" || n === "goals over/under (3 way)") && !over15) {
+        const o15 = entries.find(e => e.value.includes("1.5") && e.value.toLowerCase().includes("over"));
+        const o35 = entries.find(e => e.value.includes("3.5") && e.value.toLowerCase().includes("over"));
+        if (o15 && !over15) over15 = parseOdd(o15);
+        if (o35 && !over35) over35 = parseOdd(o35);
       }
     }
   }
@@ -361,10 +434,21 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       draw: bestDraw,
       away: bestAway,
       over25: anyRow?.overUnder25 ?? null,
+      over15,
+      over35,
       btts: anyRow?.btts ?? null,
       cornersOver,
       totalCardsOver,
       asianHandicapHome: anyRow?.handicapHome ?? asianHandicapHome,
+      doubleChance1X,
+      doubleChanceX2,
+      doubleChance12,
+      drawNoBetHome,
+      drawNoBetAway,
+      winToNilHome,
+      winToNilAway,
+      firstHalfOver15,
+      firstHalfBtts,
     },
     homeRank,
     awayRank,
@@ -406,7 +490,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
 
 const SingleTipSchema = z.object({
   recommendation: z.string(),
-  bet_type: z.enum(["match_result", "over_under", "btts", "corners", "asian_handicap", "total_cards", "no_bet"]),
+  bet_type: z.enum(["match_result", "over_under", "btts", "corners", "asian_handicap", "total_cards", "double_chance", "draw_no_bet", "win_to_nil", "first_half_goals", "no_bet"]),
   bet_side: z.string().nullable().optional(),
   trust_score: z.number().min(1).max(10),
   estimated_probability: z.number().min(0.01).max(0.99).optional(),
@@ -414,7 +498,7 @@ const SingleTipSchema = z.object({
 });
 
 const MultiBettingTipSchema = z.object({
-  tips: z.array(SingleTipSchema).min(1).max(5),
+  tips: z.array(SingleTipSchema).min(1).max(8),
 });
 
 const PostReviewSchema = z.object({
@@ -465,13 +549,15 @@ function calcValueRating(aiProb: number, marketOdds: number | null): string {
 
 function getMarketOddsForTip(
   tip: { bet_type: string; bet_side?: string | null },
-  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null; cornersOver: number | null; totalCardsOver: number | null; asianHandicapHome: number | null },
+  odds: BettingContext["odds"],
 ): number | null {
   if (tip.bet_type === "match_result") {
     if (tip.bet_side === "home") return odds.home;
     if (tip.bet_side === "away") return odds.away;
     if (tip.bet_side === "draw") return odds.draw;
   } else if (tip.bet_type === "over_under") {
+    if (tip.bet_side === "over15") return odds.over15;
+    if (tip.bet_side === "over35") return odds.over35;
     return odds.over25 ?? null;
   } else if (tip.bet_type === "btts") {
     return odds.btts;
@@ -481,6 +567,22 @@ function getMarketOddsForTip(
     return odds.asianHandicapHome;
   } else if (tip.bet_type === "total_cards") {
     return odds.totalCardsOver;
+  } else if (tip.bet_type === "double_chance") {
+    if (tip.bet_side === "1X" || tip.bet_side === "home_draw") return odds.doubleChance1X;
+    if (tip.bet_side === "X2" || tip.bet_side === "draw_away") return odds.doubleChanceX2;
+    if (tip.bet_side === "12" || tip.bet_side === "home_away") return odds.doubleChance12;
+    return odds.doubleChance1X ?? odds.doubleChanceX2 ?? odds.doubleChance12;
+  } else if (tip.bet_type === "draw_no_bet") {
+    if (tip.bet_side === "home") return odds.drawNoBetHome;
+    if (tip.bet_side === "away") return odds.drawNoBetAway;
+    return odds.drawNoBetHome ?? odds.drawNoBetAway;
+  } else if (tip.bet_type === "win_to_nil") {
+    if (tip.bet_side === "home") return odds.winToNilHome;
+    if (tip.bet_side === "away") return odds.winToNilAway;
+    return odds.winToNilHome ?? odds.winToNilAway;
+  } else if (tip.bet_type === "first_half_goals") {
+    if (tip.bet_side === "btts") return odds.firstHalfBtts;
+    return odds.firstHalfOver15;
   }
   return null;
 }
@@ -491,7 +593,7 @@ export async function getBettingTips(fixtureId: number) {
   const existing = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
   });
-  if (existing.length >= 5) return existing;
+  if (existing.length >= 8) return existing;
 
   const ctx = await buildBettingContext(fixtureId);
 
@@ -535,17 +637,24 @@ export async function getBettingTips(fixtureId: number) {
     ? `Coaches: ${ctx.homeTeam}: ${ctx.homeCoach ?? "Unknown"} | ${ctx.awayTeam}: ${ctx.awayCoach ?? "Unknown"}`
     : "";
 
-  const prompt = `You are a professional football betting analyst with access to comprehensive data. Analyse ALL FIVE markets for this upcoming match.
+  const prompt = `You are a professional football betting analyst. Analyse ALL 8 markets below for this upcoming match and return your best tips.
 
 Match: ${ctx.matchLabel}
 League: ${ctx.leagueName ?? "Unknown"} | Positions: ${ctx.homeTeam} #${ctx.homeRank ?? "?"} vs ${ctx.awayTeam} #${ctx.awayRank ?? "?"}
 Kickoff: ${ctx.kickoff ?? "Unknown"}
 ${coachSection}
 
-ODDS:
+AVAILABLE ODDS:
 - 1X2: Home ${ctx.odds.home ?? "N/A"} | Draw ${ctx.odds.draw ?? "N/A"} | Away ${ctx.odds.away ?? "N/A"}
-- Over 2.5: ${ctx.odds.over25 ?? "N/A"} | BTTS Yes: ${ctx.odds.btts ?? "N/A"}
-- Corners Over: ${ctx.odds.cornersOver ?? "N/A"} | Asian Handicap Home: ${ctx.odds.asianHandicapHome ?? "N/A"} | Cards Over: ${ctx.odds.totalCardsOver ?? "N/A"}
+- Over 1.5 goals: ${ctx.odds.over15 ?? "N/A"} | Over 2.5: ${ctx.odds.over25 ?? "N/A"} | Over 3.5: ${ctx.odds.over35 ?? "N/A"}
+- BTTS Yes: ${ctx.odds.btts ?? "N/A"}
+- Corners Over: ${ctx.odds.cornersOver ?? "N/A"}
+- Asian Handicap Home: ${ctx.odds.asianHandicapHome ?? "N/A"}
+- Cards Over: ${ctx.odds.totalCardsOver ?? "N/A"}
+- Double Chance (1X): ${ctx.odds.doubleChance1X ?? "N/A"} | (X2): ${ctx.odds.doubleChanceX2 ?? "N/A"} | (12): ${ctx.odds.doubleChance12 ?? "N/A"}
+- Draw No Bet Home: ${ctx.odds.drawNoBetHome ?? "N/A"} | Away: ${ctx.odds.drawNoBetAway ?? "N/A"}
+- Win to Nil Home: ${ctx.odds.winToNilHome ?? "N/A"} | Away: ${ctx.odds.winToNilAway ?? "N/A"}
+- First Half Over 1.5: ${ctx.odds.firstHalfOver15 ?? "N/A"} | First Half BTTS: ${ctx.odds.firstHalfBtts ?? "N/A"}
 
 ${predSection}
 
@@ -564,22 +673,32 @@ Your accuracy history: ${accuracy.summary}
 ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRate}% hit rate.` : "First tip — be conservative."}
 
 INSTRUCTIONS:
-- Give EXACTLY 5 tips: match_result, over_under, btts, corners, and one of (asian_handicap or total_cards)
-- If corners/handicap/cards odds are N/A, still pick the market but set trust_score 3 or lower
-- For each, pick the side with best edge: edge = (estimated_probability × odds) - 1
-- Trust score 1-4 = weak, 5-7 = moderate, 8-10 = strong
-- Reasoning: max 40 words per tip, state probability and edge
-- No emojis. State facts.
+- Give 6-8 tips covering different bet_types — do NOT repeat the same bet_type twice
+- Required: match_result, over_under, btts — then pick 3-5 more from: corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil, first_half_goals
+- For over_under you may pick over15, over25 or over35 as bet_side — choose the line with best edge
+- For double_chance: bet_side is "1X", "X2", or "12"
+- For draw_no_bet / win_to_nil: bet_side is "home" or "away"
+- For first_half_goals: bet_side is "over" (over 1.5 goals in 1st half) or "btts"
+- If odds are N/A for a market, set trust_score ≤ 3 but still include the tip
+- edge = (estimated_probability × odds) - 1; higher is better
+- Trust score: 1-4 = weak, 5-7 = moderate, 8-10 = strong conviction
+- Reasoning: max 35 words per tip, cite the data
+- No emojis. State facts only.
 
 Respond ONLY valid JSON:
-{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"Over 9.5 Corners","bet_type":"corners","bet_side":"over","trust_score":4,"estimated_probability":0.48,"reasoning":"..."},{"recommendation":"Asian Handicap Home -0.5","bet_type":"asian_handicap","bet_side":"home","trust_score":5,"estimated_probability":0.55,"reasoning":"..."}]}
+{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over25","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"Double Chance 1X","bet_type":"double_chance","bet_side":"1X","trust_score":7,"estimated_probability":0.75,"reasoning":"..."},{"recommendation":"Draw No Bet Home","bet_type":"draw_no_bet","bet_side":"home","trust_score":6,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 9.5 Corners","bet_type":"corners","bet_side":"over","trust_score":4,"estimated_probability":0.48,"reasoning":"..."}]}
 
-bet_side for match_result: "home","away","draw"
-bet_side for over_under: "over","under"
-bet_side for btts: "yes","no"
-bet_side for corners: "over","under"
-bet_side for asian_handicap: "home","away"
-bet_side for total_cards: "over","under"`;
+bet_side reference:
+match_result: "home","away","draw"
+over_under: "over15","over25","over35","under15","under25","under35"
+btts: "yes","no"
+corners: "over","under"
+asian_handicap: "home","away"
+total_cards: "over","under"
+double_chance: "1X","X2","12"
+draw_no_bet: "home","away"
+win_to_nil: "home","away"
+first_half_goals: "over","btts"`;
 
   const raw = await callClaude(prompt);
   const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);

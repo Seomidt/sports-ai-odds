@@ -480,6 +480,10 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     if (t === 'corners') return 'Corners Market';
     if (t === 'asian_handicap') return 'Asian Handicap';
     if (t === 'total_cards') return 'Cards Market';
+    if (t === 'double_chance') return 'Double Chance';
+    if (t === 'draw_no_bet') return 'Draw No Bet';
+    if (t === 'win_to_nil') return 'Win to Nil';
+    if (t === 'first_half_goals') return '1st Half Goals';
     if (t === 'no_bet') return 'No Bet';
     return t;
   };
@@ -758,6 +762,10 @@ function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeT
     if (t === 'corners') return 'Corners Market';
     if (t === 'asian_handicap') return 'Asian Handicap';
     if (t === 'total_cards') return 'Cards Market';
+    if (t === 'double_chance') return 'Double Chance';
+    if (t === 'draw_no_bet') return 'Draw No Bet';
+    if (t === 'win_to_nil') return 'Win to Nil';
+    if (t === 'first_half_goals') return '1st Half Goals';
     return t;
   };
 
@@ -1124,8 +1132,7 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
   const isBestAway = (bm: string | null | undefined, val: number | null | undefined) =>
     val != null && bestOdds?.away?.bookmaker === bm && Math.abs((bestOdds.away?.value ?? 0) - val) < 0.001;
 
-  const hasExtraMarkets = snap && (snap.btts != null || snap.overUnder25 != null || snap.handicapHome != null);
-  const hasAnyOdds = allOdds.length > 0 || hasExtraMarkets || Object.keys(mergedMarkets).length > 0;
+  const hasAnyOdds = allOdds.length > 0 || snap != null || Object.keys(mergedMarkets).length > 0;
 
   if (!hasAnyOdds && !latestLive) {
     return (
@@ -1135,74 +1142,42 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
     );
   }
 
+  // Priority market categories from odds_markets
+  const PRIORITY_GROUPS: { label: string; keywords: string[]; color: string }[] = [
+    { label: "Goals", keywords: ["goals over/under", "both teams score", "over/under", "goal line"], color: "text-teal-400" },
+    { label: "Match Winner", keywords: ["double chance", "draw no bet", "european handicap", "handicap result", "win to nil", "win both halves"], color: "text-violet-400" },
+    { label: "Corners", keywords: ["corner"], color: "text-amber-400" },
+    { label: "Cards", keywords: ["card", "booking", "yellow", "red card"], color: "text-amber-400" },
+    { label: "Half Time", keywords: ["first half", "second half", "half time", "ht/ft", "1st half"], color: "text-violet-400" },
+    { label: "Player Markets", keywords: ["scorer", "assist", "shot", "player"], color: "text-muted-foreground" },
+  ];
+
+  type MarketEntry = { bookmaker: string; values: Array<{ value: string; odd: string }> };
+
+  const groupedMarkets: Record<string, { color: string; markets: [string, MarketEntry[]][] }> = {};
+  for (const [name, entries] of Object.entries(mergedMarkets)) {
+    const n = name.toLowerCase();
+    const group = PRIORITY_GROUPS.find(g => g.keywords.some(k => n.includes(k)));
+    const groupLabel = group?.label ?? "Other";
+    const groupColor = group?.color ?? "text-muted-foreground";
+    if (!groupedMarkets[groupLabel]) groupedMarkets[groupLabel] = { color: groupColor, markets: [] };
+    groupedMarkets[groupLabel]!.markets.push([name, entries]);
+  }
+  const groupOrder = ["Goals", "Match Winner", "Corners", "Cards", "Half Time", "Player Markets", "Other"];
+
   return (
     <div className="space-y-4">
-      {/* 1X2 accordion */}
-      {allOdds.length > 0 && (
-        <div className="glass-card rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/6">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Match Winner — 1X2</span>
-          </div>
-          <OddsAccordionRow
-            label={homeTeam}
-            bestValue={bestOdds?.home?.value}
-            bestBookmaker={bestOdds?.home?.bookmaker}
-            rows={allOdds}
-            getVal={r => r.homeWin}
-            isBestFn={isBestHome}
-          />
-          <OddsAccordionRow
-            label="Draw"
-            bestValue={bestOdds?.draw?.value}
-            bestBookmaker={bestOdds?.draw?.bookmaker}
-            rows={allOdds}
-            getVal={r => r.draw}
-            isBestFn={isBestDraw}
-          />
-          <OddsAccordionRow
-            label={awayTeam}
-            bestValue={bestOdds?.away?.value}
-            bestBookmaker={bestOdds?.away?.bookmaker}
-            rows={allOdds}
-            getVal={r => r.awayWin}
-            isBestFn={isBestAway}
-          />
-        </div>
-      )}
-
-      {/* Extra markets accordion */}
-      {hasExtraMarkets && (
-        <div className="glass-card rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/6">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Andre markeder</span>
-          </div>
-          {snap!.btts != null && (
-            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
-              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">BTTS</span>
-              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap!.btts!.toFixed(2)}</span>
-            </div>
-          )}
-          {snap!.overUnder25 != null && (
-            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
-              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">Over 2.5</span>
-              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap!.overUnder25!.toFixed(2)}</span>
-            </div>
-          )}
-          {snap!.handicapHome != null && (
-            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
-              <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide">Handicap H</span>
-              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap!.handicapHome!.toFixed(2)}</span>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Live odds */}
-      {isLive && latestLive && (
-        <div className="glass-card rounded-xl overflow-hidden border border-amber-400/20">
+      {/* Live odds — show whenever we have snapshots, not just when isLive */}
+      {latestLive && (
+        <div className={`glass-card rounded-xl overflow-hidden ${isLive ? "border border-amber-400/20" : "border border-white/8"}`}>
           <div className="px-4 py-3 border-b border-white/6 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-            <span className="text-[10px] font-mono text-amber-400 uppercase tracking-widest">Live Odds — {latestLive.bookmaker}</span>
+            {isLive && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
+            <span className={`text-[10px] font-mono uppercase tracking-widest ${isLive ? "text-amber-400" : "text-muted-foreground"}`}>
+              {isLive ? "Live Odds" : "In-Play Snapshot"} — {latestLive.bookmaker}
+            </span>
+            {liveOdds.length > 1 && (
+              <span className="ml-auto text-[9px] font-mono text-muted-foreground/40">{liveOdds.length} snapshots</span>
+            )}
           </div>
           {[
             { label: homeTeam, val: latestLive.homeWin },
@@ -1211,28 +1186,60 @@ function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number;
           ].map(({ label, val }) => (
             <div key={label} className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
               <span className="text-xs font-mono font-semibold text-white/80 uppercase tracking-wide truncate max-w-[60%]">{label}</span>
-              <span className="font-mono text-base font-bold text-amber-400 tabular-nums">{val?.toFixed(2) ?? "—"}</span>
+              <span className={`font-mono text-base font-bold tabular-nums ${isLive ? "text-amber-400" : "text-teal-400"}`}>{val?.toFixed(2) ?? "—"}</span>
             </div>
           ))}
-          {liveOdds.length > 1 && (
-            <div className="px-4 py-2 text-xs font-mono text-muted-foreground/50 text-right">
-              {liveOdds.length} snapshots siden kickoff
+        </div>
+      )}
+
+      {/* 1X2 pre-match — best bookmaker comparison */}
+      {allOdds.length > 0 && (
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/6 flex items-center justify-between">
+            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Match Winner — 1X2</span>
+            <span className="text-[9px] font-mono text-muted-foreground/40">{allOdds.length} bookmakers</span>
+          </div>
+          <OddsAccordionRow label={homeTeam} bestValue={bestOdds?.home?.value} bestBookmaker={bestOdds?.home?.bookmaker} rows={allOdds} getVal={r => r.homeWin} isBestFn={isBestHome} />
+          <OddsAccordionRow label="Draw" bestValue={bestOdds?.draw?.value} bestBookmaker={bestOdds?.draw?.bookmaker} rows={allOdds} getVal={r => r.draw} isBestFn={isBestDraw} />
+          <OddsAccordionRow label={awayTeam} bestValue={bestOdds?.away?.value} bestBookmaker={bestOdds?.away?.bookmaker} rows={allOdds} getVal={r => r.awayWin} isBestFn={isBestAway} />
+          {/* BTTS / Over 2.5 / Handicap from snapshots */}
+          {snap?.overUnder25 != null && (
+            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/70 uppercase tracking-wide">Over 2.5 Goals</span>
+              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap.overUnder25.toFixed(2)}</span>
+            </div>
+          )}
+          {snap?.btts != null && (
+            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/70 uppercase tracking-wide">BTTS Yes</span>
+              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap.btts.toFixed(2)}</span>
+            </div>
+          )}
+          {snap?.handicapHome != null && (
+            <div className="border-b border-white/6 last:border-0 flex items-center justify-between px-4 py-3.5">
+              <span className="text-xs font-mono font-semibold text-white/70 uppercase tracking-wide">Asian Handicap H</span>
+              <span className="font-mono text-base font-bold text-violet-400 tabular-nums">{snap.handicapHome.toFixed(2)}</span>
             </div>
           )}
         </div>
       )}
 
-      {/* All markets accordion */}
-      {Object.keys(mergedMarkets).length > 0 && (
-        <div className="glass-card rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-white/6">
-            <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">Alle markeder</span>
+      {/* Categorised markets */}
+      {groupOrder.map(groupLabel => {
+        const group = groupedMarkets[groupLabel];
+        if (!group || group.markets.length === 0) return null;
+        return (
+          <div key={groupLabel} className="glass-card rounded-xl overflow-hidden">
+            <div className="px-4 py-3 border-b border-white/6 flex items-center justify-between">
+              <span className={`text-[10px] font-mono uppercase tracking-widest ${group.color}`}>{groupLabel}</span>
+              <span className="text-[9px] font-mono text-muted-foreground/40">{group.markets.length} markets</span>
+            </div>
+            {group.markets.map(([name, entries]) => (
+              <OddsMarketRow key={name} name={name} entries={entries} />
+            ))}
           </div>
-          {Object.entries(mergedMarkets).map(([name, entries]) => (
-            <OddsMarketRow key={name} name={name} entries={entries} />
-          ))}
-        </div>
-      )}
+        );
+      })}
     </div>
   );
 }

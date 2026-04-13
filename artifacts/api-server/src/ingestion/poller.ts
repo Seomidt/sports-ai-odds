@@ -1561,6 +1561,33 @@ async function upsertFixtureEventsAndStats(fixtureId: number): Promise<void> {
   }
 }
 
+// ─── Edge backfill (one-shot migration) ───────────────────────────────────────
+/**
+ * Populates ai_probability and edge for any tips that are missing them.
+ * Uses the trust_score / 10 fallback formula. Runs once at startup.
+ * Safe to run repeatedly — only touches rows where edge IS NULL.
+ */
+async function backfillMissingEdge(): Promise<void> {
+  try {
+    const { rowCount } = await pool.query(`
+      UPDATE ai_betting_tips
+      SET
+        ai_probability = ROUND((trust_score / 10.0)::numeric, 4),
+        edge = CASE
+          WHEN market_odds IS NOT NULL AND market_odds > 1
+          THEN ROUND(((trust_score / 10.0 * market_odds) - 1)::numeric, 4)
+          ELSE NULL
+        END
+      WHERE edge IS NULL
+    `);
+    if (rowCount && rowCount > 0) {
+      console.log(`[edge-backfill] Populated edge for ${rowCount} tips`);
+    }
+  } catch (err) {
+    console.warn("[edge-backfill] Failed:", err);
+  }
+}
+
 // ─── Post-match data backfill ─────────────────────────────────────────────────
 /**
  * Finds finished fixtures from the last 14 days that have no events in the DB
@@ -1863,6 +1890,9 @@ export function startPoller() {
   // ── Load persisted stats from DB (survive restarts) ───────────────────────
   initApiStats().catch(console.error);
   initAiStats().catch(console.error);
+
+  // ── One-shot migration: populate edge for tips missing it ─────────────────
+  backfillMissingEdge().catch(console.error);
 
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncNearTermFixtures().catch(console.error);

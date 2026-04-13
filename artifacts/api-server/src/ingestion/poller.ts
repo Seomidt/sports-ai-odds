@@ -25,7 +25,7 @@ import {
   alertLog,
   aiBettingTips,
 } from "@workspace/db/schema";
-import { eq, and, inArray, lt, sql, isNull, isNotNull } from "drizzle-orm";
+import { eq, and, inArray, lt, sql, isNull, isNotNull, ne, gte } from "drizzle-orm";
 import {
   TRACKED_LEAGUES,
   fetchTodayFixtures,
@@ -63,7 +63,7 @@ import {
   type ApiStatItem,
   type ApiLineup,
 } from "./apiFootballClient.js";
-import { initAiStats, getBettingTips } from "../ai/analysisLayer.js";
+import { initAiStats, getBettingTips, triggerPostMatchReview } from "../ai/analysisLayer.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
@@ -1562,6 +1562,48 @@ async function upsertFixtureEventsAndStats(fixtureId: number): Promise<void> {
   }
 }
 
+// ─── Missed post-match review sweep ───────────────────────────────────────────
+/**
+ * Finds ai_betting_tips with outcome IS NULL where the fixture has already
+ * finished (status FT/AET/PEN). Triggers triggerPostMatchReview for each
+ * unique fixture, rate-limited to 1 per 8 seconds to avoid AI overload.
+ *
+ * Safe to run repeatedly — triggerPostMatchReview is idempotent (skips if
+ * all tips for a fixture already have outcomes).
+ */
+async function sweepMissedPostMatchReviews(): Promise<void> {
+  try {
+    // Find fixtures that have pending tips but the match is already finished
+    const rows = await db
+      .selectDistinct({ fixtureId: aiBettingTips.fixtureId })
+      .from(aiBettingTips)
+      .innerJoin(fixtures, eq(fixtures.fixtureId, aiBettingTips.fixtureId))
+      .where(
+        and(
+          isNull(aiBettingTips.outcome),
+          ne(aiBettingTips.betType, "no_bet"),
+          inArray(fixtures.statusShort, ["FT", "AET", "PEN"]),
+          gte(aiBettingTips.kickoff, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+        )
+      )
+      .orderBy(aiBettingTips.fixtureId);
+
+    if (rows.length === 0) return;
+
+    console.log(`[review-sweep] Found ${rows.length} fixture(s) with pending tips — reviewing...`);
+
+    for (const row of rows) {
+      await triggerPostMatchReview(row.fixtureId);
+      // Rate-limit: 1 review per 8 seconds to avoid hammering Claude
+      await new Promise(r => setTimeout(r, 8_000));
+    }
+
+    console.log(`[review-sweep] Done reviewing ${rows.length} fixture(s)`);
+  } catch (err) {
+    console.warn("[review-sweep] Failed:", err);
+  }
+}
+
 // ─── Edge backfill (one-shot migration) ───────────────────────────────────────
 /**
  * Populates ai_probability and edge for any tips that are missing them.
@@ -1892,6 +1934,9 @@ export function startPoller() {
   // ── One-shot migration: populate edge for tips missing it ─────────────────
   backfillMissingEdge().catch(console.error);
 
+  // ── Sweep: trigger post-match reviews for tips still pending ──────────────
+  sweepMissedPostMatchReviews().catch(console.error);
+
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncNearTermFixtures().catch(console.error);
   syncRecentResults().catch(console.error); // Yesterday + day before at startup
@@ -1932,6 +1977,9 @@ export function startPoller() {
 
   // Yesterday + day before (FT results): every 2 hours — finished games rarely change
   setInterval(() => syncRecentResults().catch(console.error), 2 * 60 * 60 * 1000);
+
+  // Missed post-match review sweep: every 3 hours to catch any pending tips
+  setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
 
   // Full window -3 to +7 days: every 2 hours
   setInterval(() => syncTodayFixtures().catch(console.error), 2 * 60 * 60 * 1000);

@@ -65,7 +65,7 @@ import { initAiStats } from "../ai/analysisLayer.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
-import { fetchWeatherForCity } from "../lib/weatherClient.js";
+import { fetchWeatherForCity, geocodeCity, fetchHistoricalWeather } from "../lib/weatherClient.js";
 
 const TRACKED_LEAGUE_IDS = new Set(TRACKED_LEAGUES.map((l) => l.id));
 
@@ -1364,6 +1364,79 @@ async function syncWeatherForUpcomingFixtures() {
   }
 }
 
+// ─── Historical weather backfill ──────────────────────────────────────────────
+/**
+ * Backfills weather data for finished fixtures using Open-Meteo's free historical
+ * archive API (no API key needed, data from 1940 to present).
+ * Processes up to BATCH_SIZE fixtures per call, using geocoding cache to avoid
+ * re-geocoding the same cities. Runs hourly until all historical data is filled.
+ */
+const POST_MATCH_STATUSES = ["FT", "AET", "PEN", "AWD", "WO"] as const;
+const BACKFILL_BATCH = 100;
+
+async function backfillHistoricalWeather() {
+  const unweathered = await db.query.fixtures.findMany({
+    where: (f, { inArray, isNull, and }) =>
+      and(
+        inArray(f.statusShort, [...POST_MATCH_STATUSES]),
+        isNull(f.weatherDesc)
+      ),
+    limit: BACKFILL_BATCH,
+    orderBy: (f, { desc }) => [desc(f.kickoff)], // most recent first
+  });
+
+  if (unweathered.length === 0) {
+    console.log("[weather-backfill] All finished fixtures have weather data");
+    return;
+  }
+
+  console.log(`[weather-backfill] Processing ${unweathered.length} finished fixtures`);
+  let filled = 0;
+  let failed = 0;
+
+  for (const f of unweathered) {
+    try {
+      if (!f.kickoff) { failed++; continue; }
+
+      // Try venue city first, then fall back to venue name (stadium)
+      const cityName = f.venueCity?.trim() || (f.venue ?? "").split(",")[0]?.trim();
+      if (!cityName) { failed++; continue; }
+
+      const coords = await geocodeCity(cityName);
+      if (!coords) {
+        // If venue name geocoding failed, skip — venue_city will be populated by pollers eventually
+        failed++;
+        continue;
+      }
+
+      const kickoffUnix = Math.floor(f.kickoff.getTime() / 1000);
+      const w = await fetchHistoricalWeather(coords.lat, coords.lon, kickoffUnix);
+      if (!w) { failed++; continue; }
+
+      await db
+        .update(fixtures)
+        .set({
+          weatherTemp: w.temp,
+          weatherDesc: w.desc,
+          weatherIcon: w.icon,
+          weatherWind: w.wind,
+          weatherHumidity: w.humidity,
+          weatherFetchedAt: new Date(),
+        })
+        .where(eq(fixtures.fixtureId, f.fixtureId));
+
+      filled++;
+      // Small delay to avoid hammering Open-Meteo
+      await new Promise((r) => setTimeout(r, 150));
+    } catch (err) {
+      console.warn(`[weather-backfill] Error for fixture ${f.fixtureId}:`, err);
+      failed++;
+    }
+  }
+
+  console.log(`[weather-backfill] Done — ${filled} filled, ${failed} skipped/failed (${unweathered.length - filled - failed} remaining in batch)`);
+}
+
 // ─── Daily 5am Signal Pre-computation ─────────────────────────────────────────
 /**
  * Pre-computes pre-match features and signals for ALL of today's upcoming fixtures.
@@ -1504,8 +1577,10 @@ export function startPoller() {
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
   setTimeout(() => syncWeatherForUpcomingFixtures().catch(console.error), 13 * 60 * 1000);
+  // Historical weather backfill: starts 15 min after boot (after venue cities are fresh)
+  setTimeout(() => backfillHistoricalWeather().catch(console.error), 15 * 60 * 1000);
   // After all sync jobs finish, compute signals for all upcoming fixtures (next 7 days)
-  setTimeout(() => startupSignalCompute().catch(console.error), 14 * 60 * 1000);
+  setTimeout(() => startupSignalCompute().catch(console.error), 16 * 60 * 1000);
 
   // ── Recurring intervals ────────────────────────────────────────────────────
 
@@ -1562,6 +1637,9 @@ export function startPoller() {
 
   // Weather: every 3 hours (forecast accuracy degrades over time)
   setInterval(() => syncWeatherForUpcomingFixtures().catch(console.error), 3 * 60 * 60 * 1000);
+
+  // Historical weather backfill: every hour (100 fixtures/run) until all finished fixtures have data
+  setInterval(() => backfillHistoricalWeather().catch(console.error), 60 * 60 * 1000);
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);

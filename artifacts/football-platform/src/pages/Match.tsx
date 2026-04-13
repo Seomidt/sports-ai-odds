@@ -22,7 +22,8 @@ import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { format } from "date-fns";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
-import { useState, Component } from "react";
+import { useState, Component, useCallback } from "react";
+import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
 export function Match() {
@@ -30,6 +31,15 @@ export function Match() {
   const id = Number(params?.id);
   const { sessionId } = useSession();
   const queryClient = useQueryClient();
+  const [, navigate] = useLocation();
+
+  const handleBack = useCallback(() => {
+    if (window.history.length > 1) {
+      window.history.back();
+    } else {
+      navigate("/dashboard");
+    }
+  }, [navigate]);
 
   const LIVE_STATUSES = new Set(['1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE']);
   const { data: fixtureData, isLoading: isLoadingFixture } = useGetFixture(id, { 
@@ -94,10 +104,10 @@ export function Match() {
     <Layout>
       <div className="space-y-6">
         <div className="flex items-center gap-4 text-sm text-muted-foreground font-mono mb-4">
-          <Link href="/dashboard" className="flex items-center hover:text-white transition-colors cursor-pointer">
+          <button onClick={handleBack} className="flex items-center hover:text-white transition-colors cursor-pointer">
             <ChevronLeft className="w-4 h-4 mr-1" />
             RETURN
-          </Link>
+          </button>
           <span>/</span>
           <span>{fixture.leagueName}</span>
           <span>/</span>

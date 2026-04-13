@@ -1717,8 +1717,10 @@ async function dailySignalPrecompute() {
 
   console.log(`[signal-cron] Done — ${computed}/${upcoming.length} fixtures pre-computed`);
 
-  // After computing signals, generate AI tips for any fixture still missing them
-  await bulkGenerateAiTips(200);
+  // After signals are fresh, generate AI tips (only called from 5am cron, odds exist by then)
+  if (computed > 0) {
+    await bulkGenerateAiTips(200);
+  }
 }
 
 /**
@@ -1754,8 +1756,7 @@ async function startupSignalCompute() {
   const toCompute = upcoming.filter((f) => !alreadyComputed.has(f.fixtureId));
 
   if (toCompute.length === 0) {
-    console.log(`[signal-startup] All ${upcoming.length} upcoming fixtures already have signals — generating AI tips`);
-    await bulkGenerateAiTips(200);
+    console.log(`[signal-startup] All ${upcoming.length} upcoming fixtures already have signals`);
     return;
   }
 
@@ -1773,9 +1774,6 @@ async function startupSignalCompute() {
   }
 
   console.log(`[signal-startup] Done — ${computed}/${toCompute.length} newly computed`);
-
-  // Generate AI tips for all upcoming fixtures missing picks
-  await bulkGenerateAiTips(200);
 }
 
 /**
@@ -1884,18 +1882,20 @@ export function startPoller() {
   setTimeout(() => syncTrophiesForKnownTeams().catch(console.error), 7 * 60 * 1000);
   setTimeout(() => syncPlayerProfilesForTopPlayers().catch(console.error), 8 * 60 * 1000);
   setTimeout(() => syncOddsAllMarketsForUpcoming().catch(console.error), 9 * 60 * 1000);
-  // Week-ahead odds sweep: runs after near-term sync is done, before AI tips at 16min
+  // Week-ahead odds sweep: covers fixtures 48h-7d so AI tips have odds data
   setTimeout(() => syncOddsForUpcomingWeek().catch(console.error), 9.5 * 60 * 1000);
   setTimeout(() => syncSquadsForUpcomingTeams().catch(console.error), 10 * 60 * 1000);
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
   setTimeout(() => syncWeatherForUpcomingFixtures().catch(console.error), 13 * 60 * 1000);
-  // Post-match events+stats backfill: starts 20 min after boot (after fixtures are synced)
-  setTimeout(() => backfillPostMatchData().catch(console.error), 20 * 60 * 1000);
-  // Historical weather backfill: starts 15 min after boot (after venue cities are fresh)
+  // AI tips: runs after odds sweep finishes (~9.5 min + processing). Independent of signals.
+  setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 14 * 60 * 1000);
+  // Historical weather backfill: starts 15 min after boot
   setTimeout(() => backfillHistoricalWeather().catch(console.error), 15 * 60 * 1000);
-  // After all sync jobs finish, compute signals for all upcoming fixtures (next 7 days)
+  // Signal computation for all upcoming fixtures — runs in parallel with AI tips, not blocking them
   setTimeout(() => startupSignalCompute().catch(console.error), 16 * 60 * 1000);
+  // Post-match events+stats backfill: starts 20 min after boot
+  setTimeout(() => backfillPostMatchData().catch(console.error), 20 * 60 * 1000);
 
   // ── Recurring intervals ────────────────────────────────────────────────────
 

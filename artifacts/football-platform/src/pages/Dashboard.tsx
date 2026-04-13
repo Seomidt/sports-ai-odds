@@ -433,7 +433,6 @@ function SignalSummaryPreview() {
 // ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
-  const [expanded, setExpanded] = useState(false);
   const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
   const borderClass = isTopValue
     ? 'border-teal-400/30 shadow-[0_0_20px_rgba(0,255,200,0.06)]'
@@ -443,10 +442,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   return (
     <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden`}>
       {/* ── Clickable main area ── */}
-      <button
-        onClick={() => setExpanded(o => !o)}
-        className="w-full text-left p-5 hover:bg-white/3 transition-colors"
-      >
+      <div className="w-full text-left p-5">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2 flex-wrap">
             <span className={`text-xs font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
@@ -504,34 +500,16 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           <span className="font-medium">{tip.awayTeam}</span>
         </div>
 
-        {/* Reasoning: clipped when collapsed, full when expanded */}
-        <p className={`text-xs text-white/50 leading-relaxed ${expanded ? '' : 'line-clamp-2'}`}>
+        <p className="text-xs text-white/50 leading-relaxed">
           {tip.reasoning}
         </p>
-
-        {/* Expand indicator */}
-        <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-white/5">
-          <div className="flex items-center gap-2">
-            {tip.leagueName && (
-              <span className="text-[10px] text-muted-foreground/40 font-mono truncate">{tip.leagueName}</span>
-            )}
-            {tip.kickoff && (
-              <>
-                <span className="text-white/10">·</span>
-                <span className="text-[10px] text-muted-foreground/40 font-mono">{format(new Date(tip.kickoff), 'MMM dd, HH:mm')}</span>
-              </>
-            )}
-          </div>
-          <ChevronDown className={`w-3.5 h-3.5 text-muted-foreground/30 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-        </div>
-      </button>
+      </div>
 
       {/* ── Always-visible match link ── */}
       <div className="border-t border-white/6 px-5 py-3 bg-white/2">
         <Link href={`/match/${tip.fixtureId}`}>
-          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
+          <div className="flex items-center justify-center py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
             <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">View Full Match Analysis</span>
-            <ChevronRight className="w-3.5 h-3.5 text-primary/60" />
           </div>
         </Link>
       </div>

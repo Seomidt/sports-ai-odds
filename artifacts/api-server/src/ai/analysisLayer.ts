@@ -187,6 +187,8 @@ interface BettingContext {
   referee: string | null;
   homeRecentXg: number | null;
   awayRecentXg: number | null;
+  homeRecentStats: { avgCorners: number | null; avgCards: number | null; avgShots: number | null; avgPossession: number | null; avgFouls: number | null } | null;
+  awayRecentStats: { avgCorners: number | null; avgCards: number | null; avgShots: number | null; avgPossession: number | null; avgFouls: number | null } | null;
   oddsMovement: { homeOpen: number | null; homeNow: number | null; homeShift: number | null; awayOpen: number | null; awayNow: number | null; awayShift: number | null } | null;
   weather: { temp: number | null; desc: string | null; wind: number | null; humidity: number | null; isAdverse: boolean; adverseReason?: string } | null;
 }
@@ -207,7 +209,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       homeRank: null, awayRank: null,
       prediction: null, homeSeasonStats: null, awaySeasonStats: null,
       homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
-      homeCoach: null, awayCoach: null, referee: null, homeRecentXg: null, awayRecentXg: null, oddsMovement: null, weather: null,
+      homeCoach: null, awayCoach: null, referee: null, homeRecentXg: null, awayRecentXg: null, homeRecentStats: null, awayRecentStats: null, oddsMovement: null, weather: null,
     };
   }
 
@@ -310,29 +312,73 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
   homeRank = homeStanding?.rank ?? null;
   awayRank = awayStanding?.rank ?? null;
 
-  // Fetch recent xG and odds movement in parallel
-  const [homeXgRows, awayXgRows, oldestOdds, newestOdds] = await Promise.all([
-    // Home team xG: avg from last 5 completed matches where home team played at home
+  // Fetch recent xG, match stats (corners/cards/shots), and odds movement in parallel
+  const [homeXgRows, awayXgRows, homeStatsRows, awayStatsRows, oldestOdds, newestOdds] = await Promise.all([
+    // Home team xG: avg from last 5 completed matches
     fixture.homeTeamId ? db.execute(sql`
       SELECT AVG(fs."expected_goals") as avg_xg
-      FROM fixture_stats fs
-      JOIN fixtures f ON f.fixture_id = fs.fixture_id
-      WHERE fs.team_id = ${fixture.homeTeamId}
-        AND f.status_short IN ('FT','AET','PEN')
-        AND f.fixture_id != ${fixtureId}
-      ORDER BY f.kickoff DESC
-      LIMIT 5
+      FROM (
+        SELECT fs2."expected_goals"
+        FROM fixture_stats fs2
+        JOIN fixtures f2 ON f2.fixture_id = fs2.fixture_id
+        WHERE fs2.team_id = ${fixture.homeTeamId}
+          AND f2.status_short IN ('FT','AET','PEN')
+          AND f2.fixture_id != ${fixtureId}
+        ORDER BY f2.kickoff DESC
+        LIMIT 6
+      ) fs
     `) : Promise.resolve({ rows: [] }),
     // Away team xG: avg from last 5 completed matches
     fixture.awayTeamId ? db.execute(sql`
       SELECT AVG(fs."expected_goals") as avg_xg
-      FROM fixture_stats fs
-      JOIN fixtures f ON f.fixture_id = fs.fixture_id
-      WHERE fs.team_id = ${fixture.awayTeamId}
-        AND f.status_short IN ('FT','AET','PEN')
-        AND f.fixture_id != ${fixtureId}
-      ORDER BY f.kickoff DESC
-      LIMIT 5
+      FROM (
+        SELECT fs2."expected_goals"
+        FROM fixture_stats fs2
+        JOIN fixtures f2 ON f2.fixture_id = fs2.fixture_id
+        WHERE fs2.team_id = ${fixture.awayTeamId}
+          AND f2.status_short IN ('FT','AET','PEN')
+          AND f2.fixture_id != ${fixtureId}
+        ORDER BY f2.kickoff DESC
+        LIMIT 6
+      ) fs
+    `) : Promise.resolve({ rows: [] }),
+    // Home team recent match stats: corners, cards, shots, possession, fouls (last 7 matches)
+    fixture.homeTeamId ? db.execute(sql`
+      SELECT
+        AVG(s."corner_kicks") as avg_corners,
+        AVG(COALESCE(s."yellow_cards",0) + COALESCE(s."red_cards",0)) as avg_cards,
+        AVG(s."total_shots") as avg_shots,
+        AVG(s."ball_possession") as avg_possession,
+        AVG(s."fouls") as avg_fouls
+      FROM (
+        SELECT fs."corner_kicks", fs."yellow_cards", fs."red_cards", fs."total_shots", fs."ball_possession", fs."fouls"
+        FROM fixture_stats fs
+        JOIN fixtures f ON f.fixture_id = fs.fixture_id
+        WHERE fs.team_id = ${fixture.homeTeamId}
+          AND f.status_short IN ('FT','AET','PEN')
+          AND f.fixture_id != ${fixtureId}
+        ORDER BY f.kickoff DESC
+        LIMIT 7
+      ) s
+    `) : Promise.resolve({ rows: [] }),
+    // Away team recent match stats
+    fixture.awayTeamId ? db.execute(sql`
+      SELECT
+        AVG(s."corner_kicks") as avg_corners,
+        AVG(COALESCE(s."yellow_cards",0) + COALESCE(s."red_cards",0)) as avg_cards,
+        AVG(s."total_shots") as avg_shots,
+        AVG(s."ball_possession") as avg_possession,
+        AVG(s."fouls") as avg_fouls
+      FROM (
+        SELECT fs."corner_kicks", fs."yellow_cards", fs."red_cards", fs."total_shots", fs."ball_possession", fs."fouls"
+        FROM fixture_stats fs
+        JOIN fixtures f ON f.fixture_id = fs.fixture_id
+        WHERE fs.team_id = ${fixture.awayTeamId}
+          AND f.status_short IN ('FT','AET','PEN')
+          AND f.fixture_id != ${fixtureId}
+        ORDER BY f.kickoff DESC
+        LIMIT 7
+      ) s
     `) : Promise.resolve({ rows: [] }),
     // Oldest odds snapshot for this fixture
     db.query.oddsSnapshots.findFirst({
@@ -346,12 +392,28 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     }),
   ]);
 
+  const r2n = (v: unknown) => v != null && !isNaN(Number(v)) ? Math.round(Number(v) * 10) / 10 : null;
+
   const homeRecentXg = homeXgRows.rows[0]
-    ? Math.round(((homeXgRows.rows[0] as Record<string, unknown>).avg_xg as number ?? 0) * 100) / 100
+    ? r2n((homeXgRows.rows[0] as Record<string, unknown>).avg_xg)
     : null;
   const awayRecentXg = awayXgRows.rows[0]
-    ? Math.round(((awayXgRows.rows[0] as Record<string, unknown>).avg_xg as number ?? 0) * 100) / 100
+    ? r2n((awayXgRows.rows[0] as Record<string, unknown>).avg_xg)
     : null;
+
+  const parseMatchStats = (rows: { rows: unknown[] }) => {
+    const row = rows.rows[0] as Record<string, unknown> | undefined;
+    if (!row) return null;
+    const avgCorners = r2n(row.avg_corners);
+    const avgCards = r2n(row.avg_cards);
+    const avgShots = r2n(row.avg_shots);
+    const avgPossession = r2n(row.avg_possession);
+    const avgFouls = r2n(row.avg_fouls);
+    if (avgCorners == null && avgCards == null && avgShots == null) return null;
+    return { avgCorners, avgCards, avgShots, avgPossession, avgFouls };
+  };
+  const homeRecentStats = parseMatchStats(homeStatsRows as { rows: unknown[] });
+  const awayRecentStats = parseMatchStats(awayStatsRows as { rows: unknown[] });
 
   let oddsMovement: BettingContext["oddsMovement"] = null;
   if (oldestOdds && newestOdds && oldestOdds.id !== newestOdds.id) {
@@ -560,6 +622,8 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     referee: fixture.referee ?? null,
     homeRecentXg: homeRecentXg && homeRecentXg > 0 ? homeRecentXg : null,
     awayRecentXg: awayRecentXg && awayRecentXg > 0 ? awayRecentXg : null,
+    homeRecentStats,
+    awayRecentStats,
     oddsMovement,
     weather: fixture.weatherTemp != null ? (() => {
       const temp  = fixture.weatherTemp!;
@@ -735,6 +799,14 @@ export async function getBettingTips(fixtureId: number) {
     ? `Referee: ${ctx.referee} — consider referee tendencies when assessing cards market.`
     : "";
 
+  const fmtStat = (v: number | null, suffix = "") => v != null ? `${v}${suffix}` : "N/A";
+
+  const recentMatchStatsSection = (ctx.homeRecentStats || ctx.awayRecentStats) ? `Recent match stats (last 7 games avg per team):
+${ctx.homeTeam}: corners ${fmtStat(ctx.homeRecentStats?.avgCorners)}/game | cards ${fmtStat(ctx.homeRecentStats?.avgCards)}/game | shots ${fmtStat(ctx.homeRecentStats?.avgShots)}/game | possession ${fmtStat(ctx.homeRecentStats?.avgPossession, "%")} | fouls ${fmtStat(ctx.homeRecentStats?.avgFouls)}/game
+${ctx.awayTeam}: corners ${fmtStat(ctx.awayRecentStats?.avgCorners)}/game | cards ${fmtStat(ctx.awayRecentStats?.avgCards)}/game | shots ${fmtStat(ctx.awayRecentStats?.avgShots)}/game | possession ${fmtStat(ctx.awayRecentStats?.avgPossession, "%")} | fouls ${fmtStat(ctx.awayRecentStats?.avgFouls)}/game
+Combined avg corners/game: ${ctx.homeRecentStats?.avgCorners != null && ctx.awayRecentStats?.avgCorners != null ? Math.round((ctx.homeRecentStats.avgCorners + ctx.awayRecentStats.avgCorners) * 10) / 10 : "N/A"} | Combined avg cards/game: ${ctx.homeRecentStats?.avgCards != null && ctx.awayRecentStats?.avgCards != null ? Math.round((ctx.homeRecentStats.avgCards + ctx.awayRecentStats.avgCards) * 10) / 10 : "N/A"}
+Use these to calibrate corners and total_cards tips even when odds are N/A.` : "";
+
   const oddsMovementSection = ctx.oddsMovement
     ? (() => {
         const hShift = ctx.oddsMovement.homeShift;
@@ -785,7 +857,7 @@ ${awayStatsSection}
 ${homeScorersSection}
 ${awayScorersSection}
 
-${sidelinedSection}
+${recentMatchStatsSection ? recentMatchStatsSection + "\n" : ""}${sidelinedSection}
 ${oddsMovementSection ? "\n" + oddsMovementSection : ""}${weatherSection ? "\n" + weatherSection : ""}
 Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}

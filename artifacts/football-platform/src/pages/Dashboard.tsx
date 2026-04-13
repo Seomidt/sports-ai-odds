@@ -318,6 +318,32 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
   );
 }
 
+function SignalSummaryPreview() {
+  return (
+    <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
+      <div className="p-4 border-b border-white/5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Zap className="w-3.5 h-3.5 text-teal-400" />
+          <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-widest">Top Signals</span>
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">Live odds aware</span>
+      </div>
+      <div className="p-3 space-y-2">
+        {[
+          "Odds dropping fast on one match",
+          "One strong value edge per fixture",
+          "Injuries / lineup changes merged into one signal",
+        ].map((t, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs text-white/70 bg-white/3 rounded-lg px-3 py-2">
+            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
+            <span>{t}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {

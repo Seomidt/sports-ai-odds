@@ -210,7 +210,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
       const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
       const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
 
-      const [todayRows, yesterdayRow, yesterdayTipsRow, dailyRows, roiRow] = await Promise.all([
+      const [todayRows, yesterdayRow, yesterdayTipsRow, dailyRows, roiRow, uncoveredRow] = await Promise.all([
         // Today's top picks (upcoming, not yet resolved)
         pool.query(`
           SELECT id, fixture_id AS "fixtureId", home_team AS "homeTeam", away_team AS "awayTeam",
@@ -228,10 +228,11 @@ router.get("/analysis/daily-summary", async (_req, res) => {
         // Yesterday's results summary (outcomes: 'hit', 'miss', 'partial')
         pool.query(`
           SELECT
-            COUNT(*) FILTER (WHERE outcome = 'hit')                                   AS wins,
-            COUNT(*) FILTER (WHERE outcome = 'miss')                                  AS losses,
-            COUNT(*) FILTER (WHERE outcome = 'partial')                               AS pushes,
-            COUNT(*) FILTER (WHERE outcome IS NOT NULL AND bet_type != 'no_bet') AS total
+            COUNT(*) FILTER (WHERE outcome = 'hit')                              AS wins,
+            COUNT(*) FILTER (WHERE outcome = 'miss')                             AS losses,
+            COUNT(*) FILTER (WHERE outcome = 'partial')                          AS pushes,
+            COUNT(*) FILTER (WHERE outcome IS NOT NULL AND bet_type != 'no_bet') AS total,
+            COUNT(*) FILTER (WHERE outcome IS NULL     AND bet_type != 'no_bet') AS pending
           FROM ai_betting_tips
           WHERE kickoff >= $1 AND kickoff < $2
         `, [yesterdayStart, todayStart]),
@@ -269,6 +270,21 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           FROM ai_betting_tips
           WHERE outcome IS NOT NULL AND bet_type != 'no_bet'
         `),
+
+        // Yesterday's finished fixtures with NO AI tips at all
+        pool.query(`
+          SELECT f.id AS "fixtureId",
+                 f.home_team_name AS "homeTeam", f.away_team_name AS "awayTeam",
+                 f.kickoff, f.league_name AS "leagueName", f.status_short AS "statusShort"
+          FROM fixtures f
+          WHERE f.kickoff >= $1 AND f.kickoff < $2
+            AND f.status_short IN ('FT','AET','PEN')
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_betting_tips t
+              WHERE t.fixture_id = f.id AND t.bet_type != 'no_bet'
+            )
+          ORDER BY f.kickoff ASC
+        `, [yesterdayStart, todayStart]),
       ]);
 
       // Calculate streak from daily rows
@@ -303,11 +319,13 @@ router.get("/analysis/daily-summary", async (_req, res) => {
       return {
         todayPicks: todayRows.rows,
         yesterdayTips: yesterdayTipsRow.rows,
+        yesterdayUncovered: uncoveredRow.rows,
         yesterdayResults: {
-          wins:   Number(yr.wins   ?? 0),
-          losses: Number(yr.losses ?? 0),
-          pushes: Number(yr.pushes ?? 0),
-          total:  Number(yr.total  ?? 0),
+          wins:    Number(yr.wins    ?? 0),
+          losses:  Number(yr.losses  ?? 0),
+          pushes:  Number(yr.pushes  ?? 0),
+          total:   Number(yr.total   ?? 0),
+          pending: Number(yr.pending ?? 0),
         },
         streak: { current: streak, type: streakType, badge },
         roi: { total: roi, totalBets, netReturn },

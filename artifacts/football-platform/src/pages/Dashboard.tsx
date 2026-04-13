@@ -49,10 +49,20 @@ interface YesterdayTip extends TipSummary {
   reviewHeadline: string | null;
 }
 
+interface YesterdayUncovered {
+  fixtureId: number;
+  homeTeam: string;
+  awayTeam: string;
+  kickoff: string;
+  leagueName: string | null;
+  statusShort: string | null;
+}
+
 interface DailySummary {
   todayPicks: TipSummary[];
   yesterdayTips: YesterdayTip[];
-  yesterdayResults: { wins: number; losses: number; pushes: number; total: number };
+  yesterdayUncovered: YesterdayUncovered[];
+  yesterdayResults: { wins: number; losses: number; pushes: number; total: number; pending: number };
   streak: { current: number; type: "win" | "loss" | "none"; badge: "warming" | "hot" | "elite" | null };
   roi: { total: number; totalBets: number; netReturn: number };
 }
@@ -193,7 +203,7 @@ function StreakRoiCard({ streak, roi, badge }: { streak: StreakState; roi: RoiSt
 // ─── DailyLoopBar ────────────────────────────────────────────────────────────
 
 function DailyLoopBar({ summary }: { summary: DailySummary }) {
-  const { todayPicks, yesterdayTips, yesterdayResults, streak, roi } = summary;
+  const { todayPicks, yesterdayTips, yesterdayUncovered = [], yesterdayResults, streak, roi } = summary;
   const [todayOpen, setTodayOpen] = useState(false);
   const [yesterdayOpen, setYesterdayOpen] = useState(false);
 
@@ -278,78 +288,114 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
         </div>
 
         {/* Yesterday */}
-        <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
-          <button
-            onClick={() => setYesterdayOpen(o => !o)}
-            className="w-full text-left p-4 hover:bg-white/3 transition-colors"
-            disabled={yr.total === 0}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Yesterday</span>
-              </div>
-              {yr.total > 0 && (
-                yesterdayOpen
-                  ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40" />
-                  : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
-              )}
-            </div>
-            {yr.total === 0 ? (
-              <div className="text-sm text-muted-foreground/50">No results from yesterday</div>
-            ) : (
-              <>
-                <div className="flex items-baseline gap-3 mb-1">
-                  <span className={`text-3xl font-bold font-mono tabular-nums ${yrHitRate != null && yrHitRate >= 50 ? 'text-teal-400' : 'text-amber-400'}`}>
-                    {yrHitRate != null ? `${yrHitRate}%` : '—'}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-mono">hit rate</span>
+        {(() => {
+          const hasAny = yr.total > 0 || yesterdayTips.length > 0 || yesterdayUncovered.length > 0;
+          return (
+            <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
+              <button
+                onClick={() => setYesterdayOpen(o => !o)}
+                className="w-full text-left p-4 hover:bg-white/3 transition-colors"
+                disabled={!hasAny}
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Yesterday</span>
+                  </div>
+                  {hasAny && (
+                    yesterdayOpen
+                      ? <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/40" />
+                      : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
+                  )}
                 </div>
-                <div className="flex items-center gap-2 text-[11px] font-mono">
-                  <span className="text-teal-400">{yr.wins}W</span>
-                  <span className="text-white/20">·</span>
-                  <span className="text-amber-400">{yr.losses}L</span>
-                  {yr.pushes > 0 && (
-                    <>
+                {!hasAny ? (
+                  <div className="text-sm text-muted-foreground/50">No results from yesterday</div>
+                ) : (
+                  <>
+                    <div className="flex items-baseline gap-3 mb-1">
+                      <span className={`text-3xl font-bold font-mono tabular-nums ${yrHitRate != null && yrHitRate >= 50 ? 'text-teal-400' : 'text-amber-400'}`}>
+                        {yrHitRate != null ? `${yrHitRate}%` : '—'}
+                      </span>
+                      <span className="text-xs text-muted-foreground font-mono">hit rate</span>
+                    </div>
+                    <div className="flex items-center flex-wrap gap-x-2 gap-y-1 text-[11px] font-mono">
+                      <span className="text-teal-400">{yr.wins}W</span>
                       <span className="text-white/20">·</span>
-                      <span className="text-violet-400">{yr.pushes}P</span>
+                      <span className="text-amber-400">{yr.losses}L</span>
+                      {yr.pushes > 0 && (
+                        <>
+                          <span className="text-white/20">·</span>
+                          <span className="text-violet-400">{yr.pushes}P</span>
+                        </>
+                      )}
+                      {yr.pending > 0 && (
+                        <>
+                          <span className="text-white/20">·</span>
+                          <span className="text-white/40">{yr.pending} pending</span>
+                        </>
+                      )}
+                      <span className="text-white/20 ml-1">of {yr.total}</span>
+                      {yesterdayUncovered.length > 0 && (
+                        <span className="text-white/25 ml-1">· {yesterdayUncovered.length} no coverage</span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </button>
+
+              {/* Expanded yesterday's tips + uncovered */}
+              {yesterdayOpen && (yesterdayTips.length > 0 || yesterdayUncovered.length > 0) && (
+                <div className="border-t border-white/5 divide-y divide-white/5">
+                  {yesterdayTips.map(tip => (
+                    <Link key={tip.id} href={`/match/${tip.fixtureId}`}>
+                      <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer">
+                        <OutcomeIcon outcome={tip.outcome} />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-muted-foreground/50 font-mono uppercase mb-0.5">{betTypeLabel(tip.betType)}</div>
+                          <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
+                          <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
+                            {tip.homeTeam} vs {tip.awayTeam}
+                          </div>
+                          {tip.reviewHeadline && (
+                            <div className="text-[11px] text-muted-foreground/40 truncate mt-0.5 italic">{tip.reviewHeadline}</div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {tip.marketOdds != null && (
+                            <span className="font-mono text-xs text-muted-foreground/60">{tip.marketOdds.toFixed(2)}</span>
+                          )}
+                          <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25" />
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+
+                  {yesterdayUncovered.length > 0 && (
+                    <>
+                      <div className="px-4 py-2 bg-white/2">
+                        <span className="text-[10px] font-mono text-white/20 uppercase tracking-wider">No AI coverage</span>
+                      </div>
+                      {yesterdayUncovered.map(f => (
+                        <Link key={f.fixtureId} href={`/match/${f.fixtureId}`}>
+                          <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer opacity-50">
+                            <div className="w-5 h-5 rounded-full border border-white/15 flex items-center justify-center shrink-0">
+                              <span className="text-[8px] text-white/30 font-mono">—</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-xs text-muted-foreground/40 font-mono truncate">{f.leagueName ?? ''}</div>
+                              <div className="text-sm text-white/60 truncate">{f.homeTeam} vs {f.awayTeam}</div>
+                            </div>
+                            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/15 shrink-0" />
+                          </div>
+                        </Link>
+                      ))}
                     </>
                   )}
-                  <span className="text-white/20 ml-1">of {yr.total}</span>
                 </div>
-              </>
-            )}
-          </button>
-
-          {/* Expanded yesterday's tips */}
-          {yesterdayOpen && yesterdayTips.length > 0 && (
-            <div className="border-t border-white/5 divide-y divide-white/5">
-              {yesterdayTips.map(tip => (
-                <Link key={tip.id} href={`/match/${tip.fixtureId}`}>
-                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer">
-                    <OutcomeIcon outcome={tip.outcome} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs text-muted-foreground/50 font-mono uppercase mb-0.5">{betTypeLabel(tip.betType)}</div>
-                      <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
-                      <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
-                        {tip.homeTeam} vs {tip.awayTeam}
-                      </div>
-                      {tip.reviewHeadline && (
-                        <div className="text-[11px] text-muted-foreground/40 truncate mt-0.5 italic">{tip.reviewHeadline}</div>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {tip.marketOdds != null && (
-                        <span className="font-mono text-xs text-muted-foreground/60">{tip.marketOdds.toFixed(2)}</span>
-                      )}
-                      <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25" />
-                    </div>
-                  </div>
-                </Link>
-              ))}
+              )}
             </div>
-          )}
-        </div>
+          );
+        })()}
       </div>
 
       {/* Row 2: Streak & ROI (full width) */}

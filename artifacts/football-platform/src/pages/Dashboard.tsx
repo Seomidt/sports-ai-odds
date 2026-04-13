@@ -417,22 +417,6 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
       {/* ── Expanded detail panel ── */}
       {expanded && (
         <div className="border-t border-white/6 px-5 py-4 space-y-3 bg-white/2">
-          {/* Edge formula breakdown */}
-          {tip.aiProbability != null && tip.marketOdds != null && (
-            <div className="bg-white/4 rounded-lg p-3 space-y-1">
-              <div className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-wider">Edge Calculation</div>
-              <div className="text-xs font-mono text-white/70">
-                ({(tip.aiProbability * 100).toFixed(0)}% × {tip.marketOdds.toFixed(2)}) − 1 ={' '}
-                <span className={`font-bold ${(tip.edge ?? 0) >= 0.05 ? 'text-teal-400' : (tip.edge ?? 0) >= -0.05 ? 'text-violet-400' : 'text-amber-400'}`}>
-                  {tip.edge != null ? `${tip.edge >= 0 ? '+' : ''}${(tip.edge * 100).toFixed(1)}%` : '—'}
-                </span>
-              </div>
-              <div className="text-[9px] font-mono text-muted-foreground/30">
-                AI prob × odds − 1 · &ge;15% = Strong Value · &ge;5% = Value · &lt;0% = Overpriced
-              </div>
-            </div>
-          )}
-
           {/* View Match link */}
           <Link href={`/match/${tip.fixtureId}`}>
             <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">

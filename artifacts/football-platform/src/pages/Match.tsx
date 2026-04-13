@@ -590,7 +590,7 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
             <div className="glass-card rounded-xl border border-violet-400/20 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-white/6 flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-xs font-mono text-violet-400 uppercase tracking-widest">AI Match Briefing</span>
+              <span className="text-xs font-mono text-violet-400 uppercase tracking-widest">Match Briefing</span>
                 <span className="ml-auto text-[9px] font-mono text-muted-foreground/30">
                   {format(new Date(synthesis.generatedAt), 'HH:mm')}
                 </span>

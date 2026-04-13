@@ -12,9 +12,15 @@ if (!API_KEY) {
 
 let requestsToday = 0;
 const MAX_REQUESTS_PER_DAY = 75_000; // Ultra plan: 75,000 req/day
+const QUOTA_SAFETY_BUFFER = 200;      // Stop 200 calls before hard limit
 const MIN_REQUEST_INTERVAL_MS = 250; // Ultra plan: 500 req/min = 120ms, use 250ms safety margin
 let requestLog: { timestamp: number; endpoint: string }[] = [];
 let dayResetAt = Date.now();
+let quotaExhaustedAt: number | null = null; // set when API returns quota error
+
+export function isQuotaExhausted(): boolean {
+  return quotaExhaustedAt !== null || requestsToday >= MAX_REQUESTS_PER_DAY - QUOTA_SAFETY_BUFFER;
+}
 
 // 7-day rolling history — now persisted to DB across restarts
 const dailyHistory: { date: string; count: number }[] = [];
@@ -81,8 +87,14 @@ function serialiseRequest<T>(fn: () => Promise<T>): Promise<T> {
 
 async function apiFetch<T>(endpoint: string, params: Record<string, string | number> = {}): Promise<T | null> {
   if (!API_KEY) return null;
-  if (requestsToday >= MAX_REQUESTS_PER_DAY) {
-    console.warn("[api-football] Daily request limit reached, skipping:", endpoint);
+
+  // ── Circuit breaker: stop if quota is known to be exhausted ──────────────
+  if (isQuotaExhausted()) {
+    // Only log once per hour so we don't flood the console
+    const now = Date.now();
+    if (!quotaExhaustedAt || now - quotaExhaustedAt > 60 * 60 * 1000) {
+      console.warn("[api-football] Quota exhausted — all API calls blocked until midnight UTC. Skipping:", endpoint);
+    }
     return null;
   }
 
@@ -111,10 +123,20 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
       return null;
     }
 
-    const json = await res.json() as { response: T; errors: unknown };
+    const json = await res.json() as { response: T; errors: Record<string, string> | unknown };
 
     if (json.errors && Object.keys(json.errors as object).length > 0) {
-      console.error("[api-football] API error:", json.errors);
+      const errStr = JSON.stringify(json.errors);
+      // ── Detect daily quota exhaustion from API response body ──────────────
+      if (errStr.toLowerCase().includes("request limit") || errStr.toLowerCase().includes("rate limit")) {
+        if (!quotaExhaustedAt) {
+          quotaExhaustedAt = Date.now();
+          requestsToday = MAX_REQUESTS_PER_DAY; // prevent further calls
+          console.error("[api-football] QUOTA EXHAUSTED — circuit breaker activated. All calls blocked until midnight UTC.");
+        }
+      } else {
+        console.error("[api-football] API error:", json.errors);
+      }
       return null;
     }
 
@@ -137,7 +159,8 @@ setInterval(async () => {
   requestsToday = 0;
   requestLog = [];
   dayResetAt = Date.now();
-  console.log("[api-football] Daily request counter reset and persisted");
+  quotaExhaustedAt = null; // Reset circuit breaker for new day
+  console.log("[api-football] Daily request counter reset — circuit breaker cleared");
 }, 24 * 60 * 60 * 1000);
 
 export function getApiStats() {
@@ -162,6 +185,8 @@ export function getApiStats() {
     remaining: MAX_REQUESTS_PER_DAY - requestsToday,
     requestsThisHour,
     dayResetAt: new Date(dayResetAt).toISOString(),
+    quotaExhausted: isQuotaExhausted(),
+    quotaExhaustedAt: quotaExhaustedAt ? new Date(quotaExhaustedAt).toISOString() : null,
     recentRequests,
     dailyHistory: last7,
     dailyAvg,

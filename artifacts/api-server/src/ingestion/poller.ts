@@ -59,6 +59,7 @@ import {
   fetchFixturesBySeason,
   fetchFixtureById,
   initApiStats,
+  isQuotaExhausted,
   type ApiFixture,
   type ApiStatItem,
   type ApiLineup,
@@ -1223,6 +1224,9 @@ async function syncOddsAllMarketsForUpcoming() {
 // Track fixtures that have already had post-match processing to avoid duplicates
 const postMatchProcessed = new Set<number>();
 
+// Track consecutive fetch failures for stale-live fixtures (reset on success)
+const staleFetchFailures = new Map<number, number>();
+
 let pollerStarted = false;
 
 // Adaptive live poller — sprints at 15s when tracked matches are live, idles at 2min when quiet
@@ -1346,33 +1350,60 @@ async function adaptiveLiveLoop() {
       // Fixtures can get stuck in a live status if the poller restarts mid-match
       // or misses the final FT update. Re-fetch any that the API no longer reports
       // as live but are still stored with a live status in the DB.
+      //
+      // We skip this entire block when the daily API quota is exhausted to avoid
+      // burning through retries. Fixtures that repeatedly fail to resolve after
+      // STALE_MAX_FAILURES attempts are force-resolved to "FT" in the DB so they
+      // no longer block the loop.
+
       const STALE_LIVE_STATUSES = ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'INT', 'LIVE', 'SUSP'];
       const currentLiveIds = new Set(tracked.map((f) => f.fixture.id));
       const cutoff = new Date(Date.now() - 95 * 60 * 1000); // 95 min ago
+      const STALE_MAX_FAILURES = 5; // force-resolve after this many consecutive null returns
 
-      const staleLive = await db.query.fixtures.findMany({
-        where: (t, { inArray, lte, and: andFn }) =>
-          andFn(inArray(t.statusShort, STALE_LIVE_STATUSES), lte(t.kickoff!, cutoff)),
-        columns: { fixtureId: true, statusShort: true, kickoff: true },
-        limit: 15,
-      });
+      if (!isQuotaExhausted()) {
+        const staleLive = await db.query.fixtures.findMany({
+          where: (t, { inArray, lte, and: andFn }) =>
+            andFn(inArray(t.statusShort, STALE_LIVE_STATUSES), lte(t.kickoff!, cutoff)),
+          columns: { fixtureId: true, statusShort: true, kickoff: true },
+          limit: 15,
+        });
 
-      for (const stale of staleLive) {
-        if (currentLiveIds.has(stale.fixtureId)) continue; // still live — skip
-        console.log(`[poller] Stale-live fixture ${stale.fixtureId} (${stale.statusShort}) — re-fetching final status`);
-        const fresh = await fetchFixtureById(stale.fixtureId);
-        if (fresh) {
-          await upsertFixture(fresh);
-          cacheDel(`fixture:${stale.fixtureId}`);
-          const finalStatus = fresh.fixture.status.short;
-          const isFinished = ['FT', 'AET', 'PEN', 'ABD', 'CANC', 'AWD', 'WO'].includes(finalStatus);
-          if (isFinished && !postMatchProcessed.has(stale.fixtureId)) {
-            postMatchProcessed.add(stale.fixtureId);
-            runPostMatchFeatures(stale.fixtureId).catch(console.error);
-            runSignalEngine(stale.fixtureId, "post").catch(console.error);
+        for (const stale of staleLive) {
+          if (currentLiveIds.has(stale.fixtureId)) continue; // still live — skip
+          console.log(`[poller] Stale-live fixture ${stale.fixtureId} (${stale.statusShort}) — re-fetching final status`);
+          const fresh = await fetchFixtureById(stale.fixtureId);
+          if (fresh) {
+            staleFetchFailures.delete(stale.fixtureId); // reset on success
+            await upsertFixture(fresh);
+            cacheDel(`fixture:${stale.fixtureId}`);
+            const finalStatus = fresh.fixture.status.short;
+            const isFinished = ['FT', 'AET', 'PEN', 'ABD', 'CANC', 'AWD', 'WO'].includes(finalStatus);
+            if (isFinished && !postMatchProcessed.has(stale.fixtureId)) {
+              postMatchProcessed.add(stale.fixtureId);
+              runPostMatchFeatures(stale.fixtureId).catch(console.error);
+              runSignalEngine(stale.fixtureId, "post").catch(console.error);
+            }
+            console.log(`[poller] Stale fixture ${stale.fixtureId} resolved → ${finalStatus}`);
+          } else {
+            // API returned null — track consecutive failures
+            const failures = (staleFetchFailures.get(stale.fixtureId) ?? 0) + 1;
+            staleFetchFailures.set(stale.fixtureId, failures);
+            if (failures >= STALE_MAX_FAILURES) {
+              // Force-resolve to FT so it no longer appears in stale queries
+              await db.update(fixtures)
+                .set({ statusShort: "FT", updatedAt: new Date() })
+                .where(eq(fixtures.fixtureId, stale.fixtureId));
+              staleFetchFailures.delete(stale.fixtureId);
+              console.warn(`[poller] Stale fixture ${stale.fixtureId} force-resolved to FT after ${failures} failed fetches`);
+              cacheDel(`fixture:${stale.fixtureId}`);
+            } else {
+              console.warn(`[poller] Stale fixture ${stale.fixtureId} fetch returned null (attempt ${failures}/${STALE_MAX_FAILURES})`);
+            }
           }
-          console.log(`[poller] Stale fixture ${stale.fixtureId} resolved → ${finalStatus}`);
         }
+      } else {
+        // Quota exhausted — skip stale-live cleanup silently
       }
 
       await new Promise((r) => setTimeout(r, trackedCount > 0 ? LIVE_INTERVAL_MS : IDLE_INTERVAL_MS));

@@ -176,14 +176,18 @@ interface BettingContext {
   homeRank: number | null;
   awayRank: number | null;
   prediction: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null; goalsHome: number | null; goalsAway: number | null; advice: string | null; winner: string | null } | null;
-  homeSeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null } | null;
-  awaySeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null } | null;
+  homeSeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null; goalsForAvgHome: number | null; goalsAgainstAvgHome: number | null; cleanSheetsHome: number | null; failedToScoreHome: number | null; winsHome: number | null; lossesHome: number | null } | null;
+  awaySeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null; goalsForAvgAway: number | null; goalsAgainstAvgAway: number | null; cleanSheetsAway: number | null; failedToScoreAway: number | null; winsAway: number | null; lossesAway: number | null } | null;
   homeTopScorers: Array<{ name: string; goals: number | null; assists: number | null }>;
   awayTopScorers: Array<{ name: string; goals: number | null; assists: number | null }>;
   homeSidelined: string[];
   awaySidelined: string[];
   homeCoach: string | null;
   awayCoach: string | null;
+  referee: string | null;
+  homeRecentXg: number | null;
+  awayRecentXg: number | null;
+  oddsMovement: { homeOpen: number | null; homeNow: number | null; homeShift: number | null; awayOpen: number | null; awayNow: number | null; awayShift: number | null } | null;
   weather: { temp: number | null; desc: string | null; wind: number | null; humidity: number | null; isAdverse: boolean; adverseReason?: string } | null;
 }
 
@@ -203,7 +207,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       homeRank: null, awayRank: null,
       prediction: null, homeSeasonStats: null, awaySeasonStats: null,
       homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
-      homeCoach: null, awayCoach: null, weather: null,
+      homeCoach: null, awayCoach: null, referee: null, homeRecentXg: null, awayRecentXg: null, oddsMovement: null, weather: null,
     };
   }
 
@@ -305,6 +309,63 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
 
   homeRank = homeStanding?.rank ?? null;
   awayRank = awayStanding?.rank ?? null;
+
+  // Fetch recent xG and odds movement in parallel
+  const [homeXgRows, awayXgRows, oldestOdds, newestOdds] = await Promise.all([
+    // Home team xG: avg from last 5 completed matches where home team played at home
+    fixture.homeTeamId ? db.execute(sql`
+      SELECT AVG(fs."expected_goals") as avg_xg
+      FROM fixture_stats fs
+      JOIN fixtures f ON f.fixture_id = fs.fixture_id
+      WHERE fs.team_id = ${fixture.homeTeamId}
+        AND f.status_short IN ('FT','AET','PEN')
+        AND f.fixture_id != ${fixtureId}
+      ORDER BY f.kickoff DESC
+      LIMIT 5
+    `) : Promise.resolve({ rows: [] }),
+    // Away team xG: avg from last 5 completed matches
+    fixture.awayTeamId ? db.execute(sql`
+      SELECT AVG(fs."expected_goals") as avg_xg
+      FROM fixture_stats fs
+      JOIN fixtures f ON f.fixture_id = fs.fixture_id
+      WHERE fs.team_id = ${fixture.awayTeamId}
+        AND f.status_short IN ('FT','AET','PEN')
+        AND f.fixture_id != ${fixtureId}
+      ORDER BY f.kickoff DESC
+      LIMIT 5
+    `) : Promise.resolve({ rows: [] }),
+    // Oldest odds snapshot for this fixture
+    db.query.oddsSnapshots.findFirst({
+      where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId),
+      orderBy: (o, { asc: a }) => [a(o.snappedAt)],
+    }),
+    // Newest odds snapshot for this fixture
+    db.query.oddsSnapshots.findFirst({
+      where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId),
+      orderBy: (o, { desc: d }) => [d(o.snappedAt)],
+    }),
+  ]);
+
+  const homeRecentXg = homeXgRows.rows[0]
+    ? Math.round(((homeXgRows.rows[0] as Record<string, unknown>).avg_xg as number ?? 0) * 100) / 100
+    : null;
+  const awayRecentXg = awayXgRows.rows[0]
+    ? Math.round(((awayXgRows.rows[0] as Record<string, unknown>).avg_xg as number ?? 0) * 100) / 100
+    : null;
+
+  let oddsMovement: BettingContext["oddsMovement"] = null;
+  if (oldestOdds && newestOdds && oldestOdds.id !== newestOdds.id) {
+    const homeOpen = oldestOdds.homeWin;
+    const homeNow  = newestOdds.homeWin;
+    const awayOpen = oldestOdds.awayWin;
+    const awayNow  = newestOdds.awayWin;
+    oddsMovement = {
+      homeOpen, homeNow,
+      homeShift: homeOpen && homeNow ? Math.round((homeNow - homeOpen) * 100) / 100 : null,
+      awayOpen, awayNow,
+      awayShift: awayOpen && awayNow ? Math.round((awayNow - awayOpen) * 100) / 100 : null,
+    };
+  }
 
   // Extract top scorers from playerSeasonStats for both teams in this league
   let homeTopScorers: Array<{ name: string; goals: number | null; assists: number | null }> = [];
@@ -469,6 +530,12 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       cleanSheets: homeStats.cleanSheetsTotal,
       winStreak: homeStats.biggestWinStreak,
       played: homeStats.playedTotal,
+      goalsForAvgHome: homeStats.goalsForAvgHome,
+      goalsAgainstAvgHome: homeStats.goalsAgainstAvgHome,
+      cleanSheetsHome: homeStats.cleanSheetsHome,
+      failedToScoreHome: homeStats.failedToScoreHome,
+      winsHome: homeStats.winsHome,
+      lossesHome: homeStats.lossesHome,
     } : null,
     awaySeasonStats: awayStats ? {
       form: awayStats.form,
@@ -477,6 +544,12 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       cleanSheets: awayStats.cleanSheetsTotal,
       winStreak: awayStats.biggestWinStreak,
       played: awayStats.playedTotal,
+      goalsForAvgAway: awayStats.goalsForAvgAway,
+      goalsAgainstAvgAway: awayStats.goalsAgainstAvgAway,
+      cleanSheetsAway: awayStats.cleanSheetsAway,
+      failedToScoreAway: awayStats.failedToScoreAway,
+      winsAway: awayStats.winsAway,
+      lossesAway: awayStats.lossesAway,
     } : null,
     homeTopScorers,
     awayTopScorers,
@@ -484,6 +557,10 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     awaySidelined: awaySidelinedRows.map(sp => sp.playerName ?? "Unknown"),
     homeCoach: homeCoachRow?.name ?? null,
     awayCoach: awayCoachRow?.name ?? null,
+    referee: fixture.referee ?? null,
+    homeRecentXg: homeRecentXg && homeRecentXg > 0 ? homeRecentXg : null,
+    awayRecentXg: awayRecentXg && awayRecentXg > 0 ? awayRecentXg : null,
+    oddsMovement,
     weather: fixture.weatherTemp != null ? (() => {
       const temp  = fixture.weatherTemp!;
       const wind  = fixture.weatherWind ?? 0;
@@ -631,11 +708,11 @@ export async function getBettingTips(fixtureId: number) {
     : "No algorithmic forecast available.";
 
   const homeStatsSection = ctx.homeSeasonStats
-    ? `${ctx.homeTeam} season (${ctx.homeSeasonStats.played ?? "?"} games): Form ${ctx.homeSeasonStats.form?.slice(-5) ?? "?"} | Goals/game: ${ctx.homeSeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.homeSeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.homeSeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.homeSeasonStats.winStreak ?? "?"}`
+    ? `${ctx.homeTeam} season (${ctx.homeSeasonStats.played ?? "?"} games): Form ${ctx.homeSeasonStats.form?.slice(-5) ?? "?"} | Overall goals/game: ${ctx.homeSeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.homeSeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.homeSeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.homeSeasonStats.winStreak ?? "?"}\n  AT HOME: W${ctx.homeSeasonStats.winsHome ?? "?"}/${ctx.homeSeasonStats.lossesHome ?? "?"}L | Avg scored: ${ctx.homeSeasonStats.goalsForAvgHome?.toFixed(2) ?? "?"} | Avg conceded: ${ctx.homeSeasonStats.goalsAgainstAvgHome?.toFixed(2) ?? "?"} | Clean sheets home: ${ctx.homeSeasonStats.cleanSheetsHome ?? "?"} | Failed to score home: ${ctx.homeSeasonStats.failedToScoreHome ?? "?"}${ctx.homeRecentXg != null ? ` | Recent avg xG: ${ctx.homeRecentXg}` : ""}`
     : `${ctx.homeTeam}: No season stats`;
 
   const awayStatsSection = ctx.awaySeasonStats
-    ? `${ctx.awayTeam} season (${ctx.awaySeasonStats.played ?? "?"} games): Form ${ctx.awaySeasonStats.form?.slice(-5) ?? "?"} | Goals/game: ${ctx.awaySeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.awaySeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.awaySeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.awaySeasonStats.winStreak ?? "?"}`
+    ? `${ctx.awayTeam} season (${ctx.awaySeasonStats.played ?? "?"} games): Form ${ctx.awaySeasonStats.form?.slice(-5) ?? "?"} | Overall goals/game: ${ctx.awaySeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.awaySeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.awaySeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.awaySeasonStats.winStreak ?? "?"}\n  AWAY: W${ctx.awaySeasonStats.winsAway ?? "?"}/${ctx.awaySeasonStats.lossesAway ?? "?"}L | Avg scored: ${ctx.awaySeasonStats.goalsForAvgAway?.toFixed(2) ?? "?"} | Avg conceded: ${ctx.awaySeasonStats.goalsAgainstAvgAway?.toFixed(2) ?? "?"} | Clean sheets away: ${ctx.awaySeasonStats.cleanSheetsAway ?? "?"} | Failed to score away: ${ctx.awaySeasonStats.failedToScoreAway ?? "?"}${ctx.awayRecentXg != null ? ` | Recent avg xG: ${ctx.awayRecentXg}` : ""}`
     : `${ctx.awayTeam}: No season stats`;
 
   const homeScorersSection = ctx.homeTopScorers.length > 0
@@ -654,6 +731,29 @@ export async function getBettingTips(fixtureId: number) {
     ? `Coaches: ${ctx.homeTeam}: ${ctx.homeCoach ?? "Unknown"} | ${ctx.awayTeam}: ${ctx.awayCoach ?? "Unknown"}`
     : "";
 
+  const refereeSection = ctx.referee
+    ? `Referee: ${ctx.referee} — consider referee tendencies when assessing cards market.`
+    : "";
+
+  const oddsMovementSection = ctx.oddsMovement
+    ? (() => {
+        const hShift = ctx.oddsMovement.homeShift;
+        const aShift = ctx.oddsMovement.awayShift;
+        const lines: string[] = [];
+        if (ctx.oddsMovement.homeOpen && ctx.oddsMovement.homeNow)
+          lines.push(`Home: ${ctx.oddsMovement.homeOpen} → ${ctx.oddsMovement.homeNow} (${hShift && hShift > 0 ? "+" : ""}${hShift ?? 0})`);
+        if (ctx.oddsMovement.awayOpen && ctx.oddsMovement.awayNow)
+          lines.push(`Away: ${ctx.oddsMovement.awayOpen} → ${ctx.oddsMovement.awayNow} (${aShift && aShift > 0 ? "+" : ""}${aShift ?? 0})`);
+        if (!lines.length) return "";
+        const steamNote = (hShift && hShift < -0.2)
+          ? " — STEAM on home side (market moving home)"
+          : (aShift && aShift < -0.2)
+          ? " — STEAM on away side (market moving away)"
+          : "";
+        return `Odds movement since opening${steamNote}:\n${lines.join("\n")}\nNote: Significant shortening means sharp money; lengthing means public backing the other side.`;
+      })()
+    : "";
+
   const weatherSection = ctx.weather
     ? `Match conditions: ${Math.round(ctx.weather.temp ?? 0)}°C, ${ctx.weather.desc}, wind ${Math.round(ctx.weather.wind ?? 0)} m/s${ctx.weather.humidity != null ? `, humidity ${ctx.weather.humidity}%` : ""}${ctx.weather.isAdverse ? ` — ADVERSE CONDITIONS (${ctx.weather.adverseReason})` : ""}\nNote: Adverse weather suppresses goals and corners; adjust Over/Under and BTTS trust accordingly. Strong winds reduce accurate passing and set pieces.`
     : "";
@@ -663,7 +763,7 @@ export async function getBettingTips(fixtureId: number) {
 Match: ${ctx.matchLabel}
 League: ${ctx.leagueName ?? "Unknown"} | Positions: ${ctx.homeTeam} #${ctx.homeRank ?? "?"} vs ${ctx.awayTeam} #${ctx.awayRank ?? "?"}
 Kickoff: ${ctx.kickoff ?? "Unknown"}
-${coachSection}
+${coachSection}${refereeSection ? "\n" + refereeSection : ""}
 
 AVAILABLE ODDS:
 - 1X2: Home ${ctx.odds.home ?? "N/A"} | Draw ${ctx.odds.draw ?? "N/A"} | Away ${ctx.odds.away ?? "N/A"}
@@ -686,7 +786,7 @@ ${homeScorersSection}
 ${awayScorersSection}
 
 ${sidelinedSection}
-${weatherSection ? "\n" + weatherSection : ""}
+${oddsMovementSection ? "\n" + oddsMovementSection : ""}${weatherSection ? "\n" + weatherSection : ""}
 Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}
 

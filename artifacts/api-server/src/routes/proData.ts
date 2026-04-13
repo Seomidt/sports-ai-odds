@@ -350,6 +350,83 @@ router.get("/players/:playerId", async (req, res): Promise<void> => {
   res.set("Cache-Control", "public, max-age=21600, stale-while-revalidate=3600").set("X-Cache", "MISS").json(body);
 });
 
+router.get("/teams/:teamId/squad", async (req, res): Promise<void> => {
+  const teamId = parseInt(req.params.teamId ?? "0");
+  if (!teamId) { res.status(400).json({ error: "Invalid team id" }); return; }
+
+  const ck = `team:${teamId}:squad`;
+  const hit = cacheGet(ck);
+  if (hit) { res.set("Cache-Control", "public, max-age=21600, stale-while-revalidate=3600").set("X-Cache", "HIT").json(hit); return; }
+
+  const { rows } = await pool.query(`
+    SELECT player_id AS "playerId", name, position, age, nationality, photo, yellow_cards AS "yellowCards", red_cards AS "redCards",
+           appearances, goals, assists, rating
+    FROM player_profiles
+    WHERE team_id = $1
+    ORDER BY appearances DESC NULLS LAST, rating DESC NULLS LAST
+    LIMIT 30
+  `, [teamId]);
+
+  const body = { squad: rows };
+  cacheSet(ck, body, TTL.HOUR6);
+  res.set("Cache-Control", "public, max-age=21600, stale-while-revalidate=3600").set("X-Cache", "MISS").json(body);
+});
+
+router.get("/fixtures/:id/intel", async (req, res): Promise<void> => {
+  const id = parseInt(req.params.id ?? "0");
+  if (!id) { res.status(400).json({ error: "Invalid fixture id" }); return; }
+
+  const ck = `fixture:${id}:intel`;
+  const hit = cacheGet(ck);
+  if (hit) { res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=120").set("X-Cache", "HIT").json(hit); return; }
+
+  const fixture = await db.query.fixtures.findFirst({
+    where: (f, { eq: eqFn }) => eqFn(f.fixtureId, id),
+    columns: { homeTeamId: true, awayTeamId: true, leagueId: true },
+  });
+
+  if (!fixture) { res.status(404).json({ error: "Fixture not found" }); return; }
+
+  const [pred, homeCoach, awayCoach, homeSidelined, awaySidelined, homeTrophies, awayTrophies, topScorers, topAssists] = await Promise.all([
+    db.query.predictions.findFirst({ where: (p, { eq: eqFn }) => eqFn(p.fixtureId, id) }),
+    fixture.homeTeamId ? db.query.coaches.findFirst({ where: (c, { eq: eqFn }) => eqFn(c.teamId, fixture.homeTeamId!) }) : Promise.resolve(null),
+    fixture.awayTeamId ? db.query.coaches.findFirst({ where: (c, { eq: eqFn }) => eqFn(c.teamId, fixture.awayTeamId!) }) : Promise.resolve(null),
+    fixture.homeTeamId ? db.query.sidelinedPlayers.findMany({ where: (sp, { eq: eqFn }) => eqFn(sp.teamId, fixture.homeTeamId!) }) : Promise.resolve([]),
+    fixture.awayTeamId ? db.query.sidelinedPlayers.findMany({ where: (sp, { eq: eqFn }) => eqFn(sp.teamId, fixture.awayTeamId!) }) : Promise.resolve([]),
+    fixture.homeTeamId ? db.query.trophies.findMany({ where: (t, { eq: eqFn }) => eqFn(t.teamId, fixture.homeTeamId!), orderBy: (t, { desc: d }) => [d(t.season)], limit: 10 }) : Promise.resolve([]),
+    fixture.awayTeamId ? db.query.trophies.findMany({ where: (t, { eq: eqFn }) => eqFn(t.teamId, fixture.awayTeamId!), orderBy: (t, { desc: d }) => [d(t.season)], limit: 10 }) : Promise.resolve([]),
+    fixture.leagueId
+      ? db.query.playerSeasonStats.findMany({
+          where: (ps, { and: andFn, eq: eqFn, isNotNull }) => andFn(eqFn(ps.leagueId, fixture.leagueId!), isNotNull(ps.goals)),
+          orderBy: (ps, { desc: d }) => [d(ps.goals)],
+          limit: 10,
+        })
+      : Promise.resolve([]),
+    fixture.leagueId
+      ? db.query.playerSeasonStats.findMany({
+          where: (ps, { and: andFn, eq: eqFn, isNotNull }) => andFn(eqFn(ps.leagueId, fixture.leagueId!), isNotNull(ps.assists)),
+          orderBy: (ps, { desc: d }) => [d(ps.assists)],
+          limit: 10,
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const body = {
+    prediction: pred ?? null,
+    homeCoach: homeCoach ?? null,
+    awayCoach: awayCoach ?? null,
+    homeSidelined,
+    awaySidelined,
+    homeTrophies,
+    awayTrophies,
+    topScorers,
+    topAssists,
+  };
+
+  cacheSet(ck, body, TTL.MIN5);
+  res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=120").set("X-Cache", "MISS").json(body);
+});
+
 router.get("/leagues/:leagueId/topdiscipline", async (req, res): Promise<void> => {
   const leagueId = parseInt(req.params.leagueId ?? "0");
   const season = parseInt((req.query.season as string) ?? "2025");

@@ -16,7 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelpTooltip } from "@/components/HelpTooltip";
@@ -200,6 +200,7 @@ export function Match() {
               <TabsTrigger value="post" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">POST-MATCH</TabsTrigger>
               <TabsTrigger value="odds" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">ODDS</TabsTrigger>
               <TabsTrigger value="h2h" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">H2H</TabsTrigger>
+              <TabsTrigger value="intel" className="data-[state=active]:bg-violet-400/20 data-[state=active]:text-violet-300 font-mono text-xs tracking-wider uppercase">INTEL</TabsTrigger>
             </TabsList>
             
             <TabsContent value="pre" className="mt-4">
@@ -242,6 +243,15 @@ export function Match() {
             </TabsContent>
             <TabsContent value="h2h" className="mt-4">
               <H2HTab fixtureId={id} homeTeamId={fixture.homeTeamId!} awayTeamId={fixture.awayTeamId!} homeTeam={fixture.homeTeamName ?? "Home"} awayTeam={fixture.awayTeamName ?? "Away"} />
+            </TabsContent>
+            <TabsContent value="intel" className="mt-4">
+              <IntelTab
+                fixtureId={id}
+                homeTeamId={fixture.homeTeamId ?? 0}
+                awayTeamId={fixture.awayTeamId ?? 0}
+                homeTeam={fixture.homeTeamName ?? "Home"}
+                awayTeam={fixture.awayTeamName ?? "Away"}
+              />
             </TabsContent>
           </Tabs>
         </div>
@@ -467,6 +477,9 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
     if (t === 'match_result') return 'Match Result';
     if (t === 'over_under') return 'Goals Market';
     if (t === 'btts') return 'Both Teams to Score';
+    if (t === 'corners') return 'Corners Market';
+    if (t === 'asian_handicap') return 'Asian Handicap';
+    if (t === 'total_cards') return 'Cards Market';
     if (t === 'no_bet') return 'No Bet';
     return t;
   };
@@ -742,8 +755,26 @@ function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeT
     if (t === 'match_result') return 'Match Result';
     if (t === 'over_under') return 'Goals Market';
     if (t === 'btts') return 'Both Teams to Score';
+    if (t === 'corners') return 'Corners Market';
+    if (t === 'asian_handicap') return 'Asian Handicap';
+    if (t === 'total_cards') return 'Cards Market';
     return t;
   };
+
+  const { data: playerStatsData } = useQuery<{ playerStats: Array<{ teamId: number; playerName: string | null; goals: number | null; assists: number | null; rating: number | null; minutesPlayed: number | null; offsides: number | null; shotsTotal: number | null; shotsOnGoal: number | null; totalPasses: number | null; keyPasses: number | null; duelsTotal: number | null; duelsWon: number | null; dribbleAttempts: number | null; dribbleSuccess: number | null; foulsCommitted: number | null; foulsDrawn: number | null; yellowCards: number | null; redCards: number | null; penaltyScored: number | null; penaltyMissed: number | null }> }>({
+    queryKey: ['playerStats', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/fixtures/${fixtureId}/player-stats`);
+      if (!res.ok) throw new Error('Failed');
+      return res.json();
+    },
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
+  const playerStats = playerStatsData?.playerStats ?? [];
+  const homePlayerStats = playerStats.filter(p => p.teamId === homeTeamId);
+  const awayPlayerStats = playerStats.filter(p => p.teamId === awayTeamId);
 
   return (
     <div className="space-y-4">
@@ -793,6 +824,46 @@ function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeT
           {(homeStat?.expectedGoals != null || awayStat?.expectedGoals != null) && (
             <StatBar label="xG" home={homeStat?.expectedGoals} away={awayStat?.expectedGoals} />
           )}
+        </div>
+      )}
+
+      {/* Player Stats */}
+      {(homePlayerStats.length > 0 || awayPlayerStats.length > 0) && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+            <BarChart3 className="w-3.5 h-3.5" />
+            Player Performance
+          </div>
+          {[{ label: homeTeamName, players: homePlayerStats }, { label: awayTeamName, players: awayPlayerStats }].map(({ label, players }) => (
+            players.length > 0 && (
+              <div key={label}>
+                <div className="text-xs font-mono text-white/50 uppercase mb-2">{label}</div>
+                <div className="space-y-1.5">
+                  {players.slice(0, 8).map((p, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2 text-xs py-1.5 border-b border-white/5 last:border-0">
+                      <span className="font-mono text-white/80 truncate flex-1">{p.playerName ?? "Unknown"}</span>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {p.goals != null && p.goals > 0 && (
+                          <span className="font-mono text-white font-bold">{p.goals}G</span>
+                        )}
+                        {p.assists != null && p.assists > 0 && (
+                          <span className="font-mono text-teal-400">{p.assists}A</span>
+                        )}
+                        {p.rating != null && (
+                          <span className={`font-mono font-bold px-1.5 py-0.5 rounded text-[10px] ${p.rating >= 7.5 ? 'bg-teal-400/20 text-teal-300' : p.rating >= 6.5 ? 'bg-violet-400/20 text-violet-300' : 'bg-white/10 text-white/50'}`}>
+                            {p.rating.toFixed(1)}
+                          </span>
+                        )}
+                        {p.minutesPlayed != null && (
+                          <span className="font-mono text-muted-foreground/50 text-[10px]">{p.minutesPlayed}'</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          ))}
         </div>
       )}
 
@@ -1279,6 +1350,246 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Intel Tab ────────────────────────────────────────────────────────────────
+
+interface IntelData {
+  prediction: { homeWinPercent: number | null; drawPercent: number | null; awayWinPercent: number | null; goalsHome: number | null; goalsAway: number | null; adviceText: string | null; winner: string | null } | null;
+  homeCoach: { name: string | null; nationality: string | null; age: number | null } | null;
+  awayCoach: { name: string | null; nationality: string | null; age: number | null } | null;
+  homeSidelined: Array<{ playerName: string | null; type: string | null; startDate: string | null; endDate: string | null }>;
+  awaySidelined: Array<{ playerName: string | null; type: string | null; startDate: string | null; endDate: string | null }>;
+  homeTrophies: Array<{ leagueName: string | null; place: string | null; season: string | null }>;
+  awayTrophies: Array<{ leagueName: string | null; place: string | null; season: string | null }>;
+  topScorers: Array<{ playerName: string | null; teamId: number | null; goals: number | null; assists: number | null; appearances: number | null; rating: number | null }>;
+  topAssists: Array<{ playerName: string | null; teamId: number | null; goals: number | null; assists: number | null; appearances: number | null }>;
+}
+
+function PredictionBar({ label, pct, color }: { label: string; pct: number | null; color: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex justify-between text-xs font-mono">
+        <span className="text-muted-foreground">{label}</span>
+        <span className={`font-bold ${color}`}>{pct != null ? `${Math.round(pct)}%` : '—'}</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${color.replace('text-', 'bg-')}`} style={{ width: `${pct ?? 0}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function IntelTab({ fixtureId, homeTeamId: _homeTeamId, awayTeamId: _awayTeamId, homeTeam, awayTeam }: {
+  fixtureId: number;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeam: string;
+  awayTeam: string;
+}) {
+  const { data, isLoading } = useQuery<IntelData>({
+    queryKey: ['intel', fixtureId],
+    queryFn: async () => {
+      const res = await fetch(`/api/fixtures/${fixtureId}/intel`);
+      if (!res.ok) throw new Error('Failed to fetch intel');
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="glass-card p-10 rounded-xl flex items-center justify-center">
+        <Activity className="w-6 h-6 text-primary animate-pulse" />
+      </div>
+    );
+  }
+
+  const hasAnyData = data && (data.prediction || data.homeCoach || data.awayCoach || (data.homeSidelined?.length > 0) || (data.awaySidelined?.length > 0) || (data.topScorers?.length > 0));
+
+  if (!hasAnyData) {
+    return (
+      <div className="glass-card p-10 rounded-xl text-center space-y-2">
+        <Shield className="w-8 h-8 text-white/20 mx-auto" />
+        <p className="text-muted-foreground text-sm">Team intelligence syncs automatically for upcoming fixtures.</p>
+        <p className="text-xs text-muted-foreground/50 font-mono">Coaches, injuries, predictions, and league standings are populated by the data pipeline.</p>
+      </div>
+    );
+  }
+
+  const totalHomeTrophies = data?.homeTrophies?.filter(t => t.place === '1st' || t.place?.toLowerCase().includes('winner')).length ?? 0;
+  const totalAwayTrophies = data?.awayTrophies?.filter(t => t.place === '1st' || t.place?.toLowerCase().includes('winner')).length ?? 0;
+
+  return (
+    <div className="space-y-4">
+      {data?.prediction && (
+        <div className="glass-card p-5 rounded-xl space-y-4">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <Target className="w-3.5 h-3.5 text-violet-400" />
+            Algorithm Forecast
+          </div>
+          <div className="space-y-3">
+            <PredictionBar label={`${homeTeam} Win`} pct={data.prediction.homeWinPercent} color="text-teal-400" />
+            <PredictionBar label="Draw" pct={data.prediction.drawPercent} color="text-violet-400" />
+            <PredictionBar label={`${awayTeam} Win`} pct={data.prediction.awayWinPercent} color="text-amber-400" />
+          </div>
+          {(data.prediction.goalsHome != null || data.prediction.goalsAway != null) && (
+            <div className="flex items-center justify-center gap-4 pt-2 border-t border-white/5">
+              <div className="text-center">
+                <div className="text-xs font-mono text-muted-foreground">Predicted Score</div>
+                <div className="font-mono text-lg font-bold text-white tabular-nums mt-0.5">
+                  {data.prediction.goalsHome?.toFixed(1) ?? '?'} – {data.prediction.goalsAway?.toFixed(1) ?? '?'}
+                </div>
+              </div>
+            </div>
+          )}
+          {data.prediction.adviceText && (
+            <div className="border-t border-white/5 pt-3">
+              <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Recommendation</div>
+              <p className="text-sm text-white/80 font-mono">{data.prediction.adviceText}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(data?.homeCoach || data?.awayCoach) && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <Shield className="w-3.5 h-3.5 text-violet-400" />
+            Coaches
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {[{ coach: data.homeCoach, team: homeTeam }, { coach: data.awayCoach, team: awayTeam }].map(({ coach, team }) => (
+              <div key={team} className="space-y-1">
+                <div className="text-[10px] font-mono text-muted-foreground/60 uppercase">{team}</div>
+                {coach ? (
+                  <>
+                    <div className="text-sm font-bold text-white">{coach.name ?? '—'}</div>
+                    <div className="text-[10px] font-mono text-muted-foreground/60">
+                      {[coach.nationality, coach.age ? `Age ${coach.age}` : null].filter(Boolean).join(' · ')}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-muted-foreground/40 font-mono">No data</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {((data?.homeSidelined?.length ?? 0) > 0 || (data?.awaySidelined?.length ?? 0) > 0) && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <UserX className="w-3.5 h-3.5 text-amber-400" />
+            Sidelined / Injured
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {[{ players: data?.homeSidelined ?? [], team: homeTeam }, { players: data?.awaySidelined ?? [], team: awayTeam }].map(({ players, team }) => (
+              <div key={team}>
+                <div className="text-[10px] font-mono text-muted-foreground/60 uppercase mb-2">{team}</div>
+                {players.length === 0 ? (
+                  <div className="text-xs text-muted-foreground/40 font-mono">None reported</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {players.map((p, i) => (
+                      <div key={i} className="flex items-start justify-between gap-2">
+                        <span className="text-xs text-white/80 font-mono">{p.playerName ?? 'Unknown'}</span>
+                        <div className="text-right shrink-0">
+                          {p.type && <div className="text-[10px] font-mono text-amber-400">{p.type}</div>}
+                          {p.endDate && <div className="text-[9px] font-mono text-muted-foreground/50">Until {p.endDate}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(data?.topScorers?.length ?? 0) > 0 && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <Award className="w-3.5 h-3.5 text-teal-400" />
+            League Top Scorers
+          </div>
+          <div className="space-y-1.5">
+            {data!.topScorers.slice(0, 8).map((p, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 last:border-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] font-mono text-muted-foreground/40 w-4 shrink-0">{i + 1}</span>
+                  <span className="text-xs font-mono text-white truncate">{p.playerName ?? 'Unknown'}</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs font-mono font-bold text-white tabular-nums">{p.goals ?? 0}G</span>
+                  {p.assists != null && <span className="text-xs font-mono text-teal-400/70 tabular-nums">{p.assists}A</span>}
+                  {p.appearances != null && <span className="text-[10px] font-mono text-muted-foreground/40">{p.appearances} apps</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {(data?.topAssists?.length ?? 0) > 0 && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <Users className="w-3.5 h-3.5 text-violet-400" />
+            League Top Assists
+          </div>
+          <div className="space-y-1.5">
+            {data!.topAssists.slice(0, 8).map((p, i) => (
+              <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 last:border-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-[10px] font-mono text-muted-foreground/40 w-4 shrink-0">{i + 1}</span>
+                  <span className="text-xs font-mono text-white truncate">{p.playerName ?? 'Unknown'}</span>
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <span className="text-xs font-mono font-bold text-violet-400 tabular-nums">{p.assists ?? 0}A</span>
+                  {p.goals != null && <span className="text-[10px] font-mono text-muted-foreground/40">{p.goals}G</span>}
+                  {p.appearances != null && <span className="text-[10px] font-mono text-muted-foreground/40">{p.appearances} apps</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {((data?.homeTrophies?.length ?? 0) > 0 || (data?.awayTrophies?.length ?? 0) > 0) && (
+        <div className="glass-card p-5 rounded-xl space-y-3">
+          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+            <Trophy className="w-3.5 h-3.5 text-amber-400" />
+            Honours
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            {[{ trophies: data?.homeTrophies ?? [], team: homeTeam, count: totalHomeTrophies }, { trophies: data?.awayTrophies ?? [], team: awayTeam, count: totalAwayTrophies }].map(({ trophies, team, count }) => (
+              <div key={team}>
+                <div className="text-[10px] font-mono text-muted-foreground/60 uppercase mb-2">{team} <span className="text-amber-400 ml-1">{count} titler</span></div>
+                {trophies.length === 0 ? (
+                  <div className="text-xs text-muted-foreground/40 font-mono">No data</div>
+                ) : (
+                  <div className="space-y-1">
+                    {trophies.slice(0, 6).map((t, i) => (
+                      <div key={i} className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono text-white/70 truncate">{t.leagueName ?? '—'}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className={`text-[10px] font-mono font-bold ${t.place === '1st' || t.place?.toLowerCase().includes('winner') ? 'text-amber-400' : 'text-muted-foreground/50'}`}>{t.place}</span>
+                          <span className="text-[9px] font-mono text-muted-foreground/30">{t.season}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

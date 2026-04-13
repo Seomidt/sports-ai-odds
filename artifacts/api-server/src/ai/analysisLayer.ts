@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
-import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv } from "@workspace/db/schema";
+import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -94,7 +94,7 @@ async function callClaude(prompt: string): Promise<string | null> {
   try {
     const msg = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 450,
+      max_tokens: 900,
       messages: [{ role: "user", content: prompt }],
     });
     const inputTok = msg.usage?.input_tokens ?? 0;
@@ -148,20 +148,34 @@ async function getAccuracyHistory(): Promise<{ hitRate: number; totalReviewed: n
 
 // ─── Context builder ──────────────────────────────────────────────────────────
 
-async function buildBettingContext(fixtureId: number): Promise<{
+interface BettingContext {
   matchLabel: string;
   homeTeam: string;
   awayTeam: string;
   kickoff: string | null;
   leagueName: string | null;
+  leagueId: number | null;
+  homeTeamId: number | null;
+  awayTeamId: number | null;
   homeGoals: number | null;
   awayGoals: number | null;
   statusShort: string | null;
   signals: Record<string, number | boolean | string>;
-  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null };
+  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null; cornersOver: number | null; totalCardsOver: number | null; asianHandicapHome: number | null };
   homeRank: number | null;
   awayRank: number | null;
-}> {
+  prediction: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null; goalsHome: number | null; goalsAway: number | null; advice: string | null; winner: string | null } | null;
+  homeSeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null } | null;
+  awaySeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null } | null;
+  homeTopScorers: Array<{ name: string; goals: number | null; assists: number | null }>;
+  awayTopScorers: Array<{ name: string; goals: number | null; assists: number | null }>;
+  homeSidelined: string[];
+  awaySidelined: string[];
+  homeCoach: string | null;
+  awayCoach: string | null;
+}
+
+async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
   const fixture = await db.query.fixtures.findFirst({
     where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
   });
@@ -170,10 +184,14 @@ async function buildBettingContext(fixtureId: number): Promise<{
     return {
       matchLabel: "Unknown match",
       homeTeam: "Home", awayTeam: "Away",
-      kickoff: null, leagueName: null,
+      kickoff: null, leagueName: null, leagueId: null,
+      homeTeamId: null, awayTeamId: null,
       homeGoals: null, awayGoals: null, statusShort: null,
-      signals: {}, odds: { home: null, draw: null, away: null, over25: null, btts: null },
+      signals: {}, odds: { home: null, draw: null, away: null, over25: null, btts: null, cornersOver: null, totalCardsOver: null, asianHandicapHome: null },
       homeRank: null, awayRank: null,
+      prediction: null, homeSeasonStats: null, awaySeasonStats: null,
+      homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
+      homeCoach: null, awayCoach: null,
     };
   }
 
@@ -240,21 +258,89 @@ async function buildBettingContext(fixtureId: number): Promise<{
   const bestAway = oddsRows.reduce((best, r) => (!best || (r.awayWin ?? 0) > best) ? (r.awayWin ?? 0) : best, 0) || null;
   const anyRow = oddsRows[0];
 
-  // League standings
+  // League standings + enriched data (run in parallel)
   let homeRank: number | null = null;
   let awayRank: number | null = null;
 
-  if (fixture.leagueId && fixture.homeTeamId && fixture.awayTeamId) {
-    const homeStanding = await db.query.standings.findFirst({
-      where: (s, { and: andFn, eq: eqFn }) =>
-        andFn(eqFn(s.leagueId, fixture.leagueId), eqFn(s.teamId, fixture.homeTeamId)),
-    });
-    const awayStanding = await db.query.standings.findFirst({
-      where: (s, { and: andFn, eq: eqFn }) =>
-        andFn(eqFn(s.leagueId, fixture.leagueId), eqFn(s.teamId, fixture.awayTeamId)),
-    });
-    homeRank = homeStanding?.rank ?? null;
-    awayRank = awayStanding?.rank ?? null;
+  const [homeStanding, awayStanding, pred, homeStats, awayStats, homeCoachRow, awayCoachRow, homeSidelinedRows, awaySidelinedRows, marketsRow] = await Promise.all([
+    fixture.leagueId && fixture.homeTeamId
+      ? db.query.standings.findFirst({ where: (s, { and: andFn, eq: eqFn }) => andFn(eqFn(s.leagueId, fixture.leagueId), eqFn(s.teamId, fixture.homeTeamId)) })
+      : Promise.resolve(null),
+    fixture.leagueId && fixture.awayTeamId
+      ? db.query.standings.findFirst({ where: (s, { and: andFn, eq: eqFn }) => andFn(eqFn(s.leagueId, fixture.leagueId), eqFn(s.teamId, fixture.awayTeamId)) })
+      : Promise.resolve(null),
+    db.query.predictions.findFirst({ where: (p, { eq: eqFn }) => eqFn(p.fixtureId, fixtureId) }),
+    fixture.homeTeamId && fixture.leagueId
+      ? db.query.teamSeasonStats.findFirst({ where: (ts, { and: andFn, eq: eqFn }) => andFn(eqFn(ts.teamId, fixture.homeTeamId!), eqFn(ts.leagueId, fixture.leagueId!)) })
+      : Promise.resolve(null),
+    fixture.awayTeamId && fixture.leagueId
+      ? db.query.teamSeasonStats.findFirst({ where: (ts, { and: andFn, eq: eqFn }) => andFn(eqFn(ts.teamId, fixture.awayTeamId!), eqFn(ts.leagueId, fixture.leagueId!)) })
+      : Promise.resolve(null),
+    fixture.homeTeamId
+      ? db.query.coaches.findFirst({ where: (c, { eq: eqFn }) => eqFn(c.teamId, fixture.homeTeamId!) })
+      : Promise.resolve(null),
+    fixture.awayTeamId
+      ? db.query.coaches.findFirst({ where: (c, { eq: eqFn }) => eqFn(c.teamId, fixture.awayTeamId!) })
+      : Promise.resolve(null),
+    fixture.homeTeamId
+      ? db.query.sidelinedPlayers.findMany({ where: (sp, { eq: eqFn }) => eqFn(sp.teamId, fixture.homeTeamId!), limit: 8 })
+      : Promise.resolve([]),
+    fixture.awayTeamId
+      ? db.query.sidelinedPlayers.findMany({ where: (sp, { eq: eqFn }) => eqFn(sp.teamId, fixture.awayTeamId!), limit: 8 })
+      : Promise.resolve([]),
+    db.query.oddsMarkets.findFirst({ where: (o, { eq: eqFn }) => eqFn(o.fixtureId, fixtureId), orderBy: (o, { desc: d }) => [d(o.snappedAt)] }),
+  ]);
+
+  homeRank = homeStanding?.rank ?? null;
+  awayRank = awayStanding?.rank ?? null;
+
+  // Extract top scorers from playerSeasonStats for both teams in this league
+  let homeTopScorers: Array<{ name: string; goals: number | null; assists: number | null }> = [];
+  let awayTopScorers: Array<{ name: string; goals: number | null; assists: number | null }> = [];
+  if (fixture.leagueId) {
+    const [homeScorers, awayScorers] = await Promise.all([
+      fixture.homeTeamId
+        ? db.query.playerSeasonStats.findMany({
+            where: (ps, { and: andFn, eq: eqFn }) =>
+              andFn(eqFn(ps.teamId, fixture.homeTeamId!), eqFn(ps.leagueId, fixture.leagueId!)),
+            orderBy: (ps, { desc: d }) => [d(ps.goals)],
+            limit: 5,
+          })
+        : Promise.resolve([]),
+      fixture.awayTeamId
+        ? db.query.playerSeasonStats.findMany({
+            where: (ps, { and: andFn, eq: eqFn }) =>
+              andFn(eqFn(ps.teamId, fixture.awayTeamId!), eqFn(ps.leagueId, fixture.leagueId!)),
+            orderBy: (ps, { desc: d }) => [d(ps.goals)],
+            limit: 5,
+          })
+        : Promise.resolve([]),
+    ]);
+    homeTopScorers = homeScorers.map(p => ({ name: p.playerName ?? "Unknown", goals: p.goals, assists: p.assists }));
+    awayTopScorers = awayScorers.map(p => ({ name: p.playerName ?? "Unknown", goals: p.goals, assists: p.assists }));
+  }
+
+  // Extract corners/cards odds from oddsMarkets JSON
+  let cornersOver: number | null = null;
+  let totalCardsOver: number | null = null;
+  let asianHandicapHome: number | null = null;
+  if (marketsRow?.markets) {
+    const mkt = marketsRow.markets as Record<string, Array<{ value: string; odd: string }>>;
+    for (const [name, entries] of Object.entries(mkt)) {
+      const n = name.toLowerCase();
+      if (n.includes("corner") && n.includes("over") && !cornersOver) {
+        const over = entries.find(e => e.value.toLowerCase().includes("over"));
+        if (over) cornersOver = parseFloat(over.odd) || null;
+      }
+      if ((n.includes("card") || n.includes("booking")) && !totalCardsOver) {
+        const over = entries.find(e => e.value.toLowerCase().includes("over"));
+        if (over) totalCardsOver = parseFloat(over.odd) || null;
+      }
+      if (n.includes("handicap") && n.includes("asian") && !asianHandicapHome) {
+        const home = entries.find(e => e.value.toLowerCase().includes("home") || e.value === "-1" || e.value === "-0.5");
+        if (home) asianHandicapHome = parseFloat(home.odd) || null;
+      }
+    }
   }
 
   return {
@@ -263,6 +349,9 @@ async function buildBettingContext(fixtureId: number): Promise<{
     awayTeam: fixture.awayTeamName ?? "Away",
     kickoff: fixture.kickoff?.toISOString() ?? null,
     leagueName: fixture.leagueName,
+    leagueId: fixture.leagueId,
+    homeTeamId: fixture.homeTeamId,
+    awayTeamId: fixture.awayTeamId,
     homeGoals: fixture.homeGoals,
     awayGoals: fixture.awayGoals,
     statusShort: fixture.statusShort,
@@ -273,9 +362,43 @@ async function buildBettingContext(fixtureId: number): Promise<{
       away: bestAway,
       over25: anyRow?.overUnder25 ?? null,
       btts: anyRow?.btts ?? null,
+      cornersOver,
+      totalCardsOver,
+      asianHandicapHome: anyRow?.handicapHome ?? asianHandicapHome,
     },
     homeRank,
     awayRank,
+    prediction: pred ? {
+      homeWinPct: pred.homeWinPercent,
+      drawPct: pred.drawPercent,
+      awayWinPct: pred.awayWinPercent,
+      goalsHome: pred.goalsHome,
+      goalsAway: pred.goalsAway,
+      advice: pred.adviceText,
+      winner: pred.winner,
+    } : null,
+    homeSeasonStats: homeStats ? {
+      form: homeStats.form,
+      goalsForAvg: homeStats.goalsForAvgTotal,
+      goalsAgainstAvg: homeStats.goalsAgainstAvgTotal,
+      cleanSheets: homeStats.cleanSheetsTotal,
+      winStreak: homeStats.biggestWinStreak,
+      played: homeStats.playedTotal,
+    } : null,
+    awaySeasonStats: awayStats ? {
+      form: awayStats.form,
+      goalsForAvg: awayStats.goalsForAvgTotal,
+      goalsAgainstAvg: awayStats.goalsAgainstAvgTotal,
+      cleanSheets: awayStats.cleanSheetsTotal,
+      winStreak: awayStats.biggestWinStreak,
+      played: awayStats.playedTotal,
+    } : null,
+    homeTopScorers,
+    awayTopScorers,
+    homeSidelined: homeSidelinedRows.map(sp => sp.playerName ?? "Unknown"),
+    awaySidelined: awaySidelinedRows.map(sp => sp.playerName ?? "Unknown"),
+    homeCoach: homeCoachRow?.name ?? null,
+    awayCoach: awayCoachRow?.name ?? null,
   };
 }
 
@@ -283,7 +406,7 @@ async function buildBettingContext(fixtureId: number): Promise<{
 
 const SingleTipSchema = z.object({
   recommendation: z.string(),
-  bet_type: z.enum(["match_result", "over_under", "btts", "no_bet"]),
+  bet_type: z.enum(["match_result", "over_under", "btts", "corners", "asian_handicap", "total_cards", "no_bet"]),
   bet_side: z.string().nullable().optional(),
   trust_score: z.number().min(1).max(10),
   estimated_probability: z.number().min(0.01).max(0.99).optional(),
@@ -291,7 +414,7 @@ const SingleTipSchema = z.object({
 });
 
 const MultiBettingTipSchema = z.object({
-  tips: z.array(SingleTipSchema).min(1).max(3),
+  tips: z.array(SingleTipSchema).min(1).max(5),
 });
 
 const PostReviewSchema = z.object({
@@ -342,7 +465,7 @@ function calcValueRating(aiProb: number, marketOdds: number | null): string {
 
 function getMarketOddsForTip(
   tip: { bet_type: string; bet_side?: string | null },
-  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null },
+  odds: { home: number | null; draw: number | null; away: number | null; over25: number | null; btts: number | null; cornersOver: number | null; totalCardsOver: number | null; asianHandicapHome: number | null },
 ): number | null {
   if (tip.bet_type === "match_result") {
     if (tip.bet_side === "home") return odds.home;
@@ -352,6 +475,12 @@ function getMarketOddsForTip(
     return odds.over25 ?? null;
   } else if (tip.bet_type === "btts") {
     return odds.btts;
+  } else if (tip.bet_type === "corners") {
+    return odds.cornersOver;
+  } else if (tip.bet_type === "asian_handicap") {
+    return odds.asianHandicapHome;
+  } else if (tip.bet_type === "total_cards") {
+    return odds.totalCardsOver;
   }
   return null;
 }
@@ -362,7 +491,7 @@ export async function getBettingTips(fixtureId: number) {
   const existing = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
   });
-  if (existing.length >= 3) return existing;
+  if (existing.length >= 5) return existing;
 
   const ctx = await buildBettingContext(fixtureId);
 
@@ -372,68 +501,85 @@ export async function getBettingTips(fixtureId: number) {
 
   const accuracy = await getAccuracyHistory();
 
-  const prompt = `You are a professional football betting analyst. Analyse ALL THREE markets for this upcoming match and give a verdict on each.
+  // Build rich context sections
+  const predSection = ctx.prediction
+    ? `API-Football algorithm forecast:
+- ${ctx.homeTeam} win: ${ctx.prediction.homeWinPct?.toFixed(0) ?? "?"}%
+- Draw: ${ctx.prediction.drawPct?.toFixed(0) ?? "?"}%
+- ${ctx.awayTeam} win: ${ctx.prediction.awayWinPct?.toFixed(0) ?? "?"}%
+- Predicted score: ${ctx.prediction.goalsHome?.toFixed(1) ?? "?"} - ${ctx.prediction.goalsAway?.toFixed(1) ?? "?"}
+- Advice: ${ctx.prediction.advice ?? "None"}`
+    : "No algorithmic forecast available.";
+
+  const homeStatsSection = ctx.homeSeasonStats
+    ? `${ctx.homeTeam} season (${ctx.homeSeasonStats.played ?? "?"} games): Form ${ctx.homeSeasonStats.form?.slice(-5) ?? "?"} | Goals/game: ${ctx.homeSeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.homeSeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.homeSeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.homeSeasonStats.winStreak ?? "?"}`
+    : `${ctx.homeTeam}: No season stats`;
+
+  const awayStatsSection = ctx.awaySeasonStats
+    ? `${ctx.awayTeam} season (${ctx.awaySeasonStats.played ?? "?"} games): Form ${ctx.awaySeasonStats.form?.slice(-5) ?? "?"} | Goals/game: ${ctx.awaySeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.awaySeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.awaySeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.awaySeasonStats.winStreak ?? "?"}`
+    : `${ctx.awayTeam}: No season stats`;
+
+  const homeScorersSection = ctx.homeTopScorers.length > 0
+    ? `${ctx.homeTeam} top scorers: ${ctx.homeTopScorers.map(p => `${p.name} (${p.goals ?? 0}G/${p.assists ?? 0}A)`).join(", ")}`
+    : `${ctx.homeTeam}: No scorer data`;
+
+  const awayScorersSection = ctx.awayTopScorers.length > 0
+    ? `${ctx.awayTeam} top scorers: ${ctx.awayTopScorers.map(p => `${p.name} (${p.goals ?? 0}G/${p.assists ?? 0}A)`).join(", ")}`
+    : `${ctx.awayTeam}: No scorer data`;
+
+  const sidelinedSection = (ctx.homeSidelined.length > 0 || ctx.awaySidelined.length > 0)
+    ? `Sidelined: ${ctx.homeTeam}: ${ctx.homeSidelined.join(", ") || "None"} | ${ctx.awayTeam}: ${ctx.awaySidelined.join(", ") || "None"}`
+    : "Sidelined: No injury data";
+
+  const coachSection = (ctx.homeCoach || ctx.awayCoach)
+    ? `Coaches: ${ctx.homeTeam}: ${ctx.homeCoach ?? "Unknown"} | ${ctx.awayTeam}: ${ctx.awayCoach ?? "Unknown"}`
+    : "";
+
+  const prompt = `You are a professional football betting analyst with access to comprehensive data. Analyse ALL FIVE markets for this upcoming match.
 
 Match: ${ctx.matchLabel}
-League: ${ctx.leagueName ?? "Unknown"}
+League: ${ctx.leagueName ?? "Unknown"} | Positions: ${ctx.homeTeam} #${ctx.homeRank ?? "?"} vs ${ctx.awayTeam} #${ctx.awayRank ?? "?"}
 Kickoff: ${ctx.kickoff ?? "Unknown"}
-League positions: ${ctx.homeTeam} ranked #${ctx.homeRank ?? "?"}, ${ctx.awayTeam} ranked #${ctx.awayRank ?? "?"}
+${coachSection}
 
-Current market odds:
-- Home win: ${ctx.odds.home ?? "N/A"}
-- Draw: ${ctx.odds.draw ?? "N/A"}
-- Away win: ${ctx.odds.away ?? "N/A"}
-- Over 2.5 goals: ${ctx.odds.over25 ?? "N/A"}
-- BTTS Yes: ${ctx.odds.btts ?? "N/A"}
+ODDS:
+- 1X2: Home ${ctx.odds.home ?? "N/A"} | Draw ${ctx.odds.draw ?? "N/A"} | Away ${ctx.odds.away ?? "N/A"}
+- Over 2.5: ${ctx.odds.over25 ?? "N/A"} | BTTS Yes: ${ctx.odds.btts ?? "N/A"}
+- Corners Over: ${ctx.odds.cornersOver ?? "N/A"} | Asian Handicap Home: ${ctx.odds.asianHandicapHome ?? "N/A"} | Cards Over: ${ctx.odds.totalCardsOver ?? "N/A"}
 
-Signal data from our analysis engine:
+${predSection}
+
+${homeStatsSection}
+${awayStatsSection}
+
+${homeScorersSection}
+${awayScorersSection}
+
+${sidelinedSection}
+
+Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}
 
 Your accuracy history: ${accuracy.summary}
-${accuracy.totalReviewed > 0 ? `Calibrate your trust scores to reflect your ${accuracy.hitRate}% hit rate — do not be overconfident.` : "This is your first tip — be conservative with trust scores."}
+${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRate}% hit rate.` : "First tip — be conservative."}
 
 INSTRUCTIONS:
-- Give exactly 3 tips: one for match_result, one for over_under, one for btts
-- For each, pick the side with the best edge
-- Trust score 1-4 = weak, 5-7 = reasonable, 8-10 = strong
-- estimated_probability: your true belief in this outcome winning (0.01–0.99). This is used to calculate edge = (probability × odds) - 1
-- Implied probability from odds = 1/odds. If your estimated_probability > implied probability, there is value
-- Example: odds 2.10 → implied 47.6%. If you think 60% → edge = (0.60 × 2.10) - 1 = +26%
-- Reasoning: max 50 words per tip, state your probability and the edge
+- Give EXACTLY 5 tips: match_result, over_under, btts, corners, and one of (asian_handicap or total_cards)
+- If corners/handicap/cards odds are N/A, still pick the market but set trust_score 3 or lower
+- For each, pick the side with best edge: edge = (estimated_probability × odds) - 1
+- Trust score 1-4 = weak, 5-7 = moderate, 8-10 = strong
+- Reasoning: max 40 words per tip, state probability and edge
+- No emojis. State facts.
 
-Respond with ONLY valid JSON:
-{
-  "tips": [
-    {
-      "recommendation": "Home Win",
-      "bet_type": "match_result",
-      "bet_side": "home",
-      "trust_score": 7,
-      "estimated_probability": 0.60,
-      "reasoning": "Strong home form (W4 in last 5) and H2H dominance. Odds of 2.14 imply 47% but signals suggest 60% — edge +26%."
-    },
-    {
-      "recommendation": "Over 2.5 Goals",
-      "bet_type": "over_under",
-      "bet_side": "over",
-      "trust_score": 6,
-      "estimated_probability": 0.52,
-      "reasoning": "H2H avg 3.2 goals, both teams attack-minded. Odds of 1.90 imply 53% — slight edge at 52%, fair price."
-    },
-    {
-      "recommendation": "BTTS Yes",
-      "bet_type": "btts",
-      "bet_side": "yes",
-      "trust_score": 5,
-      "estimated_probability": 0.55,
-      "reasoning": "Both teams score in 70% of recent matches. Odds of 1.83 imply 55% — fair edge, slight lean."
-    }
-  ]
-}
+Respond ONLY valid JSON:
+{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"Over 9.5 Corners","bet_type":"corners","bet_side":"over","trust_score":4,"estimated_probability":0.48,"reasoning":"..."},{"recommendation":"Asian Handicap Home -0.5","bet_type":"asian_handicap","bet_side":"home","trust_score":5,"estimated_probability":0.55,"reasoning":"..."}]}
 
-bet_side for match_result: "home", "away", "draw"
-bet_side for over_under: "over", "under"
-bet_side for btts: "yes", "no"`;
+bet_side for match_result: "home","away","draw"
+bet_side for over_under: "over","under"
+bet_side for btts: "yes","no"
+bet_side for corners: "over","under"
+bet_side for asian_handicap: "home","away"
+bet_side for total_cards: "over","under"`;
 
   const raw = await callClaude(prompt);
   const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);

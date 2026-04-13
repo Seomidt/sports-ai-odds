@@ -23,6 +23,7 @@ import {
   oddsMarkets,
   fixtureSignals,
   alertLog,
+  aiBettingTips,
 } from "@workspace/db/schema";
 import { eq, and, inArray, lt, sql, isNull, isNotNull } from "drizzle-orm";
 import {

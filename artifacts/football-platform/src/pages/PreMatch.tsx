@@ -59,7 +59,7 @@ function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: st
     >
       {icon
         ? <img src={`https://openweathermap.org/img/wn/${icon}.png`} className="w-3.5 h-3.5 object-contain" alt="" />
-        : <Wind className="w-3 h-3" />
+        : <CloudRain className="w-3 h-3" />
       }
       {Math.round(temp ?? 0)}°
       {isAdverse && <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />}
@@ -138,14 +138,12 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
               <Clock className="w-3 h-3 shrink-0" />
               {kickoffLabel(fixture.kickoff)}
             </span>
-            {fixture.weatherDesc && (
-              <WeatherMini
-                temp={fixture.weatherTemp ?? null}
-                desc={fixture.weatherDesc}
-                wind={fixture.weatherWind ?? null}
-                icon={fixture.weatherIcon ?? null}
-              />
-            )}
+            <WeatherMini
+              temp={fixture.weatherTemp ?? null}
+              desc={fixture.weatherDesc ?? "Weather pending"}
+              wind={fixture.weatherWind ?? null}
+              icon={fixture.weatherIcon ?? null}
+            />
           </div>
           {signals.length > 0 ? (
             <span className={`inline-flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${

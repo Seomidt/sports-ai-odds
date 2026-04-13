@@ -260,9 +260,10 @@ export function PreMatch() {
           </div>
           <p className="text-muted-foreground text-sm">
             All upcoming fixtures with pre-match analysis and signals.
-            {totalWithTips > 0 && (
-              <span className="ml-2 text-primary/70 font-mono">{totalWithTips} with AI picks</span>
-            )}
+            {totalWithTips > 0
+              ? <span className="ml-1 text-primary/70 font-mono">AI picks ready for {totalWithTips} of {prematch.length} fixtures — rest generating.</span>
+              : <span className="ml-1 text-muted-foreground/50 font-mono">AI picks are being generated — check back shortly.</span>
+            }
           </p>
         </header>
 

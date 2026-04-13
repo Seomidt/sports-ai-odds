@@ -466,13 +466,33 @@ function BettingIntelTab({ fixtureId }: { fixtureId: number }) {
           <Activity className="w-6 h-6 text-primary animate-pulse" />
         </div>
       ) : tips.length === 0 ? (
-        <div className="glass-card p-8 rounded-xl text-center space-y-2">
-          <Target className="w-8 h-8 text-white/20 mx-auto" />
-          <p className="text-muted-foreground text-sm">
-            {data?.message ?? "Betting tip not yet available — signal data is still being computed."}
-          </p>
-          <p className="text-xs text-muted-foreground font-mono opacity-60">
-            Tips are generated once sufficient pre-match data is available (odds + form + H2H).
+        <div className="glass-card p-8 rounded-xl border border-white/5 space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+              <Activity className="w-4 h-4 text-primary animate-pulse" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white">AI analysis in progress</p>
+              <p className="text-xs text-muted-foreground font-mono">Picks generate automatically — no action needed</p>
+            </div>
+          </div>
+          <div className="border-t border-white/5 pt-4 space-y-2.5">
+            {[
+              { label: "Odds data", desc: "Market prices from tracked bookmakers" },
+              { label: "Form & H2H", desc: "Last 5 matches + head-to-head history" },
+              { label: "Signal engine", desc: "Pattern detection across 20+ indicators" },
+            ].map(({ label, desc }) => (
+              <div key={label} className="flex items-center gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
+                <div>
+                  <span className="text-xs font-mono text-white/70">{label}</span>
+                  <span className="text-xs text-muted-foreground/50 ml-2">{desc}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] text-muted-foreground/40 font-mono">
+            Picks are ready once all data sources are synced — typically a few hours before kickoff.
           </p>
         </div>
       ) : (

@@ -17,13 +17,37 @@ router.get("/analysis/:fixtureId/betting-tip", async (req, res) => {
   const id = parseInt(req.params["fixtureId"] ?? "0");
   if (!id) return res.status(400).json({ error: "Invalid fixture id" });
 
+  const cacheKey = `betting-tip:${id}`;
+  const emptyKey = `betting-tip-empty:${id}`;
+
   try {
-    const tips = await getBettingTips(id);
-    if (!tips || tips.length === 0) {
-      return res.json({ tips: [], tip: null, message: "Insufficient signal data — tip not yet available." });
+    // Fast path — cached hit result
+    const cached = cacheGet<{ tips: unknown[]; tip: unknown }>(cacheKey);
+    if (cached) {
+      res.set("Cache-Control", "public, max-age=900, stale-while-revalidate=300");
+      return res.json(cached);
     }
+
+    // Short-circuit if we recently confirmed no tips exist (2 min window)
+    const recentlyEmpty = cacheGet<true>(emptyKey);
+    if (recentlyEmpty) {
+      res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=60");
+      return res.json({ tips: [], tip: null, pending: true, message: "AI picks are being generated for this fixture." });
+    }
+
+    // Full fetch (may call DB + Claude)
+    const tips = await getBettingTips(id);
+
+    if (!tips || tips.length === 0) {
+      cacheSet(emptyKey, true, TTL.MIN2);
+      res.set("Cache-Control", "public, max-age=120, stale-while-revalidate=60");
+      return res.json({ tips: [], tip: null, pending: true, message: "AI picks are being generated for this fixture." });
+    }
+
+    const body = { tips, tip: tips[0] };
+    cacheSet(cacheKey, body, TTL.MIN5 * 3);
     res.set("Cache-Control", "public, max-age=900, stale-while-revalidate=300");
-    return res.json({ tips, tip: tips[0] });
+    return res.json(body);
   } catch (err) {
     console.error("[analysis] betting-tip error:", err);
     return res.status(500).json({ error: "Tip generation failed" });

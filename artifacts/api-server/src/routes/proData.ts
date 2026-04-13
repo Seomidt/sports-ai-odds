@@ -387,7 +387,38 @@ router.get("/fixtures/:id/intel", async (req, res): Promise<void> => {
 
   if (!fixture) { res.status(404).json({ error: "Fixture not found" }); return; }
 
-  const [pred, homeCoach, awayCoach, homeSidelined, awaySidelined, homeTrophies, awayTrophies, topScorers, topAssists] = await Promise.all([
+  // Use raw SQL for top scorers/assists to deduplicate players (same player can have multiple rows from different position syncs)
+  const topScorersQuery = fixture.leagueId ? pool.query<{
+    playerName: string | null; teamId: number | null; goals: number | null; assists: number | null; appearances: number | null; rating: number | null; minutesPlayed: number | null;
+  }>(`
+    SELECT player_name AS "playerName", team_id AS "teamId", goals, assists, appearances, rating, minutes_played AS "minutesPlayed"
+    FROM (
+      SELECT DISTINCT ON (player_name)
+        player_name, team_id, goals, assists, appearances, rating, minutes_played
+      FROM player_season_stats
+      WHERE league_id = $1 AND goals IS NOT NULL
+      ORDER BY player_name, goals DESC, assists DESC
+    ) deduped
+    ORDER BY goals DESC, assists DESC NULLS LAST
+    LIMIT 12
+  `, [fixture.leagueId]) : Promise.resolve({ rows: [] });
+
+  const topAssistsQuery = fixture.leagueId ? pool.query<{
+    playerName: string | null; teamId: number | null; goals: number | null; assists: number | null; appearances: number | null; rating: number | null;
+  }>(`
+    SELECT player_name AS "playerName", team_id AS "teamId", goals, assists, appearances, rating
+    FROM (
+      SELECT DISTINCT ON (player_name)
+        player_name, team_id, goals, assists, appearances, rating
+      FROM player_season_stats
+      WHERE league_id = $1 AND assists IS NOT NULL
+      ORDER BY player_name, assists DESC, goals DESC
+    ) deduped
+    ORDER BY assists DESC, goals DESC NULLS LAST
+    LIMIT 12
+  `, [fixture.leagueId]) : Promise.resolve({ rows: [] });
+
+  const [pred, homeCoach, awayCoach, homeSidelined, awaySidelined, homeTrophies, awayTrophies, topScorersResult, topAssistsResult] = await Promise.all([
     db.query.predictions.findFirst({ where: (p, { eq: eqFn }) => eqFn(p.fixtureId, id) }),
     fixture.homeTeamId ? db.query.coaches.findFirst({ where: (c, { eq: eqFn }) => eqFn(c.teamId, fixture.homeTeamId!) }) : Promise.resolve(null),
     fixture.awayTeamId ? db.query.coaches.findFirst({ where: (c, { eq: eqFn }) => eqFn(c.teamId, fixture.awayTeamId!) }) : Promise.resolve(null),
@@ -395,21 +426,12 @@ router.get("/fixtures/:id/intel", async (req, res): Promise<void> => {
     fixture.awayTeamId ? db.query.sidelinedPlayers.findMany({ where: (sp, { eq: eqFn }) => eqFn(sp.teamId, fixture.awayTeamId!) }) : Promise.resolve([]),
     fixture.homeTeamId ? db.query.trophies.findMany({ where: (t, { eq: eqFn }) => eqFn(t.teamId, fixture.homeTeamId!), orderBy: (t, { desc: d }) => [d(t.season)], limit: 10 }) : Promise.resolve([]),
     fixture.awayTeamId ? db.query.trophies.findMany({ where: (t, { eq: eqFn }) => eqFn(t.teamId, fixture.awayTeamId!), orderBy: (t, { desc: d }) => [d(t.season)], limit: 10 }) : Promise.resolve([]),
-    fixture.leagueId
-      ? db.query.playerSeasonStats.findMany({
-          where: (ps, { and: andFn, eq: eqFn, isNotNull }) => andFn(eqFn(ps.leagueId, fixture.leagueId!), isNotNull(ps.goals)),
-          orderBy: (ps, { desc: d }) => [d(ps.goals)],
-          limit: 10,
-        })
-      : Promise.resolve([]),
-    fixture.leagueId
-      ? db.query.playerSeasonStats.findMany({
-          where: (ps, { and: andFn, eq: eqFn, isNotNull }) => andFn(eqFn(ps.leagueId, fixture.leagueId!), isNotNull(ps.assists)),
-          orderBy: (ps, { desc: d }) => [d(ps.assists)],
-          limit: 10,
-        })
-      : Promise.resolve([]),
+    topScorersQuery,
+    topAssistsQuery,
   ]);
+
+  const topScorers = topScorersResult.rows;
+  const topAssists = topAssistsResult.rows;
 
   const body = {
     prediction: pred ?? null,

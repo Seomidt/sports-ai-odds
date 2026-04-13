@@ -1520,22 +1520,34 @@ function IntelTab({ fixtureId, homeTeamId: _homeTeamId, awayTeamId: _awayTeamId,
       )}
 
       {(data?.topScorers?.length ?? 0) > 0 && (
-        <div className="glass-card p-5 rounded-xl space-y-3">
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-white/6 flex items-center gap-2">
             <Award className="w-3.5 h-3.5 text-teal-400" />
-            League Top Scorers
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">League Top Scorers</span>
           </div>
-          <div className="space-y-1.5">
-            {data!.topScorers.slice(0, 8).map((p, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 last:border-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] font-mono text-muted-foreground/40 w-4 shrink-0">{i + 1}</span>
-                  <span className="text-xs font-mono text-white truncate">{p.playerName ?? 'Unknown'}</span>
+          {/* Column headers */}
+          <div className="px-5 py-2 flex items-center justify-between border-b border-white/4 bg-white/2">
+            <div className="flex items-center gap-3">
+              <span className="w-4 shrink-0" />
+              <span className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-wider">Player</span>
+            </div>
+            <div className="flex items-center gap-4 shrink-0 pr-1">
+              <span className="text-[9px] font-mono text-teal-400/60 uppercase tracking-wider w-6 text-right">Mål</span>
+              <span className="text-[9px] font-mono text-violet-400/60 uppercase tracking-wider w-5 text-right">Ass</span>
+              <span className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-wider w-8 text-right">Kam</span>
+            </div>
+          </div>
+          <div>
+            {data!.topScorers.slice(0, 10).map((p, i) => (
+              <div key={i} className="px-5 flex items-center justify-between gap-2 py-2.5 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-[10px] font-mono text-muted-foreground/40 w-4 shrink-0 tabular-nums">{i + 1}</span>
+                  <span className="text-xs font-mono text-white truncate">{p.playerName ?? 'Ukendt'}</span>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs font-mono font-bold text-white tabular-nums">{p.goals ?? 0}G</span>
-                  {p.assists != null && <span className="text-xs font-mono text-teal-400/70 tabular-nums">{p.assists}A</span>}
-                  {p.appearances != null && <span className="text-[10px] font-mono text-muted-foreground/40">{p.appearances} apps</span>}
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className="text-sm font-mono font-bold text-teal-400 tabular-nums w-6 text-right">{p.goals ?? 0}</span>
+                  <span className="text-xs font-mono text-violet-400/80 tabular-nums w-5 text-right">{p.assists ?? '—'}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums w-8 text-right">{p.appearances ?? '—'}</span>
                 </div>
               </div>
             ))}
@@ -1544,22 +1556,34 @@ function IntelTab({ fixtureId, homeTeamId: _homeTeamId, awayTeamId: _awayTeamId,
       )}
 
       {(data?.topAssists?.length ?? 0) > 0 && (
-        <div className="glass-card p-5 rounded-xl space-y-3">
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
+        <div className="glass-card rounded-xl overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-white/6 flex items-center gap-2">
             <Users className="w-3.5 h-3.5 text-violet-400" />
-            League Top Assists
+            <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">League Top Assists</span>
           </div>
-          <div className="space-y-1.5">
-            {data!.topAssists.slice(0, 8).map((p, i) => (
-              <div key={i} className="flex items-center justify-between gap-2 py-1.5 border-b border-white/5 last:border-0">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="text-[10px] font-mono text-muted-foreground/40 w-4 shrink-0">{i + 1}</span>
-                  <span className="text-xs font-mono text-white truncate">{p.playerName ?? 'Unknown'}</span>
+          {/* Column headers */}
+          <div className="px-5 py-2 flex items-center justify-between border-b border-white/4 bg-white/2">
+            <div className="flex items-center gap-3">
+              <span className="w-4 shrink-0" />
+              <span className="text-[9px] font-mono text-muted-foreground/50 uppercase tracking-wider">Player</span>
+            </div>
+            <div className="flex items-center gap-4 shrink-0 pr-1">
+              <span className="text-[9px] font-mono text-violet-400/60 uppercase tracking-wider w-6 text-right">Ass</span>
+              <span className="text-[9px] font-mono text-teal-400/60 uppercase tracking-wider w-5 text-right">Mål</span>
+              <span className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-wider w-8 text-right">Kam</span>
+            </div>
+          </div>
+          <div>
+            {data!.topAssists.slice(0, 10).map((p, i) => (
+              <div key={i} className="px-5 flex items-center justify-between gap-2 py-2.5 border-b border-white/4 last:border-0 hover:bg-white/2 transition-colors">
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="text-[10px] font-mono text-muted-foreground/40 w-4 shrink-0 tabular-nums">{i + 1}</span>
+                  <span className="text-xs font-mono text-white truncate">{p.playerName ?? 'Ukendt'}</span>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="text-xs font-mono font-bold text-violet-400 tabular-nums">{p.assists ?? 0}A</span>
-                  {p.goals != null && <span className="text-[10px] font-mono text-muted-foreground/40">{p.goals}G</span>}
-                  {p.appearances != null && <span className="text-[10px] font-mono text-muted-foreground/40">{p.appearances} apps</span>}
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className="text-sm font-mono font-bold text-violet-400 tabular-nums w-6 text-right">{p.assists ?? 0}</span>
+                  <span className="text-xs font-mono text-teal-400/80 tabular-nums w-5 text-right">{p.goals ?? '—'}</span>
+                  <span className="text-[10px] font-mono text-muted-foreground/40 tabular-nums w-8 text-right">{p.appearances ?? '—'}</span>
                 </div>
               </div>
             ))}

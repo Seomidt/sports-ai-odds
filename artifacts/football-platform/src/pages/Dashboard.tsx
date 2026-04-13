@@ -137,10 +137,10 @@ function StreakRoiCard({ streak, roi, badge }: { streak: StreakState; roi: RoiSt
 
           <button
             onClick={() => setTooltipOpen(o => !o)}
-            className="text-muted-foreground/30 hover:text-muted-foreground/70 transition-colors"
+            className="text-white/50 active:text-white/90 transition-colors -ml-1 p-0.5"
             aria-label="Hvad er dette?"
           >
-            <HelpCircle className="w-3.5 h-3.5" />
+            <HelpCircle className="w-4 h-4" />
           </button>
 
           {badge && (

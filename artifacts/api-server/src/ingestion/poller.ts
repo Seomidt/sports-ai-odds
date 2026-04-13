@@ -1833,10 +1833,10 @@ async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
   for (const t of existingTips) {
     tipCount.set(t.fixtureId, (tipCount.get(t.fixtureId) ?? 0) + 1);
   }
-  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 3);
+  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 8);
 
   if (missing.length === 0) {
-    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have tips`);
+    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have 8 tips`);
     return;
   }
 

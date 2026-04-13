@@ -629,6 +629,28 @@ export type AiBettingTip = typeof aiBettingTips.$inferSelect;
 export type OddsMarket = typeof oddsMarkets.$inferSelect;
 export type NewsArticle = typeof newsArticles.$inferSelect;
 
+// ─── Pre-match AI Synthesis (persisted to survive restarts) ───────────────────
+
+export const prematchSyntheses = pgTable(
+  "prematch_syntheses",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull(),
+    headline: text("headline").notNull(),
+    summary: text("summary").notNull(),
+    keyFactors: jsonb("key_factors").$type<string[]>().notNull().default([]),
+    bestBet: text("best_bet"),
+    bestBetOdds: real("best_bet_odds"),
+    generatedAt: timestamp("generated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("prematch_syntheses_fixture_uniq").on(t.fixtureId),
+    index("prematch_syntheses_fixture_idx").on(t.fixtureId),
+  ]
+);
+
+export type PrematchSynthesisRow = typeof prematchSyntheses.$inferSelect;
+
 // ─── Persistent key-value store (counters that survive restarts) ──────────────
 
 export const systemKv = pgTable("system_kv", {

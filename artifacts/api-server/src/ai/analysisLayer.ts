@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
-import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets } from "@workspace/db/schema";
+import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -1156,16 +1156,39 @@ export interface PrematchSynthesis {
 }
 
 /**
- * Generates a short pre-match AI synthesis (headline + summary + key factors)
- * by synthesising the existing betting tips for a fixture.
- * Cached in memory for 2 hours — regenerated on each server restart.
+ * Generates a short pre-match AI synthesis (headline + summary + key factors).
+ * Cache hierarchy: 1) in-memory 2h, 2) DB 12h, 3) Claude (only on miss/stale).
+ * Survives server restarts — no redundant Claude calls.
  */
+// Synthesis TTL: regenerate after 12h so it stays fresh pre-match
+const SYNTHESIS_TTL_MS = 12 * 60 * 60 * 1000;
+
 export async function generatePrematchSynthesis(fixtureId: number): Promise<PrematchSynthesis | null> {
   const cacheKey = `prematch-synthesis:${fixtureId}`;
+
+  // 1. Fast path — in-memory cache (2h)
   const cached = getCached<PrematchSynthesis>(cacheKey);
   if (cached) return cached;
 
-  // Fetch existing tips from DB
+  // 2. DB path — survives server restarts (12h TTL)
+  const existing = await db.query.prematchSyntheses.findFirst({
+    where: (s, { eq: eqFn }) => eqFn(s.fixtureId, fixtureId),
+  });
+  if (existing && (Date.now() - existing.generatedAt.getTime()) < SYNTHESIS_TTL_MS) {
+    const fromDb: PrematchSynthesis = {
+      headline: existing.headline,
+      summary: existing.summary,
+      keyFactors: (existing.keyFactors as string[]) ?? [],
+      bestBet: existing.bestBet,
+      bestBetOdds: existing.bestBetOdds,
+      generatedAt: existing.generatedAt.toISOString(),
+    };
+    setCached(cacheKey, fromDb, 2 * 60 * 60 * 1000);
+    return fromDb;
+  }
+
+  // 3. Check how many tips exist — don't regenerate if DB row is still fresh-enough
+  //    and tip count hasn't changed (avoid redundant Claude calls)
   const tips = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
     orderBy: (t, { desc: d }) => [d(t.trustScore)],
@@ -1185,7 +1208,6 @@ export async function generatePrematchSynthesis(fixtureId: number): Promise<Prem
   const matchLabel = `${homeTeam} vs ${awayTeam}`;
   const leagueName = fixture?.leagueName ?? "";
 
-  // Build tip summary for the prompt
   const tipLines = tips.map(t => {
     const edge = t.edge != null ? ` (edge: ${(Number(t.edge) * 100).toFixed(1)}%)` : "";
     return `- ${t.betType}: ${t.recommendation} @ ${t.marketOdds ?? "?"} | trust ${t.trustScore}/10${edge} | ${t.valueRating ?? "fair"} | ${t.reasoning?.slice(0, 120) ?? ""}`;
@@ -1231,6 +1253,27 @@ Rules: No emoji. Be direct and analytical. Focus on the bet with the most edge.`
     generatedAt: new Date().toISOString(),
   };
 
-  setCached(cacheKey, result, 2 * 60 * 60 * 1000); // 2 hours
+  // 4. Save to DB — survives server restarts
+  await db.insert(prematchSyntheses).values({
+    fixtureId,
+    headline: result.headline,
+    summary: result.summary,
+    keyFactors: result.keyFactors,
+    bestBet: result.bestBet,
+    bestBetOdds: result.bestBetOdds,
+    generatedAt: new Date(),
+  }).onConflictDoUpdate({
+    target: prematchSyntheses.fixtureId,
+    set: {
+      headline: result.headline,
+      summary: result.summary,
+      keyFactors: result.keyFactors,
+      bestBet: result.bestBet,
+      bestBetOdds: result.bestBetOdds,
+      generatedAt: new Date(),
+    },
+  });
+
+  setCached(cacheKey, result, 2 * 60 * 60 * 1000); // 2h in-memory
   return result;
 }

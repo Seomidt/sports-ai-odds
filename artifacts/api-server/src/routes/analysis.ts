@@ -86,16 +86,43 @@ router.get("/analysis/:fixtureId/live", async (req, res) => {
 router.get("/analysis/value-odds", async (_req, res) => {
   try {
     const body = await getOrFetch("analysis:value-odds", TTL.MIN5, async () => {
-      const tips = await db.query.aiBettingTips.findMany({
-        where: (t, { isNull }) => isNull(t.outcome),
-      });
-      const ranked = tips
-        .filter(t => t.betType !== 'no_bet')
-        .map(t => {
-          const valueScore = t.valueRating === 'strong_value' ? 4 : t.valueRating === 'value' ? 3 : t.valueRating === 'fair' ? 2 : 1;
-          return { ...t, valueScore, combinedScore: valueScore * 10 + t.trustScore };
-        })
-        .sort((a, b) => b.combinedScore - a.combinedScore);
+      // Only show upcoming fixtures (kickoff in the future).
+      // Allow a 2-hour grace window so in-progress matches stay visible.
+      const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const { rows } = await pool.query(`
+        SELECT t.*
+        FROM ai_betting_tips t
+        INNER JOIN fixtures f ON f.fixture_id = t.fixture_id
+        WHERE t.outcome IS NULL
+          AND t.bet_type != 'no_bet'
+          AND (t.kickoff IS NULL OR t.kickoff >= $1)
+          AND f.status_short IN ('NS','TBD','1H','HT','2H','ET','BT','P','SUSP','INT','LIVE')
+        ORDER BY t.trust_score DESC
+      `, [cutoff]);
+
+      const ranked = rows.map((t: Record<string, unknown>) => {
+        const valueRating = t["value_rating"] as string | null;
+        const valueScore = valueRating === 'strong_value' ? 4 : valueRating === 'value' ? 3 : valueRating === 'fair' ? 2 : 1;
+        return {
+          id: t["id"],
+          fixtureId: t["fixture_id"],
+          homeTeam: t["home_team"],
+          awayTeam: t["away_team"],
+          kickoff: t["kickoff"],
+          leagueName: t["league_name"],
+          recommendation: t["recommendation"],
+          betType: t["bet_type"],
+          betSide: t["bet_side"],
+          trustScore: t["trust_score"],
+          reasoning: t["reasoning"],
+          marketOdds: t["market_odds"],
+          valueRating,
+          createdAt: t["created_at"],
+          valueScore,
+          combinedScore: valueScore * 10 + (t["trust_score"] as number),
+        };
+      }).sort((a, b) => b.combinedScore - a.combinedScore);
+
       return { tips: ranked };
     });
     res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
@@ -224,17 +251,25 @@ router.get("/analysis/daily-summary", async (_req, res) => {
   }
 });
 
-// GET /api/analysis/prematch-tips — all stored tips for upcoming fixtures (no AI generation)
+// GET /api/analysis/prematch-tips — stored tips for upcoming fixtures only (no AI generation)
 router.get("/analysis/prematch-tips", async (_req, res) => {
   try {
     const body = await getOrFetch("analysis:prematch-tips", TTL.MIN5, async () => {
-      const tips = await db.query.aiBettingTips.findMany({
-        where: (t, { isNull }) => isNull(t.outcome),
-      });
-      const byFixture: Record<number, typeof tips> = {};
-      for (const tip of tips) {
-        if (!byFixture[tip.fixtureId]) byFixture[tip.fixtureId] = [];
-        byFixture[tip.fixtureId]!.push(tip);
+      const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      const { rows } = await pool.query(`
+        SELECT t.*
+        FROM ai_betting_tips t
+        INNER JOIN fixtures f ON f.fixture_id = t.fixture_id
+        WHERE t.outcome IS NULL
+          AND (t.kickoff IS NULL OR t.kickoff >= $1)
+          AND f.status_short IN ('NS','TBD','1H','HT','2H','ET','BT','P','SUSP','INT','LIVE')
+      `, [cutoff]);
+
+      const byFixture: Record<number, typeof rows> = {};
+      for (const tip of rows) {
+        const fid = tip.fixture_id as number;
+        if (!byFixture[fid]) byFixture[fid] = [];
+        byFixture[fid]!.push(tip);
       }
       return { tips: byFixture };
     });

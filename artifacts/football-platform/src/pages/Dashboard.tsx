@@ -526,18 +526,15 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
         </div>
       </button>
 
-      {/* ── Expanded detail panel ── */}
-      {expanded && (
-        <div className="border-t border-white/6 px-5 py-4 space-y-3 bg-white/2">
-          {/* View Match link */}
-          <Link href={`/match/${tip.fixtureId}`}>
-            <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
-              <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">View Full Match Analysis</span>
-              <ChevronRight className="w-3.5 h-3.5 text-primary/60" />
-            </div>
-          </Link>
-        </div>
-      )}
+      {/* ── Always-visible match link ── */}
+      <div className="border-t border-white/6 px-5 py-3 bg-white/2">
+        <Link href={`/match/${tip.fixtureId}`}>
+          <div className="flex items-center justify-between py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
+            <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">View Full Match Analysis</span>
+            <ChevronRight className="w-3.5 h-3.5 text-primary/60" />
+          </div>
+        </Link>
+      </div>
     </div>
   );
 }

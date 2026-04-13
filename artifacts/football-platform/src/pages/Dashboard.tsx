@@ -2,7 +2,10 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, TrendingUp, Zap, ChevronRight, Target } from "lucide-react";
+import {
+  Activity, TrendingUp, Zap, ChevronRight, Target,
+  Flame, Trophy, TrendingDown, BarChart3, CalendarCheck, Star
+} from "lucide-react";
 
 interface ValueTip {
   id: number;
@@ -21,6 +24,36 @@ interface ValueTip {
   valueScore: number;
   combinedScore: number;
   createdAt: string;
+}
+
+interface DailySummary {
+  todayPicks: Array<{
+    id: number;
+    fixtureId: number;
+    homeTeam: string | null;
+    awayTeam: string | null;
+    kickoff: string | null;
+    recommendation: string;
+    trustScore: number;
+    marketOdds: number | null;
+    valueRating: string | null;
+  }>;
+  yesterdayResults: {
+    wins: number;
+    losses: number;
+    pushes: number;
+    total: number;
+  };
+  streak: {
+    current: number;
+    type: "win" | "loss" | "none";
+    badge: "warming" | "hot" | "elite" | null;
+  };
+  roi: {
+    total: number;
+    totalBets: number;
+    netReturn: number;
+  };
 }
 
 function ValueBadge({ rating }: { rating: string | null }) {
@@ -45,6 +78,128 @@ const betTypeLabel = (t: string) => {
   if (t === 'btts') return 'Both Teams to Score';
   return t;
 };
+
+const BADGE_CONFIG = {
+  warming: { label: '3+ WIN STREAK', icon: Flame, color: 'text-amber-400', bg: 'bg-amber-400/10', border: 'border-amber-400/30' },
+  hot: { label: '7+ WIN STREAK', icon: Flame, color: 'text-orange-400', bg: 'bg-orange-400/10', border: 'border-orange-400/30' },
+  elite: { label: 'ELITE STREAK', icon: Trophy, color: 'text-teal-300', bg: 'bg-teal-400/10', border: 'border-teal-400/30' },
+};
+
+function DailyLoopBar({ summary }: { summary: DailySummary }) {
+  const { todayPicks, yesterdayResults, streak, roi } = summary;
+  const yr = yesterdayResults;
+  const yrHitRate = yr.total > 0 ? Math.round((yr.wins / yr.total) * 100) : null;
+  const topPick = todayPicks[0];
+  const badge = streak.badge ? BADGE_CONFIG[streak.badge] : null;
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-8">
+      {/* Today's Picks panel */}
+      <div className="glass-card rounded-xl p-4 border border-white/8">
+        <div className="flex items-center gap-2 mb-3">
+          <CalendarCheck className="w-3.5 h-3.5 text-violet-400" />
+          <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest">Today's Picks</span>
+        </div>
+        {todayPicks.length === 0 ? (
+          <div className="text-sm text-muted-foreground/50">No high-confidence tips yet today</div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-3xl font-bold font-mono text-white tabular-nums">{todayPicks.length}</span>
+              <span className="text-xs text-muted-foreground font-mono">tip{todayPicks.length !== 1 ? 's' : ''}</span>
+            </div>
+            {topPick && (
+              <div className="text-xs text-muted-foreground/70 truncate">
+                Top: <span className="text-white/80">{topPick.recommendation}</span>
+                {topPick.marketOdds != null && (
+                  <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Yesterday's Results panel */}
+      <div className="glass-card rounded-xl p-4 border border-white/8">
+        <div className="flex items-center gap-2 mb-3">
+          <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
+          <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Yesterday</span>
+        </div>
+        {yr.total === 0 ? (
+          <div className="text-sm text-muted-foreground/50">No results from yesterday</div>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-3 mb-2">
+              <span className={`text-3xl font-bold font-mono tabular-nums ${yrHitRate != null && yrHitRate >= 50 ? 'text-teal-400' : 'text-amber-400'}`}>
+                {yrHitRate != null ? `${yrHitRate}%` : '—'}
+              </span>
+              <span className="text-xs text-muted-foreground font-mono">hit rate</span>
+            </div>
+            <div className="flex items-center gap-2 text-[11px] font-mono">
+              <span className="text-teal-400">{yr.wins}W</span>
+              <span className="text-white/20">·</span>
+              <span className="text-amber-400">{yr.losses}L</span>
+              {yr.pushes > 0 && <>
+                <span className="text-white/20">·</span>
+                <span className="text-muted-foreground">{yr.pushes}P</span>
+              </>}
+              <span className="text-white/20 ml-1">of {yr.total}</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Streak + ROI panel */}
+      <div className="glass-card rounded-xl p-4 border border-white/8">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            {streak.type === 'win' ? (
+              <Flame className="w-3.5 h-3.5 text-amber-400" />
+            ) : streak.type === 'loss' ? (
+              <TrendingDown className="w-3.5 h-3.5 text-amber-400" />
+            ) : (
+              <Star className="w-3.5 h-3.5 text-muted-foreground" />
+            )}
+            <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Streak & ROI</span>
+          </div>
+          {badge && (
+            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-mono font-bold tracking-wider border ${badge.color} ${badge.bg} ${badge.border}`}>
+              <badge.icon className="w-2.5 h-2.5" />
+              {badge.label}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-baseline gap-3 mb-2">
+          {streak.current > 0 && streak.type !== 'none' ? (
+            <>
+              <span className={`text-3xl font-bold font-mono tabular-nums ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
+                {streak.current}
+              </span>
+              <span className={`text-xs font-mono ${streak.type === 'win' ? 'text-teal-400' : 'text-amber-400'}`}>
+                {streak.type === 'win' ? 'winning day' : 'losing day'}{streak.current !== 1 ? 's' : ''}
+              </span>
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground/50">No streak yet</span>
+          )}
+        </div>
+
+        {roi.totalBets > 0 && (
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className="text-muted-foreground">ROI</span>
+            <span className={`font-bold ${roi.total >= 0 ? 'text-teal-400' : 'text-amber-400'}`}>
+              {roi.total >= 0 ? '+' : ''}{roi.total}%
+            </span>
+            <span className="text-white/20">·</span>
+            <span className="text-muted-foreground/50">{roi.totalBets} bets</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
@@ -140,6 +295,17 @@ export function Dashboard() {
     staleTime: 5 * 60_000,
   });
 
+  const { data: summary } = useQuery<DailySummary>({
+    queryKey: ['dailySummary'],
+    queryFn: async () => {
+      const res = await fetch('/api/analysis/daily-summary');
+      if (!res.ok) throw new Error('Failed to fetch daily summary');
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
+  });
+
   const tips = data?.tips ?? [];
   const valueTips = tips.filter(t => t.valueRating === 'strong_value' || t.valueRating === 'value');
   const fairTips = tips.filter(t => t.valueRating === 'fair');
@@ -177,6 +343,9 @@ export function Dashboard() {
             )}
           </div>
         </header>
+
+        {/* Daily Loop bar — Today / Yesterday / Streak & ROI */}
+        {summary && <DailyLoopBar summary={summary} />}
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">

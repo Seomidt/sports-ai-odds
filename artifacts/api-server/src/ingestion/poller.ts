@@ -22,6 +22,7 @@ import {
   trophies,
   oddsMarkets,
   fixtureSignals,
+  alertLog,
 } from "@workspace/db/schema";
 import { eq, and, inArray, lt, sql, isNull, isNotNull } from "drizzle-orm";
 import {
@@ -298,6 +299,11 @@ async function insertOddsSnapshot(
     if (ouMarket) overUnder25 = parseFloat(ouMarket.values.find((v) => v.value === "Over 2.5")?.odd ?? "0") || null;
   }
 
+  // Read previous snapshot for odds-drop detection (before deleting)
+  const prev = await db.query.oddsSnapshots.findFirst({
+    where: (o, { and: a, eq: e }) => a(e(o.fixtureId, fixtureId), e(o.bookmaker, bm.name)),
+  });
+
   await db.delete(oddsSnapshots).where(
     and(eq(oddsSnapshots.fixtureId, fixtureId), eq(oddsSnapshots.bookmaker, bm.name))
   );
@@ -312,6 +318,32 @@ async function insertOddsSnapshot(
     handicapHome: handicapHome ?? null,
     snappedAt: new Date(),
   });
+
+  // Detect significant odds drop (>= 0.15) and fire broadcast alert
+  if (prev) {
+    const DROP = 0.15;
+    const drops: Array<{ label: string; from: number; to: number }> = [];
+    if (prev.homeWin && homeVal && prev.homeWin - homeVal >= DROP) drops.push({ label: "Home", from: prev.homeWin, to: homeVal });
+    if (prev.draw && drawVal && prev.draw - drawVal >= DROP) drops.push({ label: "Draw", from: prev.draw, to: drawVal });
+    if (prev.awayWin && awayVal && prev.awayWin - awayVal >= DROP) drops.push({ label: "Away", from: prev.awayWin, to: awayVal });
+    if (drops.length > 0) {
+      // Get fixture team names
+      const fix = await db.query.fixtures.findFirst({
+        where: (f, { eq: e }) => e(f.fixtureId, fixtureId),
+        columns: { homeTeamName: true, awayTeamName: true },
+      });
+      const matchName = fix ? `${fix.homeTeamName} vs ${fix.awayTeamName}` : `Fixture ${fixtureId}`;
+      const dropStr = drops.map(d => `${d.label} ${d.from.toFixed(2)} → ${d.to.toFixed(2)}`).join(", ");
+      db.insert(alertLog).values({
+        fixtureId,
+        sessionId: null,
+        signalKey: "odds_drop",
+        alertText: `Odds dropping fast: ${matchName} — ${dropStr} (${bm.name})`,
+        isRead: false,
+        createdAt: new Date(),
+      }).catch((e: unknown) => console.error("[odds-drop] alert insert error:", e));
+    }
+  }
 }
 
 async function syncOdds() {

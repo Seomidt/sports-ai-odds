@@ -117,6 +117,113 @@ router.get("/analysis/accuracy", async (_req, res) => {
   }
 });
 
+// GET /api/analysis/daily-summary — today's picks, yesterday's results, streak, ROI
+router.get("/analysis/daily-summary", async (_req, res) => {
+  try {
+    const body = await getOrFetch("analysis:daily-summary", TTL.MIN5, async () => {
+      const now = new Date();
+      const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
+      const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+      const [todayRows, yesterdayRow, dailyRows, roiRow] = await Promise.all([
+        // Today's top picks (upcoming, not yet resolved)
+        pool.query(`
+          SELECT id, fixture_id AS "fixtureId", home_team AS "homeTeam", away_team AS "awayTeam",
+                 kickoff, league_name AS "leagueName", recommendation, bet_type AS "betType",
+                 bet_side AS "betSide", trust_score AS "trustScore", reasoning,
+                 market_odds AS "marketOdds", value_rating AS "valueRating"
+          FROM ai_betting_tips
+          WHERE kickoff >= $1 AND outcome IS NULL AND bet_type != 'no_bet' AND trust_score >= 6
+          ORDER BY trust_score DESC, CASE value_rating
+            WHEN 'strong_value' THEN 4 WHEN 'value' THEN 3 WHEN 'fair' THEN 2 ELSE 1
+          END DESC
+          LIMIT 5
+        `, [todayStart]),
+
+        // Yesterday's results summary (outcomes: 'hit', 'miss', 'partial')
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE outcome = 'hit')                                   AS wins,
+            COUNT(*) FILTER (WHERE outcome = 'miss')                                  AS losses,
+            COUNT(*) FILTER (WHERE outcome = 'partial')                               AS pushes,
+            COUNT(*) FILTER (WHERE outcome IS NOT NULL AND bet_type != 'no_bet') AS total
+          FROM ai_betting_tips
+          WHERE kickoff >= $1 AND kickoff < $2
+        `, [yesterdayStart, todayStart]),
+
+        // Daily hit/miss per day for streak calculation (most recent 60 days)
+        pool.query(`
+          SELECT
+            DATE(kickoff) AS day,
+            COUNT(*) FILTER (WHERE outcome = 'hit')                                   AS wins,
+            COUNT(*) FILTER (WHERE outcome IS NOT NULL AND bet_type != 'no_bet') AS total
+          FROM ai_betting_tips
+          WHERE kickoff >= NOW() - INTERVAL '60 days' AND outcome IS NOT NULL AND bet_type != 'no_bet'
+          GROUP BY DATE(kickoff)
+          ORDER BY day DESC
+        `),
+
+        // All-time ROI (1 unit stake; hit returns odds-1, miss costs 1 unit)
+        pool.query(`
+          SELECT
+            COUNT(*) FILTER (WHERE outcome IS NOT NULL AND bet_type != 'no_bet') AS total_bets,
+            COALESCE(SUM(CASE WHEN outcome = 'hit'  THEN COALESCE(market_odds, 2.0) - 1 ELSE 0 END), 0) AS gross_return,
+            COUNT(*) FILTER (WHERE outcome = 'miss') AS losses
+          FROM ai_betting_tips
+          WHERE outcome IS NOT NULL AND bet_type != 'no_bet'
+        `),
+      ]);
+
+      // Calculate streak from daily rows
+      let streak = 0;
+      let streakType: "win" | "loss" | "none" = "none";
+      for (const row of dailyRows.rows) {
+        const isWin = Number(row.total) > 0 && Number(row.wins) / Number(row.total) >= 0.5;
+        if (streak === 0) {
+          streakType = isWin ? "win" : "loss";
+          streak = 1;
+        } else if ((isWin && streakType === "win") || (!isWin && streakType === "loss")) {
+          streak++;
+        } else {
+          break;
+        }
+      }
+
+      const badge =
+        streakType === "win" && streak >= 14 ? "elite" :
+        streakType === "win" && streak >= 7  ? "hot" :
+        streakType === "win" && streak >= 3  ? "warming" : null;
+
+      const r = roiRow.rows[0] ?? {};
+      const totalBets    = Number(r.total_bets ?? 0);
+      const grossReturn  = Number(r.gross_return ?? 0);
+      const lossCount    = Number(r.losses ?? 0);
+      const netReturn    = Math.round((grossReturn - lossCount) * 10) / 10;
+      const roi          = totalBets > 0 ? Math.round((netReturn / totalBets) * 1000) / 10 : 0;
+
+      const yr = yesterdayRow.rows[0] ?? {};
+
+      return {
+        todayPicks: todayRows.rows,
+        yesterdayResults: {
+          wins:   Number(yr.wins   ?? 0),
+          losses: Number(yr.losses ?? 0),
+          pushes: Number(yr.pushes ?? 0),
+          total:  Number(yr.total  ?? 0),
+        },
+        streak: { current: streak, type: streakType, badge },
+        roi: { total: roi, totalBets, netReturn },
+      };
+    });
+
+    res.set("Cache-Control", "public, max-age=300, stale-while-revalidate=60");
+    return res.json(body);
+  } catch (err) {
+    console.error("[analysis] daily-summary error:", err);
+    return res.status(500).json({ error: "Failed to fetch daily summary" });
+  }
+});
+
 // GET /api/analysis/prematch-tips — all stored tips for upcoming fixtures (no AI generation)
 router.get("/analysis/prematch-tips", async (_req, res) => {
   try {

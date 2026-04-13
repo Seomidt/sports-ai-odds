@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
-import { aiBettingTips, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv } from "@workspace/db/schema";
+import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -456,7 +456,22 @@ bet_side for btts: "yes", "no"`;
         valueRating,
       },
     }).returning();
-    if (stored) storedTips.push(stored);
+    if (stored) {
+      storedTips.push(stored);
+      // Fire broadcast alert for high-value tips (visible to all users within 6h)
+      if (stored.trustScore >= 8 && (stored.valueRating === "strong_value" || stored.valueRating === "value")) {
+        const oddsStr = stored.marketOdds ? ` @ ${stored.marketOdds.toFixed(2)}` : "";
+        const alertText = `High-value tip: ${stored.homeTeam} vs ${stored.awayTeam} — ${stored.recommendation}${oddsStr} (trust ${stored.trustScore}/10, ${stored.valueRating?.replace("_", " ")})`;
+        db.insert(alertLog).values({
+          fixtureId,
+          sessionId: null,
+          signalKey: "high_value_tip",
+          alertText,
+          isRead: false,
+          createdAt: new Date(),
+        }).catch((e: unknown) => console.error("[ai] alert insert error:", e));
+      }
+    }
   }
 
   console.log(`[ai] Generated ${storedTips.length} betting tips for fixture ${fixtureId}`);

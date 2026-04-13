@@ -53,7 +53,7 @@ router.get("/fixtures/followed", async (req, res) => {
   return res.json({ fixtureIds: rows.map((r) => r.fixtureId) });
 });
 
-// GET /api/alerts/unread — poll for new alerts (enriched with fixture team names)
+// GET /api/alerts/unread — session alerts + broadcast alerts (sessionId IS NULL)
 router.get("/alerts/unread", async (req, res): Promise<void> => {
   const sessionId = req.headers["x-session-id"] as string | undefined;
   if (!sessionId) {
@@ -70,6 +70,9 @@ router.get("/alerts/unread", async (req, res): Promise<void> => {
     return;
   }
 
+  // Return: alerts for this session OR broadcast alerts (session_id IS NULL)
+  // Broadcast alerts are global (high-value tips, odds drops) — shown to everyone.
+  // We use created_at > 6h ago for broadcasts so stale ones don't resurface.
   const { rows } = await pool.query(
     `SELECT
        a.id,
@@ -83,8 +86,10 @@ router.get("/alerts/unread", async (req, res): Promise<void> => {
        f.away_team_name AS "awayTeamName"
      FROM alert_log a
      LEFT JOIN fixtures f ON f.fixture_id = a.fixture_id
-     WHERE a.session_id = $1
-       AND a.is_read = false
+     WHERE (
+       (a.session_id = $1 AND a.is_read = false)
+       OR (a.session_id IS NULL AND a.created_at > NOW() - INTERVAL '6 hours')
+     )
      ORDER BY a.created_at DESC
      LIMIT 20`,
     [sessionId],

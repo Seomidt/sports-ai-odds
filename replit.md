@@ -94,3 +94,20 @@ A 5-layer deterministic AI football analysis platform using the API-Football API
 - **Value analysis**: AI confidence vs market implied probability → strong_value / value / fair / overpriced
 - **DB**: `ai_betting_tips` table with composite unique on (fixture_id, bet_type)
 - **Post-match grading**: Each market tip individually graded hit/miss/partial after FT
+- **Broadcast alerts**: Tips with trustScore >= 8 auto-fire a broadcast notification visible to all sessions (6h window)
+
+## Daily Loop & Gamification (Dashboard)
+
+- **DailyLoop bar** (3 glass-cards at top of Dashboard):
+  - **Today's Picks**: count of high-confidence tips (trustScore >= 6) for today's fixtures
+  - **Yesterday's Results**: win/loss/push counts + hit rate %
+  - **Streak & ROI**: consecutive winning/losing days; badge tiers (warming=3+, hot=7+, elite=14+); all-time ROI %
+- API endpoint: `GET /api/analysis/daily-summary`
+
+## Alert System (enhanced)
+
+- **Session alerts**: live-match signal alerts for followed fixtures (sessionId)
+- **Broadcast alerts** (sessionId = NULL): shown to all users within 6h window:
+  - High-value tip alert: trustScore >= 8 AND valueRating in (strong_value, value)
+  - Odds-drop alert: odds move >= 0.15 in a single sync cycle
+- AlertPoller polls every 30s; client-side deduplication via sessionStorage

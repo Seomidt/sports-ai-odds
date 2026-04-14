@@ -1934,11 +1934,89 @@ async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
   console.log(`[ai-tips] Done — ${ok} generated, ${skipped} skipped (no odds/error)`);
 }
 
-/**
- * Schedules dailySignalPrecompute to run every day at 05:00 UTC.
- * On startup: if today's 5am UTC has already passed and we haven't run today,
- * fires immediately (catch-up). Otherwise, waits until next 5am UTC.
- */
+// ─── Midnight odds sweep ───────────────────────────────────────────────────────
+
+async function runMidnightOddsSweep() {
+  console.log("[midnight-odds] Full odds sweep for upcoming week starting");
+  await syncOdds().catch(console.error);
+  await syncOddsAllMarketsForUpcoming().catch(console.error);
+  await syncOddsForUpcomingWeek().catch(console.error);
+  console.log("[midnight-odds] Full odds sweep complete");
+}
+
+async function scheduleMidnightOddsSweep() {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const lastRunKey = "midnight-odds-cron:lastRun";
+  const lastRun = await kvGet(lastRunKey);
+
+  // Midnight sweep: runs once per day at 00:00 UTC
+  const nextMidnight = new Date(now);
+  nextMidnight.setUTCHours(0, 0, 0, 0);
+  if (nextMidnight.getTime() <= now.getTime()) nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
+
+  if (lastRun !== todayStr) {
+    const minLate = Math.round((now.getTime() - new Date(now.toISOString().slice(0,10) + "T00:00:00Z").getTime()) / 60_000);
+    console.log(`[midnight-odds] Missed today's sweep by ${minLate} min — running catch-up now`);
+    await kvSet(lastRunKey, todayStr);
+    runMidnightOddsSweep().catch(console.error);
+  } else {
+    console.log(`[midnight-odds] Already ran today (${todayStr}) — next at ${nextMidnight.toISOString()}`);
+  }
+
+  const msUntilNext = nextMidnight.getTime() - now.getTime();
+  setTimeout(async () => {
+    const d = new Date().toISOString().slice(0, 10);
+    await kvSet(lastRunKey, d);
+    runMidnightOddsSweep().catch(console.error);
+    setInterval(async () => {
+      const d2 = new Date().toISOString().slice(0, 10);
+      await kvSet(lastRunKey, d2);
+      runMidnightOddsSweep().catch(console.error);
+    }, 24 * 60 * 60 * 1000);
+  }, msUntilNext);
+}
+
+// ─── Fixed-time AI tips cron (06:00, 12:00, 18:00 UTC) ────────────────────────
+
+async function scheduleAiTipsAtHour(utcHour: number) {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const padded = String(utcHour).padStart(2, "0");
+  const lastRunKey = `ai-tips-cron:${padded}:lastRun`;
+  const lastRun = await kvGet(lastRunKey);
+
+  const nextRun = new Date(now);
+  nextRun.setUTCHours(utcHour, 0, 0, 0);
+  if (nextRun.getTime() <= now.getTime()) nextRun.setUTCDate(nextRun.getUTCDate() + 1);
+
+  const pastHourToday = now.getUTCHours() >= utcHour;
+  if (pastHourToday && lastRun !== todayStr) {
+    const minLate = Math.round((now.getTime() - new Date(`${todayStr}T${padded}:00:00Z`).getTime()) / 60_000);
+    console.log(`[ai-tips-cron] Missed ${padded}:00 UTC run by ${minLate} min — running catch-up now`);
+    await kvSet(lastRunKey, todayStr);
+    bulkGenerateAiTips(200).catch(console.error);
+  } else if (lastRun !== todayStr) {
+    console.log(`[ai-tips-cron] Next ${padded}:00 UTC run in ${Math.round((nextRun.getTime() - now.getTime()) / 60_000)} min`);
+  } else {
+    console.log(`[ai-tips-cron] ${padded}:00 UTC already ran today — next at ${nextRun.toISOString()}`);
+  }
+
+  const msUntilNext = nextRun.getTime() - now.getTime();
+  setTimeout(async () => {
+    const d = new Date().toISOString().slice(0, 10);
+    await kvSet(lastRunKey, d);
+    bulkGenerateAiTips(200).catch(console.error);
+    setInterval(async () => {
+      const d2 = new Date().toISOString().slice(0, 10);
+      await kvSet(lastRunKey, d2);
+      bulkGenerateAiTips(200).catch(console.error);
+    }, 24 * 60 * 60 * 1000);
+  }, msUntilNext);
+}
+
+// ─── Daily signal pre-compute (05:00 UTC) ─────────────────────────────────────
+
 async function scheduleDailySignalCron() {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -2067,9 +2145,8 @@ export function startPoller() {
   // Week-ahead odds sweep: every 12 hours (fills odds for fixtures 2-7 days out)
   setInterval(() => syncOddsForUpcomingWeek().catch(console.error), 12 * 60 * 60 * 1000);
 
-  // AI tips: every 6 hours — catches newly added fixtures and refreshes missing picks
-  // Batch size 200 = covers the full 7-day window (~155 fixtures) in one pass
-  setInterval(() => bulkGenerateAiTips(200).catch(console.error), 6 * 60 * 60 * 1000);
+  // AI tips are now driven by fixed-time crons (06:00, 12:00, 18:00 UTC)
+  // scheduled via scheduleAiTipsAtHour() below — no interval needed here.
 
   // Team season stats: every 2 hours (more frequent = fresher form indicators)
   setInterval(() => syncTeamSeasonStats().catch(console.error), 2 * 60 * 60 * 1000);
@@ -2113,8 +2190,14 @@ export function startPoller() {
   // Runs once at startup (60s delay). Can always be triggered manually via admin panel.
   setTimeout(() => seedHistoricalIfNeeded().catch(console.error), 60 * 1000);
 
-  // Daily 5am signal pre-compute + catch-up if server was down during 5am window.
-  // scheduleDailySignalCron() handles missed runs and future scheduling automatically.
+  // ── Fixed-time daily crons (all with catch-up on restart) ────────────────────
+  // Midnight UTC: full odds sweep — fills gaps for the whole upcoming week
+  scheduleMidnightOddsSweep().catch(console.error);
+  // AI tips: 06:00, 12:00, 18:00 UTC — re-scores all fixtures after odds refresh
+  scheduleAiTipsAtHour(6).catch(console.error);
+  scheduleAiTipsAtHour(12).catch(console.error);
+  scheduleAiTipsAtHour(18).catch(console.error);
+  // Signal pre-compute: 05:00 UTC — caches signals for today's fixtures
   scheduleDailySignalCron().catch(console.error);
 }
 

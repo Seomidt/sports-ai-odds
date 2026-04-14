@@ -616,7 +616,7 @@ function ForceSyncSection() {
       <div>
         <h3 className="text-base font-bold font-mono text-white mb-1">Force Sync</h3>
         <p className="text-xs text-muted-foreground">
-          Ignores all freshness caches. Treats the database as empty and re-fetches everything from the API — fixtures, odds, predictions, H2H, injuries — then regenerates AI tips.
+          Henter kun det der mangler. Fixtures der allerede har odds, predictions, H2H eller AI tips springes over — kun huller i databasen fyldes ud.
         </p>
       </div>
 

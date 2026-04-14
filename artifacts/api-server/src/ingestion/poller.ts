@@ -2084,10 +2084,9 @@ async function scheduleDailySignalCron() {
 }
 
 /**
- * Full force-sync for all upcoming fixtures — ignores ALL freshness checks and caches.
- * Behaves as if the database has nothing: re-fetches fixtures, odds, predictions, H2H,
- * injuries, then deletes and regenerates AI tips.
- * Safe to call multiple times; upserts handle duplicates.
+ * Fill-gaps sync for all upcoming fixtures in the next 7 days.
+ * Only fetches data that is genuinely missing from the database.
+ * Does NOT re-fetch or overwrite data that already exists.
  */
 export async function forceFullSync(onProgress?: (msg: string) => void): Promise<void> {
   const log = (msg: string) => {
@@ -2098,7 +2097,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   const now = new Date();
   const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
-  // ── 1. Re-sync fixture lists for next 7 days ─────────────────────────────
+  // ── 1. Sync fixture lists for next 7 days (upsert — safe to always run) ──
   log("Syncing fixture lists for next 7 days...");
   for (let i = 0; i < 7; i++) {
     const date = getDateOffset(i);
@@ -2107,16 +2106,25 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
 
   // ── 2. Get all upcoming NS/TBD fixtures in 7-day window ──────────────────
   const upcoming = await db.query.fixtures.findMany({
-    where: (f, { and, gte, lte, inArray }) =>
-      and(gte(f.kickoff, now), lte(f.kickoff, in7d), inArray(f.statusShort, ["NS", "TBD"])),
+    where: (f, { and: andFn, gte: gteFn, lte, inArray: inArr }) =>
+      andFn(gteFn(f.kickoff, now), lte(f.kickoff, in7d), inArr(f.statusShort, ["NS", "TBD"])),
   });
-  log(`Found ${upcoming.length} upcoming fixtures to sync`);
-
+  log(`Found ${upcoming.length} upcoming fixtures`);
   if (upcoming.length === 0) return;
 
-  // ── 3. Force-sync ALL odds markets (no freshness skip) ───────────────────
-  log("Syncing odds markets for all upcoming fixtures...");
-  for (const fix of upcoming) {
+  const allIds = upcoming.map((f) => f.fixtureId);
+
+  // ── 3. Odds: only fetch for fixtures that have NO odds at all ─────────────
+  const withOdds = new Set(
+    (await db.selectDistinct({ fixtureId: oddsMarkets.fixtureId })
+      .from(oddsMarkets)
+      .where(inArray(oddsMarkets.fixtureId, allIds))
+    ).map((r) => r.fixtureId)
+  );
+  const missingOdds = upcoming.filter((f) => !withOdds.has(f.fixtureId));
+  log(`Odds: ${withOdds.size} already have odds, fetching for ${missingOdds.length} missing`);
+
+  for (const fix of missingOdds) {
     const seen = new Set<string>();
     const snappedAt = new Date();
 
@@ -2125,15 +2133,12 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
       for (const m of markets) {
         if (seen.has(m.bookmaker)) continue;
         seen.add(m.bookmaker);
-        await db.delete(oddsMarkets).where(
-          and(eq(oddsMarkets.fixtureId, fix.fixtureId), eq(oddsMarkets.bookmaker, m.bookmaker))
-        );
         await db.insert(oddsMarkets).values({
           fixtureId: fix.fixtureId,
           bookmaker: m.bookmaker,
           markets: m.markets as Record<string, unknown>,
           snappedAt,
-        });
+        }).onConflictDoNothing();
       }
     }
 
@@ -2147,32 +2152,43 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
       for (const bet of bm.bets) {
         mkt[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
       }
-      await db.delete(oddsMarkets).where(
-        and(eq(oddsMarkets.fixtureId, fix.fixtureId), eq(oddsMarkets.bookmaker, bm.name))
-      );
       await db.insert(oddsMarkets).values({
         fixtureId: fix.fixtureId,
         bookmaker: bm.name,
         markets: mkt as Record<string, unknown>,
         snappedAt,
-      });
+      }).onConflictDoNothing();
       await new Promise((r) => setTimeout(r, 150));
     }
   }
-  log("Odds markets synced");
+  log("Odds done");
 
-  // ── 4. Force-sync predictions for all upcoming fixtures ──────────────────
-  log("Syncing predictions...");
-  for (const fix of upcoming) {
+  // ── 4. Predictions: only fetch for fixtures that have NO prediction ────────
+  const withPredictions = new Set(
+    (await db.select({ fixtureId: predictions.fixtureId })
+      .from(predictions)
+      .where(inArray(predictions.fixtureId, allIds))
+    ).map((r) => r.fixtureId)
+  );
+  const missingPredictions = upcoming.filter((f) => !withPredictions.has(f.fixtureId));
+  log(`Predictions: ${withPredictions.size} already present, fetching ${missingPredictions.length} missing`);
+
+  for (const fix of missingPredictions) {
     await syncPredictionForFixture(fix.fixtureId).catch(console.error);
     await new Promise((r) => setTimeout(r, 100));
   }
-  log("Predictions synced");
+  log("Predictions done");
 
-  // ── 5. Force-sync H2H for all upcoming fixtures (not just 48h) ───────────
-  log("Syncing H2H...");
+  // ── 5. H2H: only fetch for team pairs that have NO h2h data ──────────────
+  log("Syncing H2H for pairs with no existing data...");
   for (const fix of upcoming) {
     if (!fix.homeTeamId || !fix.awayTeamId) continue;
+    const existing = await db.query.h2hFixtures.findFirst({
+      where: (h, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(h.forTeam1Id, fix.homeTeamId!), eqFn(h.forTeam2Id, fix.awayTeamId!)),
+    });
+    if (existing) continue; // Already have H2H for this pair
+
     const data = await fetchH2H(fix.homeTeamId, fix.awayTeamId, 10).catch(() => null);
     if (!data) continue;
     for (const entry of data) {
@@ -2198,11 +2214,19 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     }
     await new Promise((r) => setTimeout(r, 150));
   }
-  log("H2H synced");
+  log("H2H done");
 
-  // ── 6. Force-sync injuries for all upcoming fixtures ─────────────────────
-  log("Syncing injuries...");
-  for (const fix of upcoming) {
+  // ── 6. Injuries: only fetch for fixtures that have NO injury data ──────────
+  const withInjuries = new Set(
+    (await db.selectDistinct({ fixtureId: injuries.fixtureId })
+      .from(injuries)
+      .where(inArray(injuries.fixtureId, allIds))
+    ).map((r) => r.fixtureId)
+  );
+  const missingInjuries = upcoming.filter((f) => !withInjuries.has(f.fixtureId));
+  log(`Injuries: ${withInjuries.size} already present, fetching ${missingInjuries.length} missing`);
+
+  for (const fix of missingInjuries) {
     const data = await fetchFixtureInjuries(fix.fixtureId).catch(() => null);
     if (!data || data.length === 0) continue;
     for (const inj of data) {
@@ -2217,20 +2241,13 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  log("Injuries synced");
+  log("Injuries done");
 
-  // ── 7. Delete and regenerate AI tips for all upcoming fixtures ───────────
-  log("Deleting existing AI tips and regenerating...");
-  const ids = upcoming.map((f) => f.fixtureId);
-  if (ids.length > 0) {
-    for (const id of ids) {
-      await db.delete(aiBettingTips).where(eq(aiBettingTips.fixtureId, id));
-    }
-  }
-  log("Existing tips deleted — running AI generation in background");
-
-  // Fire and forget: bulk generate runs asynchronously
+  // ── 7. AI tips: only generate for fixtures that have fewer than 10 tips ───
+  log("Generating AI tips for fixtures with missing tips...");
+  // bulkGenerateAiTips already skips fixtures with ≥10 tips — no delete needed
   bulkGenerateAiTips(upcoming.length).catch(console.error);
+  log("AI tip generation queued in background");
 }
 
 /**

@@ -1,4 +1,4 @@
-import type Stripe from "stripe";
+import StripeImport from "stripe";
 import { type Request, type Response } from "express";
 import { getStripeClient, STRIPE_ENABLED } from "./stripeClient.js";
 import { logger } from "../lib/logger.js";
@@ -21,7 +21,12 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
 
   const sigStr = Array.isArray(sig) ? sig[0] : sig;
 
-  let event: Stripe.Event;
+  let event: InstanceType<typeof StripeImport>["webhooks"] extends {
+    constructEvent(payload: Buffer, header: string, secret: string): infer T;
+  }
+    ? T
+    : never;
+
   try {
     const stripe = getStripeClient();
     event = stripe.webhooks.constructEvent(req.body as Buffer, sigStr, webhookSecret);
@@ -38,16 +43,24 @@ export async function handleStripeWebhook(req: Request, res: Response): Promise<
     case "customer.subscription.created":
     case "customer.subscription.updated":
     case "customer.subscription.deleted": {
-      const sub = event.data.object as Stripe.Subscription;
+      const sub = event.data.object as {
+        id: string;
+        status?: string;
+        customer?: string | null;
+      };
       logger.info(
         { subscriptionId: sub.id, status: sub.status, customerId: sub.customer },
-        `Subscription ${event.type}`
+        `Subscription ${event.type}`,
       );
       break;
     }
     case "invoice.payment_succeeded":
     case "invoice.payment_failed": {
-      const inv = event.data.object as Stripe.Invoice;
+      const inv = event.data.object as {
+        id: string;
+        amount_paid?: number | null;
+        customer?: string | null;
+      };
       if (event.type === "invoice.payment_succeeded") {
         logger.info({ invoiceId: inv.id, amount: inv.amount_paid }, "Payment succeeded");
       } else {

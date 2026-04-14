@@ -42,6 +42,7 @@ interface TipSummary {
   trustScore: number;
   marketOdds: number | null;
   valueRating: string | null;
+  edge: number | null;
 }
 
 interface YesterdayTip extends TipSummary {
@@ -217,7 +218,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
       {/* Row 1: Today + Yesterday side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
-        {/* Today's Picks */}
+        {/* Highest Edge Picks */}
         <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
           <button
             onClick={() => setTodayOpen(o => !o)}
@@ -225,8 +226,9 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
           >
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <CalendarCheck className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-[10px] font-mono font-bold text-violet-400 uppercase tracking-widest">Today's Picks</span>
+                <Zap className="w-3.5 h-3.5 text-teal-400" />
+                <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-widest">Highest Edge</span>
+                <span className="text-[9px] font-mono text-muted-foreground/40">1–7 dage</span>
               </div>
               {todayPicks.length > 0 && (
                 todayOpen
@@ -235,17 +237,20 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
               )}
             </div>
             {todayPicks.length === 0 ? (
-              <div className="text-sm text-muted-foreground/50">No high-confidence tips yet today</div>
+              <div className="text-sm text-muted-foreground/50">Ingen value picks de næste 7 dage</div>
             ) : (
               <>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="text-3xl font-bold font-mono text-white tabular-nums">{todayPicks.length}</span>
-                  <span className="text-xs text-muted-foreground font-mono">tip{todayPicks.length !== 1 ? 's' : ''}</span>
+                  <span className="text-xs text-muted-foreground font-mono">best value picks</span>
                 </div>
                 {topPick && !todayOpen && (
                   <div className="text-xs text-muted-foreground/70 truncate">
                     Top: <span className="text-white/80">{topPick.recommendation}</span>
-                    {topPick.marketOdds != null && (
+                    {topPick.edge != null && (
+                      <span className="text-teal-400 font-mono ml-1">+{Math.round(topPick.edge * 100)}% edge</span>
+                    )}
+                    {topPick.marketOdds != null && topPick.edge == null && (
                       <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
                     )}
                   </div>
@@ -254,7 +259,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
             )}
           </button>
 
-          {/* Expanded today's picks list */}
+          {/* Expanded highest edge list */}
           {todayOpen && todayPicks.length > 0 && (
             <div className="border-t border-white/5 divide-y divide-white/5">
               {todayPicks.map(tip => (
@@ -268,13 +273,19 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                       <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
                       <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
                         {tip.homeTeam} vs {tip.awayTeam}
-                        {tip.kickoff && <span className="ml-1.5 opacity-60">{format(new Date(tip.kickoff), 'HH:mm')}</span>}
+                        {tip.kickoff && (
+                          <span className="ml-1.5 opacity-60">
+                            {format(new Date(tip.kickoff), 'EEE d MMM, HH:mm')}
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {tip.marketOdds != null && (
+                      {tip.edge != null ? (
+                        <span className="font-mono text-sm font-bold text-teal-400">+{Math.round(tip.edge * 100)}%</span>
+                      ) : tip.marketOdds != null ? (
                         <span className="font-mono text-sm font-bold text-teal-400">{tip.marketOdds.toFixed(2)}</span>
-                      )}
+                      ) : null}
                       <span className={`text-sm font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : 'text-amber-400'}`}>
                         {tip.trustScore}<span className="text-[10px] text-muted-foreground/40">/10</span>
                       </span>

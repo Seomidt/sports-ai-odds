@@ -210,20 +210,22 @@ router.get("/analysis/daily-summary", async (_req, res) => {
       const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
       const yesterdayStart = new Date(todayStart); yesterdayStart.setDate(yesterdayStart.getDate() - 1);
 
+      const next7Days = new Date(now); next7Days.setDate(next7Days.getDate() + 7);
+
       const [todayRows, yesterdayRow, yesterdayTipsRow, dailyRows, roiRow, uncoveredRow] = await Promise.all([
-        // Today's top picks (upcoming, not yet resolved)
+        // Highest edge picks across next 7 days (upcoming, not yet resolved)
         pool.query(`
           SELECT id, fixture_id AS "fixtureId", home_team AS "homeTeam", away_team AS "awayTeam",
                  kickoff, league_name AS "leagueName", recommendation, bet_type AS "betType",
                  bet_side AS "betSide", trust_score AS "trustScore", reasoning,
-                 market_odds AS "marketOdds", value_rating AS "valueRating"
+                 market_odds AS "marketOdds", value_rating AS "valueRating", edge
           FROM ai_betting_tips
-          WHERE kickoff >= $1 AND outcome IS NULL AND bet_type != 'no_bet' AND trust_score >= 6
-          ORDER BY trust_score DESC, CASE value_rating
-            WHEN 'strong_value' THEN 4 WHEN 'value' THEN 3 WHEN 'fair' THEN 2 ELSE 1
-          END DESC
+          WHERE kickoff >= NOW() AND kickoff <= $1
+            AND outcome IS NULL AND bet_type != 'no_bet' AND trust_score >= 6
+            AND value_rating IN ('strong_value','value')
+          ORDER BY edge DESC NULLS LAST, trust_score DESC
           LIMIT 5
-        `, [todayStart]),
+        `, [next7Days]),
 
         // Yesterday's results summary (outcomes: 'hit', 'miss', 'partial')
         pool.query(`

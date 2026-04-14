@@ -65,6 +65,7 @@ export function Following() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [explainingAlertId, setExplainingAlertId] = useState<number | null>(null);
+  const [dismissedIds, setDismissedIds] = useState<Set<number>>(new Set());
 
   const { data: followedData, isLoading: isLoadingFollowed } = useQuery<{ fixtureIds: number[] }>({
     queryKey: ['followedFixtures', sessionId],
@@ -91,17 +92,17 @@ export function Following() {
     },
   });
 
-  const handleMarkRead = async (id: number) => {
-    try {
-      const res = await fetch(`/api/alerts/${id}/read`, {
+  const handleMarkRead = async (id: number, sessionAlertSessionId: string | null | undefined) => {
+    // Optimistically remove from view immediately — works for both session and broadcast alerts
+    setDismissedIds(prev => new Set([...prev, id]));
+    queryClient.invalidateQueries({ queryKey: ['globalUnreadAlerts', sessionId] });
+
+    // For session-owned alerts, also persist to DB
+    if (sessionAlertSessionId) {
+      fetch(`/api/alerts/${id}/read`, {
         method: 'POST',
         headers: { 'x-session-id': sessionId },
-      });
-      if (!res.ok) throw new Error('Failed to mark alert as read');
-      await refetchAlerts();
-      queryClient.invalidateQueries({ queryKey: ['globalUnreadAlerts', sessionId] });
-    } catch (e) {
-      console.error(e);
+      }).catch(console.error);
     }
   };
 
@@ -164,36 +165,37 @@ export function Following() {
             <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-4 border-b border-white/10 pb-2 flex items-center">
               <Bell className="w-5 h-5 mr-2 text-primary" />
               UNREAD ALERTS
-              {alertsData?.alerts?.length ? (
-                <span className="ml-3 bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full font-mono">{alertsData.alerts.length}</span>
-              ) : null}
+              {(() => { const n = (alertsData?.alerts ?? []).filter(a => !dismissedIds.has(a.id)).length; return n > 0 ? <span className="ml-3 bg-primary/20 text-primary text-xs px-2 py-0.5 rounded-full font-mono">{n}</span> : null; })()}
             </h2>
 
-            {!alertsData?.alerts?.length ? (
-              <div className="glass-card p-8 text-center rounded-xl">
-                <p className="text-sm text-muted-foreground">No unread alerts.</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {alertsData.alerts.map(alert => (
-                  <div key={alert.id} className="glass-card p-4 rounded-xl border border-primary/20 bg-primary/5">
-                    <div className="flex justify-between items-start mb-2">
-                      <span className="text-xs text-primary font-mono bg-primary/10 px-2 py-1 rounded">MATCH {alert.fixtureId}</span>
-                      <span className="text-xs text-muted-foreground font-mono">{format(new Date(alert.createdAt || Date.now()), 'HH:mm:ss')}</span>
+            {(() => {
+              const visibleAlerts = (alertsData?.alerts ?? []).filter(a => !dismissedIds.has(a.id));
+              return visibleAlerts.length === 0 ? (
+                <div className="glass-card p-8 text-center rounded-xl">
+                  <p className="text-sm text-muted-foreground">No unread alerts.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {visibleAlerts.map(alert => (
+                    <div key={alert.id} className="glass-card p-4 rounded-xl border border-primary/20 bg-primary/5">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs text-primary font-mono bg-primary/10 px-2 py-1 rounded">MATCH {alert.fixtureId}</span>
+                        <span className="text-xs text-muted-foreground font-mono">{format(new Date(alert.createdAt || Date.now()), 'HH:mm:ss')}</span>
+                      </div>
+                      <p className="text-sm text-white mb-4">{alert.alertText}</p>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="secondary" className="flex-1 text-xs" onClick={() => handleExplain(alert)} disabled={explainingAlertId === alert.id}>
+                          {explainingAlertId === alert.id ? <Activity className="w-4 h-4 mr-1 animate-pulse" /> : <Info className="w-4 h-4 mr-1" />} Explain
+                        </Button>
+                        <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => handleMarkRead(alert.id, alert.sessionId)}>
+                          <CheckCircle2 className="w-4 h-4 mr-1" /> Done
+                        </Button>
+                      </div>
                     </div>
-                    <p className="text-sm text-white mb-4">{alert.alertText}</p>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="secondary" className="flex-1 text-xs" onClick={() => handleExplain(alert)} disabled={explainingAlertId === alert.id}>
-                        {explainingAlertId === alert.id ? <Activity className="w-4 h-4 mr-1 animate-pulse" /> : <Info className="w-4 h-4 mr-1" />} Explain
-                      </Button>
-                      <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => handleMarkRead(alert.id)}>
-                        <CheckCircle2 className="w-4 h-4 mr-1" /> Ack
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

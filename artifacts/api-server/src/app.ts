@@ -16,9 +16,9 @@ app.use(
     serializers: {
       req(req) {
         return {
-          id: req.id,
+          id: res.id,
           method: req.method,
-          url: req.url?.split("?")[0],
+          url: res.url?.split("?")[0],
         };
       },
       res(res) {
@@ -88,3 +88,4 @@ app.use(clerkMiddleware());
 app.use("/api", router);
 
 export default app;
+import type { IncomingMessage, ServerResponse } from "http";

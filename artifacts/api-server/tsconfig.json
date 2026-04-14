@@ -15,3 +15,5 @@
     }
   ]
 }
+"esModuleInterop": true,
+"allowSyntheticDefaultImports": true

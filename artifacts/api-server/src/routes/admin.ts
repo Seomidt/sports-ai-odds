@@ -5,7 +5,7 @@ import { eq, sql, and } from "drizzle-orm";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
 import { getAiStats, getBettingTips } from "../ai/analysisLayer.js";
 import { requireAdmin } from "../middlewares/requireAuth.js";
-import { getSeedStatus, seedHistoricalData, syncOddsForFixture } from "../ingestion/poller.js";
+import { getSeedStatus, seedHistoricalData, syncOddsForFixture, forceFullSync } from "../ingestion/poller.js";
 import { clerkClient } from "@clerk/express";
 
 const router = Router();
@@ -140,6 +140,18 @@ router.post("/admin/seed-history", requireAdmin, (req, res): void => {
   }
   seedHistoricalData(seasons).catch(console.error);
   res.json({ started: true, seasons, message: `Historical seed started for last ${seasons} season(s)` });
+});
+
+// POST /api/admin/force-full-sync — re-sync everything for all upcoming fixtures, ignore all caches
+let fullSyncRunning = false;
+router.post("/admin/force-full-sync", requireAdmin, async (_req, res): Promise<void> => {
+  if (fullSyncRunning) {
+    res.status(409).json({ error: "A full sync is already running. Check server logs for progress." });
+    return;
+  }
+  fullSyncRunning = true;
+  res.json({ started: true, message: "Full sync started — fixtures, odds, predictions, H2H, injuries + AI tips are being refreshed. Check server logs or come back in a few minutes." });
+  forceFullSync().catch(console.error).finally(() => { fullSyncRunning = false; });
 });
 
 // POST /api/admin/force-sync/:fixtureId — force-refresh odds + regenerate AI tips for one fixture

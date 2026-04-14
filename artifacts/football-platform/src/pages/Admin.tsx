@@ -569,53 +569,91 @@ function BillingSection() {
 function ForceSyncSection() {
   const { toast } = useToast();
   const [fixtureIdInput, setFixtureIdInput] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingFull, setLoadingFull] = useState(false);
+  const [loadingFixture, setLoadingFixture] = useState(false);
 
-  const handleForceSync = async () => {
+  const handleForceFullSync = async () => {
+    setLoadingFull(true);
+    try {
+      const res = await fetch("/api/admin/force-full-sync", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? "Sync failed", variant: "destructive" });
+      } else {
+        toast({ title: "Full sync started", description: data.message });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setLoadingFull(false);
+    }
+  };
+
+  const handleForceFixtureSync = async () => {
     const id = parseInt(fixtureIdInput.trim(), 10);
     if (!id) {
       toast({ title: "Enter a valid fixture ID", variant: "destructive" });
       return;
     }
-    setLoading(true);
+    setLoadingFixture(true);
     try {
       const res = await fetch(`/api/admin/force-sync/${id}`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast({ title: data.error ?? "Sync failed", variant: "destructive" });
       } else {
-        toast({ title: "Sync started", description: data.message });
+        toast({ title: "Fixture sync started", description: data.message });
       }
     } catch {
       toast({ title: "Network error", variant: "destructive" });
     } finally {
-      setLoading(false);
+      setLoadingFixture(false);
     }
   };
 
   return (
-    <div className="glass-card p-6 rounded-xl space-y-4">
+    <div className="glass-card p-6 rounded-xl space-y-6">
       <div>
-        <h3 className="text-base font-bold font-mono text-white mb-1">Force Sync Fixture</h3>
+        <h3 className="text-base font-bold font-mono text-white mb-1">Force Sync</h3>
         <p className="text-xs text-muted-foreground">
-          Re-fetch odds from the API and regenerate AI tips for a specific fixture. Useful when data is missing or stale.
+          Ignores all freshness caches. Treats the database as empty and re-fetches everything from the API — fixtures, odds, predictions, H2H, injuries — then regenerates AI tips.
         </p>
       </div>
-      <div className="flex gap-3">
-        <input
-          type="number"
-          placeholder="Fixture ID e.g. 1534912"
-          value={fixtureIdInput}
-          onChange={(e) => setFixtureIdInput(e.target.value)}
-          className="flex-1 bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm font-mono text-white placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
-        />
+
+      {/* Full sync */}
+      <div className="space-y-2">
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">All upcoming fixtures (7-day window)</div>
         <button
-          onClick={handleForceSync}
-          disabled={loading || !fixtureIdInput}
-          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-mono font-bold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          onClick={handleForceFullSync}
+          disabled={loadingFull}
+          className="w-full h-11 bg-primary text-primary-foreground text-sm font-mono font-bold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {loading ? "Syncing..." : "Force Sync"}
+          {loadingFull ? "Syncing everything..." : "Force Full Sync"}
         </button>
+        <p className="text-[10px] text-muted-foreground/60 font-mono">
+          Takes 2-5 minutes depending on fixture count. Progress logged server-side.
+        </p>
+      </div>
+
+      {/* Per-fixture sync */}
+      <div className="space-y-2 pt-2 border-t border-white/10">
+        <div className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Single fixture</div>
+        <div className="flex gap-3">
+          <input
+            type="number"
+            placeholder="Fixture ID e.g. 1534912"
+            value={fixtureIdInput}
+            onChange={(e) => setFixtureIdInput(e.target.value)}
+            className="flex-1 bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm font-mono text-white placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+          />
+          <button
+            onClick={handleForceFixtureSync}
+            disabled={loadingFixture || !fixtureIdInput}
+            className="px-4 py-2 bg-white/10 text-white text-sm font-mono font-bold rounded-md hover:bg-white/15 disabled:opacity-50 transition-colors border border-white/10"
+          >
+            {loadingFixture ? "Syncing..." : "Sync"}
+          </button>
+        </div>
       </div>
     </div>
   );

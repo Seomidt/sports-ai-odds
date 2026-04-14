@@ -2084,6 +2084,156 @@ async function scheduleDailySignalCron() {
 }
 
 /**
+ * Full force-sync for all upcoming fixtures — ignores ALL freshness checks and caches.
+ * Behaves as if the database has nothing: re-fetches fixtures, odds, predictions, H2H,
+ * injuries, then deletes and regenerates AI tips.
+ * Safe to call multiple times; upserts handle duplicates.
+ */
+export async function forceFullSync(onProgress?: (msg: string) => void): Promise<void> {
+  const log = (msg: string) => {
+    console.log(`[force-full-sync] ${msg}`);
+    onProgress?.(msg);
+  };
+
+  const now = new Date();
+  const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+  // ── 1. Re-sync fixture lists for next 7 days ─────────────────────────────
+  log("Syncing fixture lists for next 7 days...");
+  for (let i = 0; i < 7; i++) {
+    const date = getDateOffset(i);
+    await syncFixturesForDate(date).catch(console.error);
+  }
+
+  // ── 2. Get all upcoming NS/TBD fixtures in 7-day window ──────────────────
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and, gte, lte, inArray }) =>
+      and(gte(f.kickoff, now), lte(f.kickoff, in7d), inArray(f.statusShort, ["NS", "TBD"])),
+  });
+  log(`Found ${upcoming.length} upcoming fixtures to sync`);
+
+  if (upcoming.length === 0) return;
+
+  // ── 3. Force-sync ALL odds markets (no freshness skip) ───────────────────
+  log("Syncing odds markets for all upcoming fixtures...");
+  for (const fix of upcoming) {
+    const seen = new Set<string>();
+    const snappedAt = new Date();
+
+    const markets = await fetchOddsAllMarkets(fix.fixtureId).catch(() => null);
+    if (markets) {
+      for (const m of markets) {
+        if (seen.has(m.bookmaker)) continue;
+        seen.add(m.bookmaker);
+        await db.delete(oddsMarkets).where(
+          and(eq(oddsMarkets.fixtureId, fix.fixtureId), eq(oddsMarkets.bookmaker, m.bookmaker))
+        );
+        await db.insert(oddsMarkets).values({
+          fixtureId: fix.fixtureId,
+          bookmaker: m.bookmaker,
+          markets: m.markets as Record<string, unknown>,
+          snappedAt,
+        });
+      }
+    }
+
+    for (const [bmId, bmName] of Object.entries(PRIORITY_BOOKMAKER_IDS)) {
+      if (seen.has(bmName)) continue;
+      const bmOdds = await fetchOddsForBookmaker(fix.fixtureId, Number(bmId)).catch(() => null);
+      if (!bmOdds || bmOdds.bookmakers.length === 0) continue;
+      const bm = bmOdds.bookmakers[0]!;
+      seen.add(bm.name);
+      const mkt: Record<string, Array<{ value: string; odd: string }>> = {};
+      for (const bet of bm.bets) {
+        mkt[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
+      }
+      await db.delete(oddsMarkets).where(
+        and(eq(oddsMarkets.fixtureId, fix.fixtureId), eq(oddsMarkets.bookmaker, bm.name))
+      );
+      await db.insert(oddsMarkets).values({
+        fixtureId: fix.fixtureId,
+        bookmaker: bm.name,
+        markets: mkt as Record<string, unknown>,
+        snappedAt,
+      });
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+  log("Odds markets synced");
+
+  // ── 4. Force-sync predictions for all upcoming fixtures ──────────────────
+  log("Syncing predictions...");
+  for (const fix of upcoming) {
+    await syncPredictionForFixture(fix.fixtureId).catch(console.error);
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  log("Predictions synced");
+
+  // ── 5. Force-sync H2H for all upcoming fixtures (not just 48h) ───────────
+  log("Syncing H2H...");
+  for (const fix of upcoming) {
+    if (!fix.homeTeamId || !fix.awayTeamId) continue;
+    const data = await fetchH2H(fix.homeTeamId, fix.awayTeamId, 10).catch(() => null);
+    if (!data) continue;
+    for (const entry of data) {
+      if (!["FT", "AET", "PEN"].includes(entry.fixture.status.short)) continue;
+      await db.insert(h2hFixtures).values({
+        fixtureId: entry.fixture.id,
+        leagueId: entry.league.id,
+        leagueName: entry.league.name,
+        seasonYear: entry.league.season,
+        homeTeamId: entry.teams.home.id,
+        homeTeamName: entry.teams.home.name,
+        homeTeamLogo: entry.teams.home.logo,
+        awayTeamId: entry.teams.away.id,
+        awayTeamName: entry.teams.away.name,
+        awayTeamLogo: entry.teams.away.logo,
+        homeGoals: entry.goals.home,
+        awayGoals: entry.goals.away,
+        kickoff: entry.fixture.date ? new Date(entry.fixture.date) : null,
+        statusShort: entry.fixture.status.short,
+        forTeam1Id: fix.homeTeamId,
+        forTeam2Id: fix.awayTeamId,
+      }).onConflictDoNothing();
+    }
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  log("H2H synced");
+
+  // ── 6. Force-sync injuries for all upcoming fixtures ─────────────────────
+  log("Syncing injuries...");
+  for (const fix of upcoming) {
+    const data = await fetchFixtureInjuries(fix.fixtureId).catch(() => null);
+    if (!data || data.length === 0) continue;
+    for (const inj of data) {
+      await db.insert(injuries).values({
+        fixtureId: fix.fixtureId,
+        playerId: inj.player.id,
+        playerName: inj.player.name,
+        teamId: inj.team.id,
+        type: inj.player.type,
+        reason: inj.player.reason,
+      }).onConflictDoNothing();
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  log("Injuries synced");
+
+  // ── 7. Delete and regenerate AI tips for all upcoming fixtures ───────────
+  log("Deleting existing AI tips and regenerating...");
+  const ids = upcoming.map((f) => f.fixtureId);
+  if (ids.length > 0) {
+    for (const id of ids) {
+      await db.delete(aiBettingTips).where(eq(aiBettingTips.fixtureId, id));
+    }
+  }
+  log("Existing tips deleted — running AI generation in background");
+
+  // Fire and forget: bulk generate runs asynchronously
+  bulkGenerateAiTips(upcoming.length).catch(console.error);
+}
+
+/**
  * Force-sync odds for a single fixture from API-Football, bypassing the freshness cache.
  * Returns true if any odds were written to the DB.
  */

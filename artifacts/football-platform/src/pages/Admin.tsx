@@ -566,6 +566,61 @@ function BillingSection() {
   );
 }
 
+function ForceSyncSection() {
+  const { toast } = useToast();
+  const [fixtureIdInput, setFixtureIdInput] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleForceSync = async () => {
+    const id = parseInt(fixtureIdInput.trim(), 10);
+    if (!id) {
+      toast({ title: "Enter a valid fixture ID", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/admin/force-sync/${id}`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: data.error ?? "Sync failed", variant: "destructive" });
+      } else {
+        toast({ title: "Sync started", description: data.message });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="glass-card p-6 rounded-xl space-y-4">
+      <div>
+        <h3 className="text-base font-bold font-mono text-white mb-1">Force Sync Fixture</h3>
+        <p className="text-xs text-muted-foreground">
+          Re-fetch odds from the API and regenerate AI tips for a specific fixture. Useful when data is missing or stale.
+        </p>
+      </div>
+      <div className="flex gap-3">
+        <input
+          type="number"
+          placeholder="Fixture ID e.g. 1534912"
+          value={fixtureIdInput}
+          onChange={(e) => setFixtureIdInput(e.target.value)}
+          className="flex-1 bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm font-mono text-white placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary/50"
+        />
+        <button
+          onClick={handleForceSync}
+          disabled={loading || !fixtureIdInput}
+          className="px-4 py-2 bg-primary text-primary-foreground text-sm font-mono font-bold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
+        >
+          {loading ? "Syncing..." : "Force Sync"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function Admin() {
   return (
     <AdminErrorBoundary>
@@ -896,6 +951,9 @@ function AdminContent() {
 
         {/* Historical Data Seed Section */}
         <HistoricalDataSection />
+
+        {/* Force Sync Section */}
+        <ForceSyncSection />
 
         {/* Billing Section */}
         <div className="border-t border-white/10 pt-8">

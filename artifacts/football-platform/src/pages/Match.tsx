@@ -123,8 +123,6 @@ export function Match() {
           </button>
           <span>/</span>
           <span>{fixture.leagueName}</span>
-          <span>/</span>
-          <span>ID: {fixture.fixtureId}</span>
         </div>
 
         {/* Header Card */}

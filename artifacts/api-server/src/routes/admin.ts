@@ -1,11 +1,11 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and } from "drizzle-orm";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
-import { getAiStats } from "../ai/analysisLayer.js";
+import { getAiStats, getBettingTips } from "../ai/analysisLayer.js";
 import { requireAdmin } from "../middlewares/requireAuth.js";
-import { getSeedStatus, seedHistoricalData } from "../ingestion/poller.js";
+import { getSeedStatus, seedHistoricalData, syncOddsForFixture } from "../ingestion/poller.js";
 import { clerkClient } from "@clerk/express";
 
 const router = Router();
@@ -140,6 +140,41 @@ router.post("/admin/seed-history", requireAdmin, (req, res): void => {
   }
   seedHistoricalData(seasons).catch(console.error);
   res.json({ started: true, seasons, message: `Historical seed started for last ${seasons} season(s)` });
+});
+
+// POST /api/admin/force-sync/:fixtureId — force-refresh odds + regenerate AI tips for one fixture
+router.post("/admin/force-sync/:fixtureId", requireAdmin, async (req, res): Promise<void> => {
+  const fixtureId = parseInt(req.params["fixtureId"] ?? "0", 10);
+  if (!fixtureId) {
+    res.status(400).json({ error: "Invalid fixtureId" });
+    return;
+  }
+
+  // Verify fixture exists
+  const fix = await db.query.fixtures.findFirst({ where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId) });
+  if (!fix) {
+    res.status(404).json({ error: "Fixture not found" });
+    return;
+  }
+
+  // Step 1: Force-sync odds from API-Football
+  const oddsWritten = await syncOddsForFixture(fixtureId).catch((e) => { console.error("[admin] odds sync error:", e); return false; });
+
+  // Step 2: Delete existing tips so AI can regenerate fresh
+  await db.delete(aiBettingTips).where(eq(aiBettingTips.fixtureId, fixtureId));
+
+  // Step 3: Generate new AI tips (non-blocking, returns immediately)
+  const tipsPromise = getBettingTips(fixtureId).catch((e) => { console.error("[admin] tip gen error:", e); return null; });
+
+  res.json({
+    fixtureId,
+    oddsRefreshed: oddsWritten,
+    tipsRegenStarted: true,
+    message: `Odds synced (${oddsWritten ? "data found" : "no odds from API"}). AI tips regenerating — refresh the match page in ~30s.`,
+  });
+
+  // Await in background so errors are logged
+  tipsPromise.catch(console.error);
 });
 
 export default router;

@@ -2083,6 +2083,58 @@ async function scheduleDailySignalCron() {
   }, msUntilNext);
 }
 
+/**
+ * Force-sync odds for a single fixture from API-Football, bypassing the freshness cache.
+ * Returns true if any odds were written to the DB.
+ */
+export async function syncOddsForFixture(fixtureId: number): Promise<boolean> {
+  const seen = new Set<string>();
+  const snappedAt = new Date();
+  let wrote = false;
+
+  const markets = await fetchOddsAllMarkets(fixtureId);
+  if (markets) {
+    for (const m of markets) {
+      if (seen.has(m.bookmaker)) continue;
+      seen.add(m.bookmaker);
+      await db.delete(oddsMarkets).where(
+        and(eq(oddsMarkets.fixtureId, fixtureId), eq(oddsMarkets.bookmaker, m.bookmaker))
+      );
+      await db.insert(oddsMarkets).values({
+        fixtureId,
+        bookmaker: m.bookmaker,
+        markets: m.markets as Record<string, unknown>,
+        snappedAt,
+      });
+      wrote = true;
+    }
+  }
+
+  for (const [bmId, bmName] of Object.entries(PRIORITY_BOOKMAKER_IDS)) {
+    if (seen.has(bmName)) continue;
+    const bmOdds = await fetchOddsForBookmaker(fixtureId, Number(bmId));
+    if (!bmOdds || bmOdds.bookmakers.length === 0) continue;
+    const bm = bmOdds.bookmakers[0]!;
+    seen.add(bm.name);
+    const mkt: Record<string, Array<{ value: string; odd: string }>> = {};
+    for (const bet of bm.bets) {
+      mkt[bet.name] = bet.values.map((v) => ({ value: v.value, odd: v.odd }));
+    }
+    await db.delete(oddsMarkets).where(
+      and(eq(oddsMarkets.fixtureId, fixtureId), eq(oddsMarkets.bookmaker, bm.name))
+    );
+    await db.insert(oddsMarkets).values({
+      fixtureId,
+      bookmaker: bm.name,
+      markets: mkt as Record<string, unknown>,
+      snappedAt,
+    });
+    wrote = true;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return wrote;
+}
+
 export function startPoller() {
   if (pollerStarted) return;
   pollerStarted = true;

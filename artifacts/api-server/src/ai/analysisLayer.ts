@@ -829,7 +829,11 @@ export async function getBettingTips(fixtureId: number) {
 
   const ctx = await buildBettingContext(fixtureId);
 
-  if (!ctx.odds.home && !ctx.odds.draw && !ctx.odds.away) {
+  // Only bail if we have literally no data at all — form/H2H/signals is enough to generate tips
+  const hasOdds = !!(ctx.odds.home || ctx.odds.draw || ctx.odds.away);
+  const hasSignals = Object.keys(ctx.signals ?? {}).length > 0;
+  const hasPrediction = !!ctx.prediction;
+  if (!hasOdds && !hasSignals && !hasPrediction) {
     return null;
   }
 

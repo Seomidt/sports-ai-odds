@@ -344,11 +344,11 @@ export const followedFixtures = pgTable(
   "followed_fixtures",
   {
     id: serial("id").primaryKey(),
-    sessionId: text("session_id").notNull(),
+    userId: text("user_id").notNull(),
     fixtureId: integer("fixture_id").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
-  (t) => [unique("followed_fixtures_unique").on(t.sessionId, t.fixtureId)]
+  (t) => [unique("followed_fixtures_unique").on(t.userId, t.fixtureId)]
 );
 
 export const alertLog = pgTable(

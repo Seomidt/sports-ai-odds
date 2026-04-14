@@ -2,52 +2,54 @@ import { Router } from "express";
 import { db, pool } from "@workspace/db";
 import { followedFixtures, alertLog } from "@workspace/db/schema";
 import { eq, and } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
+import { requireAuth } from "../middlewares/requireAuth.js";
 import { cacheGet, cacheSet, cacheDel, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
-// POST /api/fixtures/:id/follow
-router.post("/fixtures/:id/follow", async (req, res) => {
+// POST /api/fixtures/:id/follow — requires auth, follows per Clerk userId
+router.post("/fixtures/:id/follow", requireAuth, async (req, res) => {
   const fixtureId = parseInt(req.params.id ?? "0");
-  const sessionId = req.headers["x-session-id"] as string | undefined;
+  const { userId } = getAuth(req);
 
   if (!fixtureId) return res.status(400).json({ error: "Invalid fixture id" });
-  if (!sessionId) return res.status(400).json({ error: "Missing x-session-id header" });
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   await db
     .insert(followedFixtures)
-    .values({ sessionId, fixtureId, createdAt: new Date() })
+    .values({ userId, fixtureId, createdAt: new Date() })
     .onConflictDoNothing();
 
   return res.json({ followed: true, fixtureId });
 });
 
-// DELETE /api/fixtures/:id/follow
-router.delete("/fixtures/:id/follow", async (req, res) => {
+// DELETE /api/fixtures/:id/follow — requires auth
+router.delete("/fixtures/:id/follow", requireAuth, async (req, res) => {
   const fixtureId = parseInt(req.params.id ?? "0");
-  const sessionId = req.headers["x-session-id"] as string | undefined;
+  const { userId } = getAuth(req);
 
-  if (!fixtureId || !sessionId) return res.status(400).json({ error: "Invalid params" });
+  if (!fixtureId || !userId) return res.status(400).json({ error: "Invalid params" });
 
   await db
     .delete(followedFixtures)
     .where(
       and(
         eq(followedFixtures.fixtureId, fixtureId),
-        eq(followedFixtures.sessionId, sessionId)
+        eq(followedFixtures.userId, userId)
       )
     );
 
   return res.json({ unfollowed: true, fixtureId });
 });
 
-// GET /api/fixtures/followed
-router.get("/fixtures/followed", async (req, res) => {
-  const sessionId = req.headers["x-session-id"] as string | undefined;
-  if (!sessionId) return res.status(400).json({ error: "Missing x-session-id header" });
+// GET /api/fixtures/followed — requires auth, returns only this user's followed fixtures
+router.get("/fixtures/followed", requireAuth, async (req, res) => {
+  const { userId } = getAuth(req);
+  if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
   const rows = await db.query.followedFixtures.findMany({
-    where: (f, { eq: eqFn }) => eqFn(f.sessionId, sessionId),
+    where: (f, { eq: eqFn }) => eqFn(f.userId, userId),
   });
 
   return res.json({ fixtureIds: rows.map((r) => r.fixtureId) });

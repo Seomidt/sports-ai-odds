@@ -22,6 +22,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { Link } from "wouter";
 import { useSession } from "@/lib/session";
+import { useUser } from "@clerk/react";
 import { format } from "date-fns";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useState, Component, useCallback } from "react";
@@ -32,6 +33,7 @@ export function Match() {
   const [, params] = useRoute("/match/:id");
   const id = Number(params?.id);
   const { sessionId } = useSession();
+  const { user } = useUser();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
 
@@ -60,12 +62,10 @@ export function Match() {
   const { toast } = useToast();
 
   const { data: followedData, refetch: refetchFollowed } = useQuery<{ fixtureIds: number[] }>({
-    queryKey: ['followedFixtures', sessionId],
-    enabled: !!sessionId,
+    queryKey: ['followedFixtures', user?.id],
+    enabled: !!user?.id,
     queryFn: async () => {
-      const res = await fetch('/api/fixtures/followed', {
-        headers: { 'x-session-id': sessionId },
-      });
+      const res = await fetch('/api/fixtures/followed');
       if (!res.ok) throw new Error('Failed to fetch followed fixtures');
       return res.json();
     },
@@ -76,10 +76,7 @@ export function Match() {
   const toggleFollow = async () => {
     try {
       const method = isFollowed ? 'DELETE' : 'POST';
-      const res = await fetch(`/api/fixtures/${id}/follow`, {
-        method,
-        headers: { 'x-session-id': sessionId },
-      });
+      const res = await fetch(`/api/fixtures/${id}/follow`, { method });
       if (!res.ok) throw new Error('Follow request failed');
       await refetchFollowed();
     } catch {

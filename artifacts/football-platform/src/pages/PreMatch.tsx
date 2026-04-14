@@ -10,6 +10,13 @@ import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
+const SPECIAL_STATUS_LABEL: Record<string, string> = {
+  PST: "Postponed",
+  CANC: "Cancelled",
+  ABD: "Abandoned",
+  SUSP: "Suspended",
+  TBD: "TBD",
+};
 
 function isPrematch(f: Fixture) {
   const s = f.statusShort ?? "";
@@ -159,7 +166,11 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
               icon={fixture.weatherIcon ?? null}
             />
           </div>
-          {signals.length > 0 ? (
+          {SPECIAL_STATUS_LABEL[fixture.statusShort ?? ""] ? (
+            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded">
+              {SPECIAL_STATUS_LABEL[fixture.statusShort!]}
+            </span>
+          ) : signals.length > 0 ? (
             <span className={`inline-flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${
               signals.length >= 4
                 ? "text-primary bg-primary/10 border border-primary/20"

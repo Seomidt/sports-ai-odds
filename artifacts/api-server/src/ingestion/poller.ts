@@ -1168,14 +1168,38 @@ async function syncTopDiscipline() {
 
 async function syncOddsAllMarketsForUpcoming() {
   const now = new Date();
-  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const staleThreshold = new Date(now.getTime() - 6 * 60 * 60 * 1000); // 6h ago
 
+  // Fetch all upcoming fixtures in the next 7 days
   const upcoming = await db.query.fixtures.findMany({
-    where: (f, { and, gte, lte }) => and(gte(f.kickoff, now), lte(f.kickoff, in24h)),
-    limit: 30,
+    where: (f, { and, gte, lte, inArray }) => and(
+      gte(f.kickoff, now),
+      lte(f.kickoff, in7d),
+      inArray(f.statusShort, ["NS", "TBD"]),
+    ),
+    limit: 60,
   });
 
-  for (const fix of upcoming) {
+  // Find which fixtures already have fresh odds (< 6h old) — skip those to save quota
+  const freshOdds = upcoming.length > 0
+    ? await db.select({ fixtureId: oddsMarkets.fixtureId })
+        .from(oddsMarkets)
+        .where(and(
+          inArray(oddsMarkets.fixtureId, upcoming.map(f => f.fixtureId)),
+          gte(oddsMarkets.snappedAt, staleThreshold),
+        ))
+    : [];
+  const hasFreshOdds = new Set(freshOdds.map(r => r.fixtureId));
+
+  const fixturesForSync = upcoming.filter(f => !hasFreshOdds.has(f.fixtureId));
+  if (fixturesForSync.length === 0) {
+    console.log(`[poller] Full odds markets: all ${upcoming.length} fixtures have fresh data — skipping`);
+    return;
+  }
+  console.log(`[poller] Full odds markets: syncing ${fixturesForSync.length} fixtures (${upcoming.length - fixturesForSync.length} already fresh)`);
+
+  for (const fix of fixturesForSync) {
     const seen = new Set<string>();
     const snappedAt = new Date();
 
@@ -1220,7 +1244,7 @@ async function syncOddsAllMarketsForUpcoming() {
       await new Promise((r) => setTimeout(r, 150));
     }
   }
-  console.log(`[poller] Full odds markets synced for ${upcoming.length} upcoming fixtures`);
+  console.log(`[poller] Full odds markets synced for ${fixturesForSync.length} fixtures (7-day window)`);
 }
 
 // Track fixtures that have already had post-match processing to avoid duplicates

@@ -654,8 +654,8 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                         <div className="text-[9px] font-mono text-teal-400/60 uppercase tracking-wider truncate">{homeTeam} — Top Scorer</div>
                         <div className="text-xs font-mono text-white truncate">{homeTopScorer.playerName}</div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold font-mono text-teal-400">{homeTopScorer.goals ?? 0}G</span>
-                          {homeTopScorer.assists != null && <span className="text-xs font-mono text-violet-400/70">{homeTopScorer.assists}A</span>}
+                          <span className="text-sm font-bold font-mono text-teal-400">{homeTopScorer.goals ?? 0} mål</span>
+                          {homeTopScorer.assists != null && <span className="text-xs font-mono text-violet-400/70">{homeTopScorer.assists} ass</span>}
                         </div>
                       </div>
                     )}
@@ -664,8 +664,8 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                         <div className="text-[9px] font-mono text-violet-400/60 uppercase tracking-wider truncate">{awayTeam} — Top Scorer</div>
                         <div className="text-xs font-mono text-white truncate">{awayTopScorer.playerName}</div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold font-mono text-teal-400">{awayTopScorer.goals ?? 0}G</span>
-                          {awayTopScorer.assists != null && <span className="text-xs font-mono text-violet-400/70">{awayTopScorer.assists}A</span>}
+                          <span className="text-sm font-bold font-mono text-teal-400">{awayTopScorer.goals ?? 0} mål</span>
+                          {awayTopScorer.assists != null && <span className="text-xs font-mono text-violet-400/70">{awayTopScorer.assists} ass</span>}
                         </div>
                       </div>
                     )}

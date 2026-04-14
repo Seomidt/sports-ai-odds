@@ -10,7 +10,7 @@ import { Layout } from "@/components/Layout";
 import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, LogIn } from "lucide-react";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { format } from "date-fns";
-import { useState, Component, ReactNode } from "react";
+import { useState, useRef, Component, ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -574,21 +574,50 @@ function ForceSyncSection() {
   const [loadingFull, setLoadingFull] = useState(false);
   const [loadingFixture, setLoadingFixture] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+  };
+
+  const startPolling = () => {
+    stopPolling();
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/admin/sync-status");
+        const data = await res.json();
+        if (!data.running) {
+          stopPolling();
+          setLoadingFull(false);
+          if (data.error) {
+            toast({ title: "Sync fejlede", description: data.error, variant: "destructive" });
+          } else if (data.result) {
+            setSyncResult(data.result);
+          }
+        }
+      } catch {
+        stopPolling();
+        setLoadingFull(false);
+        toast({ title: "Mistede forbindelsen under sync", variant: "destructive" });
+      }
+    }, 3000);
+  };
 
   const handleForceFullSync = async () => {
-    setLoadingFull(true);
     setSyncResult(null);
+    setLoadingFull(true);
     try {
       const res = await fetch("/api/admin/force-full-sync", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
-        toast({ title: data.error ?? "Sync failed", variant: "destructive" });
-      } else {
-        setSyncResult(data.result);
+        toast({ title: data.error ?? "Sync fejlede", variant: "destructive" });
+        setLoadingFull(false);
+        return;
       }
+      // Started — now poll for completion
+      startPolling();
     } catch {
-      toast({ title: "Network error", variant: "destructive" });
-    } finally {
+      toast({ title: "Netværksfejl", variant: "destructive" });
       setLoadingFull(false);
     }
   };

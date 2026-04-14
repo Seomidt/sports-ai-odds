@@ -142,23 +142,31 @@ router.post("/admin/seed-history", requireAdmin, (req, res): void => {
   res.json({ started: true, seasons, message: `Historical seed started for last ${seasons} season(s)` });
 });
 
-// POST /api/admin/force-full-sync — fill gaps for all upcoming fixtures, returns result counts
-let fullSyncRunning = false;
-router.post("/admin/force-full-sync", requireAdmin, async (_req, res): Promise<void> => {
-  if (fullSyncRunning) {
+// In-memory sync state — polled by frontend
+let syncState: { running: boolean; result: ForceSyncResult | null; error: string | null; startedAt: Date | null } = {
+  running: false, result: null, error: null, startedAt: null,
+};
+
+// GET /api/admin/sync-status — poll for current sync state
+router.get("/admin/sync-status", requireAdmin, (_req, res): void => {
+  res.json(syncState);
+});
+
+// POST /api/admin/force-full-sync — fire-and-forget; poll /admin/sync-status for result
+router.post("/admin/force-full-sync", requireAdmin, (_req, res): void => {
+  if (syncState.running) {
     res.status(409).json({ error: "A full sync is already running." });
     return;
   }
-  fullSyncRunning = true;
-  try {
-    const result: ForceSyncResult = await forceFullSync();
-    res.json({ ok: true, result });
-  } catch (err) {
-    console.error("[force-full-sync] Error:", err);
-    res.status(500).json({ error: "Sync failed. Check server logs." });
-  } finally {
-    fullSyncRunning = false;
-  }
+  syncState = { running: true, result: null, error: null, startedAt: new Date() };
+  res.json({ started: true });
+
+  forceFullSync()
+    .then((result) => { syncState = { running: false, result, error: null, startedAt: syncState.startedAt }; })
+    .catch((err) => {
+      console.error("[force-full-sync] Error:", err);
+      syncState = { running: false, result: null, error: String(err), startedAt: syncState.startedAt };
+    });
 });
 
 // POST /api/admin/force-sync/:fixtureId — force-refresh odds + regenerate AI tips for one fixture

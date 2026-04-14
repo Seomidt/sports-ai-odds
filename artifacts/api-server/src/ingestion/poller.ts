@@ -2083,12 +2083,21 @@ async function scheduleDailySignalCron() {
   }, msUntilNext);
 }
 
+export interface ForceSyncResult {
+  fixtures: number;
+  oddsFetched: number;
+  predictionsFetched: number;
+  h2hFetched: number;
+  injuriesFetched: number;
+  tipsQueued: number;
+}
+
 /**
  * Fill-gaps sync for all upcoming fixtures in the next 7 days.
  * Only fetches data that is genuinely missing from the database.
  * Does NOT re-fetch or overwrite data that already exists.
  */
-export async function forceFullSync(onProgress?: (msg: string) => void): Promise<void> {
+export async function forceFullSync(onProgress?: (msg: string) => void): Promise<ForceSyncResult> {
   const log = (msg: string) => {
     console.log(`[force-full-sync] ${msg}`);
     onProgress?.(msg);
@@ -2110,9 +2119,10 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
       andFn(gteFn(f.kickoff, now), lte(f.kickoff, in7d), inArr(f.statusShort, ["NS", "TBD"])),
   });
   log(`Found ${upcoming.length} upcoming fixtures`);
-  if (upcoming.length === 0) return;
+  if (upcoming.length === 0) return { fixtures: 0, oddsFetched: 0, predictionsFetched: 0, h2hFetched: 0, injuriesFetched: 0, tipsQueued: 0 };
 
   const allIds = upcoming.map((f) => f.fixtureId);
+  const result: ForceSyncResult = { fixtures: upcoming.length, oddsFetched: 0, predictionsFetched: 0, h2hFetched: 0, injuriesFetched: 0, tipsQueued: 0 };
 
   // ── 3. Odds: only fetch for fixtures that have NO odds at all ─────────────
   const withOdds = new Set(
@@ -2123,6 +2133,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   );
   const missingOdds = upcoming.filter((f) => !withOdds.has(f.fixtureId));
   log(`Odds: ${withOdds.size} already have odds, fetching for ${missingOdds.length} missing`);
+  result.oddsFetched = missingOdds.length;
 
   for (const fix of missingOdds) {
     const seen = new Set<string>();
@@ -2172,6 +2183,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   );
   const missingPredictions = upcoming.filter((f) => !withPredictions.has(f.fixtureId));
   log(`Predictions: ${withPredictions.size} already present, fetching ${missingPredictions.length} missing`);
+  result.predictionsFetched = missingPredictions.length;
 
   for (const fix of missingPredictions) {
     await syncPredictionForFixture(fix.fixtureId).catch(console.error);
@@ -2188,6 +2200,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
         andFn(eqFn(h.forTeam1Id, fix.homeTeamId!), eqFn(h.forTeam2Id, fix.awayTeamId!)),
     });
     if (existing) continue; // Already have H2H for this pair
+    result.h2hFetched++;
 
     const data = await fetchH2H(fix.homeTeamId, fix.awayTeamId, 10).catch(() => null);
     if (!data) continue;
@@ -2225,6 +2238,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   );
   const missingInjuries = upcoming.filter((f) => !withInjuries.has(f.fixtureId));
   log(`Injuries: ${withInjuries.size} already present, fetching ${missingInjuries.length} missing`);
+  result.injuriesFetched = missingInjuries.length;
 
   for (const fix of missingInjuries) {
     const data = await fetchFixtureInjuries(fix.fixtureId).catch(() => null);
@@ -2245,9 +2259,17 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
 
   // ── 7. AI tips: only generate for fixtures that have fewer than 10 tips ───
   log("Generating AI tips for fixtures with missing tips...");
+  const tipsCountRows = await db
+    .selectDistinct({ fixtureId: aiBettingTips.fixtureId })
+    .from(aiBettingTips)
+    .where(inArray(aiBettingTips.fixtureId, allIds));
+  const withTips = new Set(tipsCountRows.map((r) => r.fixtureId));
+  result.tipsQueued = upcoming.filter((f) => !withTips.has(f.fixtureId)).length;
   // bulkGenerateAiTips already skips fixtures with ≥10 tips — no delete needed
   bulkGenerateAiTips(upcoming.length).catch(console.error);
-  log("AI tip generation queued in background");
+  log(`AI tip generation queued in background (${result.tipsQueued} fixtures need tips)`);
+
+  return result;
 }
 
 /**

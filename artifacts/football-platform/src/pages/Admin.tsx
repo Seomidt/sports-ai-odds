@@ -566,21 +566,25 @@ function BillingSection() {
   );
 }
 
+interface SyncResult { fixtures: number; oddsFetched: number; predictionsFetched: number; h2hFetched: number; injuriesFetched: number; tipsQueued: number; }
+
 function ForceSyncSection() {
   const { toast } = useToast();
   const [fixtureIdInput, setFixtureIdInput] = useState("");
   const [loadingFull, setLoadingFull] = useState(false);
   const [loadingFixture, setLoadingFixture] = useState(false);
+  const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
 
   const handleForceFullSync = async () => {
     setLoadingFull(true);
+    setSyncResult(null);
     try {
       const res = await fetch("/api/admin/force-full-sync", { method: "POST" });
       const data = await res.json();
       if (!res.ok) {
         toast({ title: data.error ?? "Sync failed", variant: "destructive" });
       } else {
-        toast({ title: "Full sync started", description: data.message });
+        setSyncResult(data.result);
       }
     } catch {
       toast({ title: "Network error", variant: "destructive" });
@@ -628,11 +632,41 @@ function ForceSyncSection() {
           disabled={loadingFull}
           className="w-full h-11 bg-primary text-primary-foreground text-sm font-mono font-bold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
-          {loadingFull ? "Syncing everything..." : "Force Full Sync"}
+          {loadingFull ? "Syncing — please wait..." : "Force Full Sync"}
         </button>
         <p className="text-[10px] text-muted-foreground/60 font-mono">
-          Takes 2-5 minutes depending on fixture count. Progress logged server-side.
+          Knappen er aktiv mens den kører. Kun manglende data hentes.
         </p>
+
+        {syncResult && (
+          <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-4 font-mono text-xs space-y-1.5">
+            <div className="text-muted-foreground uppercase tracking-wider text-[10px] mb-2">Sync resultat</div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Fixtures i vindue</span>
+              <span className="text-white font-bold">{syncResult.fixtures}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Odds hentet</span>
+              <span className={syncResult.oddsFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.oddsFetched}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Predictions hentet</span>
+              <span className={syncResult.predictionsFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.predictionsFetched}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">H2H holdepar hentet</span>
+              <span className={syncResult.h2hFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.h2hFetched}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Injuries hentet</span>
+              <span className={syncResult.injuriesFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.injuriesFetched}</span>
+            </div>
+            <div className="flex justify-between border-t border-white/10 pt-1.5 mt-1.5">
+              <span className="text-muted-foreground">AI tips i kø</span>
+              <span className={syncResult.tipsQueued > 0 ? "text-violet-400 font-bold" : "text-muted-foreground"}>{syncResult.tipsQueued} fixtures</span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Per-fixture sync */}

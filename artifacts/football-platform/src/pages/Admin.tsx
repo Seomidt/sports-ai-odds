@@ -582,9 +582,23 @@ function ForceSyncSection() {
 
   const startPolling = () => {
     stopPolling();
+    let failCount = 0;
     pollRef.current = setInterval(async () => {
       try {
         const res = await fetch("/api/admin/sync-status");
+        // 401/403 during token refresh — silently retry, don't stop
+        if (res.status === 401 || res.status === 403) {
+          failCount++;
+          if (failCount > 10) { stopPolling(); setLoadingFull(false); }
+          return;
+        }
+        failCount = 0;
+        if (!res.ok) {
+          stopPolling();
+          setLoadingFull(false);
+          toast({ title: "Sync status fejl", variant: "destructive" });
+          return;
+        }
         const data = await res.json();
         if (!data.running) {
           stopPolling();
@@ -596,9 +610,13 @@ function ForceSyncSection() {
           }
         }
       } catch {
-        stopPolling();
-        setLoadingFull(false);
-        toast({ title: "Mistede forbindelsen under sync", variant: "destructive" });
+        // Network hiccup — keep retrying silently
+        failCount++;
+        if (failCount > 5) {
+          stopPolling();
+          setLoadingFull(false);
+          toast({ title: "Mistede forbindelsen under sync", variant: "destructive" });
+        }
       }
     }, 3000);
   };

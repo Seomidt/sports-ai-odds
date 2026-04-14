@@ -172,6 +172,8 @@ interface BettingContext {
     drawNoBetHome: number | null; drawNoBetAway: number | null;
     winToNilHome: number | null; winToNilAway: number | null;
     firstHalfOver15: number | null; firstHalfBtts: number | null;
+    correctScoreTopOdds: Array<{ score: string; odd: number }> | null;
+    firstTeamScoreHome: number | null; firstTeamScoreAway: number | null;
   };
   homeRank: number | null;
   awayRank: number | null;
@@ -206,7 +208,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       kickoff: null, leagueName: null, leagueId: null,
       homeTeamId: null, awayTeamId: null,
       homeGoals: null, awayGoals: null, statusShort: null,
-      signals: {}, odds: { home: null, draw: null, away: null, over25: null, over15: null, over35: null, btts: null, cornersOver: null, totalCardsOver: null, asianHandicapHome: null, doubleChance1X: null, doubleChanceX2: null, doubleChance12: null, drawNoBetHome: null, drawNoBetAway: null, winToNilHome: null, winToNilAway: null, firstHalfOver15: null, firstHalfBtts: null },
+      signals: {}, odds: { home: null, draw: null, away: null, over25: null, over15: null, over35: null, btts: null, cornersOver: null, totalCardsOver: null, asianHandicapHome: null, doubleChance1X: null, doubleChanceX2: null, doubleChance12: null, drawNoBetHome: null, drawNoBetAway: null, winToNilHome: null, winToNilAway: null, firstHalfOver15: null, firstHalfBtts: null, correctScoreTopOdds: null, firstTeamScoreHome: null, firstTeamScoreAway: null },
       homeRank: null, awayRank: null,
       prediction: null, homeSeasonStats: null, awaySeasonStats: null,
       homeTopScorers: [], awayTopScorers: [], homeSidelined: [], awaySidelined: [],
@@ -510,6 +512,9 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
   let firstHalfBtts: number | null = null;
   let over15: number | null = null;
   let over35: number | null = null;
+  let correctScoreTopOdds: Array<{ score: string; odd: number }> | null = null;
+  let firstTeamScoreHome: number | null = null;
+  let firstTeamScoreAway: number | null = null;
 
   if (marketsRow?.markets) {
     const mkt = marketsRow.markets as Record<string, Array<{ value: string; odd: string }>>;
@@ -577,6 +582,21 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
         if (o15 && !over15) over15 = parseOdd(o15);
         if (o35 && !over35) over35 = parseOdd(o35);
       }
+      // Exact / Correct Score — top 5 most likely (lowest odds)
+      if ((n === "exact score" || n === "correct score") && !correctScoreTopOdds) {
+        const sorted = [...entries]
+          .map(e => ({ score: e.value, odd: parseFloat(e.odd) }))
+          .filter(e => !isNaN(e.odd) && e.odd > 1)
+          .sort((a, b) => a.odd - b.odd);
+        if (sorted.length > 0) correctScoreTopOdds = sorted.slice(0, 5);
+      }
+      // Team to Score First (Home / Away)
+      if ((n === "team to score first" || n.includes("first team to score") || n.includes("team to score first")) && !firstTeamScoreHome) {
+        const home = entries.find(e => e.value.toLowerCase() === "home");
+        const away = entries.find(e => e.value.toLowerCase() === "away");
+        if (home) firstTeamScoreHome = parseOdd(home);
+        if (away) firstTeamScoreAway = parseOdd(away);
+      }
     }
   }
 
@@ -613,6 +633,9 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
       winToNilAway,
       firstHalfOver15,
       firstHalfBtts,
+      correctScoreTopOdds,
+      firstTeamScoreHome,
+      firstTeamScoreAway,
     },
     homeRank,
     awayRank,
@@ -689,7 +712,7 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
 
 const SingleTipSchema = z.object({
   recommendation: z.string(),
-  bet_type: z.enum(["match_result", "over_under", "btts", "corners", "asian_handicap", "total_cards", "double_chance", "draw_no_bet", "win_to_nil", "first_half_goals", "no_bet"]),
+  bet_type: z.enum(["match_result", "over_under", "btts", "corners", "asian_handicap", "total_cards", "double_chance", "draw_no_bet", "win_to_nil", "first_half_goals", "correct_score", "first_team_score", "no_bet"]),
   bet_side: z.string().nullable().optional(),
   trust_score: z.number().min(1).max(10),
   estimated_probability: z.number().min(0.01).max(0.99).optional(),
@@ -697,7 +720,7 @@ const SingleTipSchema = z.object({
 });
 
 const MultiBettingTipSchema = z.object({
-  tips: z.array(SingleTipSchema).min(1).max(8),
+  tips: z.array(SingleTipSchema).min(1).max(10),
 });
 
 const PostReviewSchema = z.object({
@@ -782,6 +805,16 @@ function getMarketOddsForTip(
   } else if (tip.bet_type === "first_half_goals") {
     if (tip.bet_side === "btts") return odds.firstHalfBtts;
     return odds.firstHalfOver15;
+  } else if (tip.bet_type === "correct_score") {
+    // bet_side = the chosen scoreline e.g. "1-1" or "2-1"
+    const sideNorm = (tip.bet_side ?? "").replace("-", ":");
+    const match = odds.correctScoreTopOdds?.find(s => s.score === sideNorm || s.score === tip.bet_side);
+    if (match) return match.odd;
+    return odds.correctScoreTopOdds?.[0]?.odd ?? null;
+  } else if (tip.bet_type === "first_team_score") {
+    if (tip.bet_side === "home") return odds.firstTeamScoreHome;
+    if (tip.bet_side === "away") return odds.firstTeamScoreAway;
+    return odds.firstTeamScoreHome ?? odds.firstTeamScoreAway;
   }
   return null;
 }
@@ -792,7 +825,7 @@ export async function getBettingTips(fixtureId: number) {
   const existing = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
   });
-  if (existing.length >= 8) return existing;
+  if (existing.length >= 10) return existing;
 
   const ctx = await buildBettingContext(fixtureId);
 
@@ -878,7 +911,7 @@ Use these to calibrate corners and total_cards tips even when odds are N/A.` : "
     ? `Match conditions: ${Math.round(ctx.weather.temp ?? 0)}°C, ${ctx.weather.desc}, wind ${Math.round(ctx.weather.wind ?? 0)} m/s${ctx.weather.humidity != null ? `, humidity ${ctx.weather.humidity}%` : ""}${ctx.weather.isAdverse ? ` — ADVERSE CONDITIONS (${ctx.weather.adverseReason})` : ""}\nNote: Adverse weather suppresses goals and corners; adjust Over/Under and BTTS trust accordingly. Strong winds reduce accurate passing and set pieces.`
     : "";
 
-  const prompt = `You are a professional football betting analyst. Analyse ALL 8 markets below for this upcoming match and return your best tips.
+  const prompt = `You are a professional football betting analyst. Analyse ALL 10 markets below for this upcoming match and return your best tips.
 
 Match: ${ctx.matchLabel}
 League: ${ctx.leagueName ?? "Unknown"} | Positions: ${ctx.homeTeam} #${ctx.homeRank ?? "?"} vs ${ctx.awayTeam} #${ctx.awayRank ?? "?"}
@@ -896,6 +929,8 @@ AVAILABLE ODDS:
 - Draw No Bet Home: ${ctx.odds.drawNoBetHome ?? "N/A"} | Away: ${ctx.odds.drawNoBetAway ?? "N/A"}
 - Win to Nil Home: ${ctx.odds.winToNilHome ?? "N/A"} | Away: ${ctx.odds.winToNilAway ?? "N/A"}
 - First Half Over 1.5: ${ctx.odds.firstHalfOver15 ?? "N/A"} | First Half BTTS: ${ctx.odds.firstHalfBtts ?? "N/A"}
+- Correct Score (top 5 most likely): ${ctx.odds.correctScoreTopOdds ? ctx.odds.correctScoreTopOdds.map(s => `${s.score} @ ${s.odd}`).join(" | ") : "N/A"}
+- Team to Score First: Home ${ctx.odds.firstTeamScoreHome ?? "N/A"} | Away ${ctx.odds.firstTeamScoreAway ?? "N/A"}
 
 ${predSection}
 
@@ -915,12 +950,14 @@ Your accuracy history: ${accuracy.summary}
 ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRate}% hit rate.` : "First tip — be conservative."}
 
 INSTRUCTIONS:
-- Give 6-8 tips covering different bet_types — do NOT repeat the same bet_type twice
-- Required: match_result, over_under, btts — then pick 3-5 more from: corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil, first_half_goals
+- Give 8-10 tips covering different bet_types — do NOT repeat the same bet_type twice
+- Required: match_result, over_under, btts, correct_score, first_team_score — then pick 3-5 more from: corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil, first_half_goals
 - For over_under you may pick over15, over25 or over35 as bet_side — choose the line with best edge
 - For double_chance: bet_side is "1X", "X2", or "12"
 - For draw_no_bet / win_to_nil: bet_side is "home" or "away"
 - For first_half_goals: bet_side is "over" (over 1.5 goals in 1st half) or "btts"
+- For correct_score: recommendation = the most likely scoreline e.g. "1-1" or "2-1"; bet_side = same scoreline in format "H:A" e.g. "1:1". Pick the scoreline with best value from top 5 available. Only pick if trust_score >= 4.
+- For first_team_score: bet_side = "home" or "away". Pick based on attacking pressure, home advantage, top scorer availability, and odds value.
 - If odds are N/A for a market, set trust_score ≤ 3 but still include the tip
 - edge = (estimated_probability × odds) - 1; higher is better
 - Trust score: 1-4 = weak, 5-7 = moderate, 8-10 = strong conviction
@@ -928,7 +965,7 @@ INSTRUCTIONS:
 - No emojis. State facts only.
 
 Respond ONLY valid JSON:
-{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over25","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"Double Chance 1X","bet_type":"double_chance","bet_side":"1X","trust_score":7,"estimated_probability":0.75,"reasoning":"..."},{"recommendation":"Draw No Bet Home","bet_type":"draw_no_bet","bet_side":"home","trust_score":6,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 9.5 Corners","bet_type":"corners","bet_side":"over","trust_score":4,"estimated_probability":0.48,"reasoning":"..."}]}
+{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over25","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"1-1","bet_type":"correct_score","bet_side":"1:1","trust_score":5,"estimated_probability":0.12,"reasoning":"..."},{"recommendation":"Home Team Scores First","bet_type":"first_team_score","bet_side":"home","trust_score":6,"estimated_probability":0.55,"reasoning":"..."}]}
 
 bet_side reference:
 match_result: "home","away","draw"
@@ -940,7 +977,9 @@ total_cards: "over","under"
 double_chance: "1X","X2","12"
 draw_no_bet: "home","away"
 win_to_nil: "home","away"
-first_half_goals: "over","btts"`;
+first_half_goals: "over","btts"
+correct_score: scoreline in "H:A" format e.g. "1:0","1:1","2:1","0:0"
+first_team_score: "home","away"`;
 
   const raw = await callClaude(prompt);
   const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);

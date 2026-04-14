@@ -1903,7 +1903,7 @@ async function startupSignalCompute() {
 /**
  * Generates AI betting tips (via Claude) for all upcoming fixtures that have
  * odds data but are missing tips in the DB. Safe to call multiple times —
- * getBettingTips() skips fixtures already having ≥3 tips.
+ * getBettingTips() skips fixtures already having ≥10 tips.
  * Processes up to BATCH_SIZE per call to avoid hammering the AI API.
  */
 async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
@@ -1932,10 +1932,10 @@ async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
   for (const t of existingTips) {
     tipCount.set(t.fixtureId, (tipCount.get(t.fixtureId) ?? 0) + 1);
   }
-  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 8);
+  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 10);
 
   if (missing.length === 0) {
-    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have 8 tips`);
+    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have 10 tips`);
     return;
   }
 

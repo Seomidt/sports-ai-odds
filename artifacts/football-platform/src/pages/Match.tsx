@@ -531,6 +531,8 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
     if (t === 'draw_no_bet') return 'Draw No Bet';
     if (t === 'win_to_nil') return 'Win to Nil';
     if (t === 'first_half_goals') return '1st Half Goals';
+    if (t === 'correct_score') return 'Correct Score';
+    if (t === 'first_team_score') return 'First Team to Score';
     if (t === 'no_bet') return 'No Bet';
     return t;
   };
@@ -922,6 +924,8 @@ function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeT
     if (t === 'draw_no_bet') return 'Draw No Bet';
     if (t === 'win_to_nil') return 'Win to Nil';
     if (t === 'first_half_goals') return '1st Half Goals';
+    if (t === 'correct_score') return 'Correct Score';
+    if (t === 'first_team_score') return 'First Team to Score';
     return t;
   };
 

@@ -27,14 +27,14 @@ const dailyHistory: { date: string; count: number }[] = [];
 
 // ── Persistence helpers ──────────────────────────────────────────────────────
 
-async function kvGet(key: string): Promise<string | null> {
+export async function kvGet(key: string): Promise<string | null> {
   try {
     const row = await db.query.systemKv.findFirst({ where: (t, { eq: eqFn }) => eqFn(t.key, key) });
     return row?.value ?? null;
   } catch { return null; }
 }
 
-async function kvSet(key: string, value: string): Promise<void> {
+export async function kvSet(key: string, value: string): Promise<void> {
   try {
     await db.insert(systemKv).values({ key, value, updatedAt: new Date() })
       .onConflictDoUpdate({ target: systemKv.key, set: { value, updatedAt: new Date() } });

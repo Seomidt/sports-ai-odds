@@ -39,10 +39,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-[100dvh] w-full overflow-hidden text-foreground">
 
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
-        <div className="h-16 flex items-center px-6 border-b border-white/5">
-          <img src={appLogo} alt="sports-ai-odds" className="w-8 h-8 mr-3 rounded-lg object-contain" />
-          <span className="font-mono font-bold tracking-tight text-lg">sports-ai-odds</span>
-        </div>
+        <Link href="/dashboard">
+          <div className="h-16 flex items-center px-6 border-b border-white/5 hover:bg-white/3 transition-colors cursor-pointer">
+            <img src={appLogo} alt="sports-ai-odds" className="w-8 h-8 mr-3 rounded-lg object-contain" />
+            <span className="font-mono font-bold tracking-tight text-lg">sports-ai-odds</span>
+          </div>
+        </Link>
 
         <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
@@ -147,10 +149,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <header className="md:hidden flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
-          <div className="flex items-center gap-2">
-            <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
-            <span className="font-mono font-bold text-sm tracking-tight">sports-ai-odds</span>
-          </div>
+          <Link href="/dashboard">
+            <div className="flex items-center gap-2 cursor-pointer">
+              <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
+              <span className="font-mono font-bold text-sm tracking-tight">sports-ai-odds</span>
+            </div>
+          </Link>
           <button
             onClick={() => setMobileMenuOpen(true)}
             className="text-muted-foreground hover:text-white p-1"

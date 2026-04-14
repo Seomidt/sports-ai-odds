@@ -60,6 +60,8 @@ import {
   fetchFixtureById,
   initApiStats,
   isQuotaExhausted,
+  kvGet,
+  kvSet,
   type ApiFixture,
   type ApiStatItem,
   type ApiLineup,
@@ -1933,23 +1935,50 @@ async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
 }
 
 /**
- * Schedules dailySignalPrecompute to run every day at 05:00 local time.
- * Uses setTimeout to align with the wall-clock hour, then setInterval for recurrence.
+ * Schedules dailySignalPrecompute to run every day at 05:00 UTC.
+ * On startup: if today's 5am UTC has already passed and we haven't run today,
+ * fires immediately (catch-up). Otherwise, waits until next 5am UTC.
  */
-function scheduleDailySignalCron() {
+async function scheduleDailySignalCron() {
   const now = new Date();
-  const next5am = new Date(now);
-  next5am.setHours(5, 0, 0, 0);
-  if (next5am <= now) next5am.setDate(next5am.getDate() + 1);
+  const todayStr = now.toISOString().slice(0, 10);
+  const lastRunKey = "signal-cron:lastRun";
 
-  const msUntil5am = next5am.getTime() - now.getTime();
-  const minUntil = Math.round(msUntil5am / 60_000);
-  console.log(`[signal-cron] Next 5am run scheduled in ${minUntil} min (${next5am.toISOString()})`);
+  // Check if we already ran the cron today
+  const lastRun = await kvGet(lastRunKey);
+  const alreadyRanToday = lastRun === todayStr;
 
-  setTimeout(() => {
+  // Compute next 5am UTC
+  const next5amUTC = new Date(now);
+  next5amUTC.setUTCHours(5, 0, 0, 0);
+  if (next5amUTC <= now) next5amUTC.setUTCDate(next5amUTC.getUTCDate() + 1);
+
+  const past5amToday = now.getUTCHours() >= 5;
+
+  if (past5amToday && !alreadyRanToday) {
+    // Missed today's 5am cron (server was down) — run now as catch-up
+    const minLate = Math.round((now.getTime() - new Date(now).setUTCHours(5,0,0,0)) / 60_000);
+    console.log(`[signal-cron] Missed today's 5am run by ${minLate} min — running catch-up now`);
+    await kvSet(lastRunKey, todayStr);
     dailySignalPrecompute().catch(console.error);
-    setInterval(() => dailySignalPrecompute().catch(console.error), 24 * 60 * 60 * 1000);
-  }, msUntil5am);
+  } else if (!alreadyRanToday) {
+    console.log(`[signal-cron] Next 5am UTC run in ${Math.round((next5amUTC.getTime() - now.getTime()) / 60_000)} min (${next5amUTC.toISOString()})`);
+  } else {
+    console.log(`[signal-cron] Already ran today (${todayStr}) — next run at ${next5amUTC.toISOString()}`);
+  }
+
+  // Schedule all future 5am UTC runs
+  const msUntilNext = next5amUTC.getTime() - now.getTime();
+  setTimeout(async () => {
+    const d = new Date().toISOString().slice(0, 10);
+    await kvSet(lastRunKey, d);
+    dailySignalPrecompute().catch(console.error);
+    setInterval(async () => {
+      const d2 = new Date().toISOString().slice(0, 10);
+      await kvSet(lastRunKey, d2);
+      dailySignalPrecompute().catch(console.error);
+    }, 24 * 60 * 60 * 1000);
+  }, msUntilNext);
 }
 
 export function startPoller() {
@@ -1979,7 +2008,11 @@ export function startPoller() {
   setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 90 * 1000);
   setTimeout(() => syncH2HForUpcomingFixtures().catch(console.error), 2 * 60 * 1000);
   setTimeout(() => syncOdds().catch(console.error), 2.5 * 60 * 1000);
-  setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 3 * 60 * 1000);
+  // Early AI tips pass: uses whatever odds are already in the DB (from prior syncs)
+  // Generates tips for any fixture with existing odds but missing picks.
+  // A second, fuller pass follows at 14 min after fresh odds are fetched.
+  setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 3 * 60 * 1000);
+  setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 3.5 * 60 * 1000);
   setTimeout(() => syncTeamSeasonStats().catch(console.error), 4 * 60 * 1000);
   setTimeout(() => syncTopScorersAndAssists().catch(console.error), 5 * 60 * 1000);
   setTimeout(() => syncTopDiscipline().catch(console.error), 6 * 60 * 1000);
@@ -1992,7 +2025,7 @@ export function startPoller() {
   setTimeout(() => syncFixtureInjuriesForUpcoming().catch(console.error), 11 * 60 * 1000);
   setTimeout(() => syncSidelinedForRecentPlayers().catch(console.error), 12 * 60 * 1000);
   setTimeout(() => syncWeatherForUpcomingFixtures().catch(console.error), 13 * 60 * 1000);
-  // AI tips: runs after odds sweep finishes (~9.5 min + processing). Independent of signals.
+  // Second AI tips pass: runs after week-ahead odds sweep has fresh data
   setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 14 * 60 * 1000);
   // Historical weather backfill: starts 15 min after boot
   setTimeout(() => backfillHistoricalWeather().catch(console.error), 15 * 60 * 1000);
@@ -2080,10 +2113,9 @@ export function startPoller() {
   // Runs once at startup (60s delay). Can always be triggered manually via admin panel.
   setTimeout(() => seedHistoricalIfNeeded().catch(console.error), 60 * 1000);
 
-  // Daily 5am signal pre-compute: runs immediately at startup (30s delay) and then
-  // every day at 05:00 local time to cache signals for ALL of today's fixtures.
-  setTimeout(() => dailySignalPrecompute().catch(console.error), 30 * 1000);
-  scheduleDailySignalCron();
+  // Daily 5am signal pre-compute + catch-up if server was down during 5am window.
+  // scheduleDailySignalCron() handles missed runs and future scheduling automatically.
+  scheduleDailySignalCron().catch(console.error);
 }
 
 // ─── Historical season seed ────────────────────────────────────────────────────

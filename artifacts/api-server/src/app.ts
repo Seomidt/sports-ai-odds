@@ -1,6 +1,7 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import type { IncomingMessage, ServerResponse } from "http";
 import { clerkMiddleware } from "@clerk/express";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware.js";
 import router from "./routes";
@@ -14,14 +15,14 @@ app.use(
   pinoHttp({
     logger,
     serializers: {
-      req(req) {
+      req(req: IncomingMessage & { id?: string }) {
         return {
-          id: res.id,
+          id: req.id,
           method: req.method,
-          url: res.url?.split("?")[0],
+          url: req.url?.split("?")[0],
         };
       },
-      res(res) {
+      res(res: ServerResponse) {
         return {
           statusCode: res.statusCode,
         };
@@ -55,7 +56,10 @@ app.use(
   cors({
     credentials: true,
     origin: (origin, callback) => {
-      if (!origin) { callback(null, true); return; }
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
       const isLocalhost = /^https?:\/\/localhost(:\d+)?$/.test(origin);
       const isReplitApp = /^https:\/\/[a-zA-Z0-9-]+\.replit\.app$/.test(origin);
       const isReplitDev = /^https?:\/\/[a-zA-Z0-9-]+\.[a-zA-Z0-9-]+\.repl\.co$/.test(origin);
@@ -76,7 +80,7 @@ if (STRIPE_ENABLED) {
   app.post(
     "/api/stripe/webhook",
     express.raw({ type: "application/json" }),
-    handleStripeWebhook
+    handleStripeWebhook,
   );
 }
 
@@ -88,4 +92,3 @@ app.use(clerkMiddleware());
 app.use("/api", router);
 
 export default app;
-import type { IncomingMessage, ServerResponse } from "http";

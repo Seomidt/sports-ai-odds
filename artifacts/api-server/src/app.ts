@@ -1,7 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
-import pinoHttp from "pino-http";
-import type { IncomingMessage, ServerResponse } from "http";
+import pinoHttpImport from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
 import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware.js";
 import router from "./routes";
@@ -9,27 +8,11 @@ import { logger } from "./lib/logger";
 import { STRIPE_ENABLED } from "./billing/stripeClient.js";
 import { handleStripeWebhook } from "./billing/webhookHandler.js";
 
+const pinoHttp = pinoHttpImport as unknown as (options?: unknown) => express.RequestHandler;
+
 const app: Express = express();
 
-app.use(
-  pinoHttp({
-    logger,
-    serializers: {
-      req(req: IncomingMessage & { id?: string }) {
-        return {
-          id: req.id,
-          method: req.method,
-          url: req.url?.split("?")[0],
-        };
-      },
-      res(res: ServerResponse) {
-        return {
-          statusCode: res.statusCode,
-        };
-      },
-    },
-  }),
-);
+app.use(pinoHttp({ logger }));
 
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 

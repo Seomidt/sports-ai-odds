@@ -18,7 +18,7 @@ const LEAGUES = [
 const STATS = [
   { value: "27", label: "Leagues Tracked" },
   { value: "15s", label: "Live Update Rate" },
-  { value: "3", label: "AI Tips Per Match" },
+  { value: "10", label: "AI Tips Per Match" },
   { value: "100%", label: "Automated Analysis" },
 ];
 
@@ -29,7 +29,7 @@ const FEATURES = [
     bg: "bg-violet-400/10",
     border: "border-violet-400/20",
     title: "AI Betting Intelligence",
-    desc: "Claude Haiku generates 3 structured tips per fixture — match result, over/under 2.5, and BTTS — each with a trust score from 1–10, value rating, and detailed reasoning based on form, H2H, odds movement, and signal data.",
+    desc: "AI generates up to 10 structured tips per fixture — match result, over/under, BTTS, correct score, first team to score, corners, cards and more — each with a trust score from 1–10, value rating, and detailed reasoning.",
   },
   {
     icon: Zap,
@@ -69,7 +69,7 @@ const FEATURES = [
     bg: "bg-primary/10",
     border: "border-primary/20",
     title: "27 Leagues, All Automated",
-    desc: "From the Premier League to K League 1 — all 27 leagues sync automatically every day at 5:00 AM. Fixtures, lineups, standings, odds and predictions are pre-cached so analysis is instant when you open a match.",
+    desc: "From the Premier League to K League 1 — all 27 leagues sync automatically every day. Fixtures, lineups, standings, odds and predictions are pre-cached so analysis is instant when you open a match.",
   },
   {
     icon: LineChart,
@@ -93,7 +93,7 @@ const FEATURES = [
     bg: "bg-teal-400/10",
     border: "border-teal-400/20",
     title: "Historical Data Engine",
-    desc: "Multiple seasons of historical fixture data can be seeded into the database from admin. The AI uses H2H records, team season stats and past match patterns as core inputs for its pre-match predictions.",
+    desc: "Multiple seasons of historical fixture data power the AI. H2H records, team season stats and past match patterns are core inputs for pre-match predictions and signal scoring.",
   },
   {
     icon: Bell,
@@ -103,47 +103,26 @@ const FEATURES = [
     title: "Follow & Alerts",
     desc: "Bookmark any fixture and get it surfaced in your Following feed. The alert engine monitors live match conditions and flags alert-worthy moments automatically based on AI verdict and signal thresholds.",
   },
-  {
-    icon: Users,
-    color: "text-violet-400",
-    bg: "bg-violet-400/10",
-    border: "border-violet-400/20",
-    title: "Admin Panel & User Control",
-    desc: "Invite-only access model with full admin panel. Manage users and roles, monitor AI token usage, track API request counts and daily averages, seed historical data, and view AI accuracy over time.",
-  },
-  {
-    icon: Shield,
-    color: "text-teal-400",
-    bg: "bg-teal-400/10",
-    border: "border-teal-400/20",
-    title: "Secure, Restricted Access",
-    desc: "Built on Clerk authentication with role-based access. Users require admin approval before accessing the platform — ideal for syndicates, private clubs, and professional analyst teams.",
-  },
 ];
 
 const STEPS = [
   {
     n: "01",
-    title: "Fixtures are synced automatically",
-    desc: "Every morning at 05:00, the system fetches all fixtures across 27 leagues, including lineups, odds, predictions, H2H data and injury reports.",
+    title: "AI signals are computed",
+    desc: "Before each match, dozens of signals are scored — form momentum, home/away advantage, odds movement, H2H win rates, squad depth, weather conditions, and more.",
   },
   {
     n: "02",
-    title: "AI signals are computed",
-    desc: "Before each match, dozens of signals are scored — form momentum, home/away advantage, odds movement, H2H win rates, squad depth, and more.",
+    title: "Tips are generated with value ratings",
+    desc: "AI reads the full signal context and outputs up to 10 structured betting tips per fixture, each with a trust score, recommendation, and edge calculation across 10 different markets.",
   },
   {
     n: "03",
-    title: "Tips are generated with value ratings",
-    desc: "Claude Haiku reads the full signal context and outputs 3 structured betting tips per fixture, each with a trust score, recommendation, and edge calculation.",
-  },
-  {
-    n: "04",
     title: "Live AI narrates the match",
     desc: "Once the whistle blows, live scores, in-play odds and signals update every 15 seconds. The AI generates a real-time headline and momentum verdict.",
   },
   {
-    n: "05",
+    n: "04",
     title: "Post-match grading & improvement",
     desc: "After FT, the AI reviews each tip against the final result, writes a self-critique, and logs HIT/MISS. This data improves future calibration.",
   },
@@ -176,7 +155,7 @@ export function Home() {
             Professional AI sports intelligence. Real-time betting signals, live match analysis, and self-improving prediction models — built for analysts and syndicates.
           </p>
           <p className="text-sm text-muted-foreground/60 mb-12 font-mono">
-            27 leagues · 15-second live updates · Claude AI · Automated grading
+            27 leagues · 15-second live updates · AI-powered · Automated grading
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
@@ -298,6 +277,7 @@ export function Home() {
                 { label: "Match Result tip", outcome: "HIT", score: 8, color: "text-teal-400 bg-teal-400/10 border-teal-400/30" },
                 { label: "Over 2.5 Goals", outcome: "HIT", score: 7, color: "text-teal-400 bg-teal-400/10 border-teal-400/30" },
                 { label: "BTTS — Yes", outcome: "MISS", score: 5, color: "text-red-400 bg-red-400/10 border-red-400/30" },
+                { label: "Correct Score 1-1", outcome: "HIT", score: 6, color: "text-teal-400 bg-teal-400/10 border-teal-400/30" },
               ].map((ex) => (
                 <div key={ex.label} className="flex items-center justify-between bg-white/3 border border-white/8 rounded-xl px-4 py-3">
                   <div>
@@ -327,44 +307,6 @@ export function Home() {
               </span>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* ── FOR WHO ─────────────────────────────────────────────── */}
-      <div className="max-w-7xl mx-auto px-6 py-24">
-        <div className="text-center mb-12">
-          <p className="text-xs font-mono text-primary uppercase tracking-widest mb-3">Access</p>
-          <h2 className="text-4xl font-bold font-mono tracking-tighter mb-4">BUILT FOR PROFESSIONALS</h2>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {[
-            {
-              icon: Target,
-              color: "text-primary",
-              title: "Independent Analysts",
-              desc: "Get AI-generated pre-match intelligence and live narrative for every tracked fixture without building your own data pipeline.",
-            },
-            {
-              icon: Users,
-              color: "text-violet-400",
-              title: "Betting Syndicates",
-              desc: "Restricted access, role-based invites, and centralised signal tracking make it easy to run analysis for a team.",
-            },
-            {
-              icon: Eye,
-              color: "text-teal-400",
-              title: "Sports Data Professionals",
-              desc: "Full API data, odds tracking, H2H history, squad depth, injuries, top scorers — everything in one place.",
-            },
-          ].map((c) => (
-            <div key={c.title} className="glass-card rounded-xl p-7 border border-white/8 text-center">
-              <div className="inline-flex p-3 rounded-xl bg-white/5 mb-5">
-                <c.icon className={`w-6 h-6 ${c.color}`} />
-              </div>
-              <h3 className="text-lg font-bold text-white mb-3 font-mono">{c.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{c.desc}</p>
-            </div>
-          ))}
         </div>
       </div>
 

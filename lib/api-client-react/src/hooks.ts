@@ -1,5 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { healthCheck } from "./generated/api";
+import {
+  getFixtureById,
+  getFixtureFeatures,
+  getFixtureSignals,
+  getFixturesToday,
+  getLeagues,
+  getLeagueStandings,
+  getTeamInjuries,
+  getTopPicks,
+  healthCheck,
+} from "./generated/api";
 
 export function useGetMe() {
   return useQuery({
@@ -22,5 +32,81 @@ export function useGetMe() {
       }
     },
     staleTime: 30_000,
+  });
+}
+
+export function useGetTodayFixtures() {
+  return useQuery({
+    queryKey: ["fixtures", "today"],
+    queryFn: getFixturesToday,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useGetTopPicks() {
+  return useQuery({
+    queryKey: ["fixtures", "top-picks"],
+    queryFn: getTopPicks,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useGetFixture(fixtureId: number) {
+  return useQuery({
+    queryKey: ["fixtures", fixtureId],
+    queryFn: () => getFixtureById(fixtureId),
+    enabled: Number.isFinite(fixtureId) && fixtureId > 0,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useGetFixtureFeatures(fixtureId: number) {
+  return useQuery({
+    queryKey: ["fixtures", fixtureId, "features"],
+    queryFn: () => getFixtureFeatures(fixtureId),
+    enabled: Number.isFinite(fixtureId) && fixtureId > 0,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useGetFixtureSignals(fixtureId: number) {
+  return useQuery({
+    queryKey: ["fixtures", fixtureId, "signals"],
+    queryFn: () => getFixtureSignals(fixtureId),
+    enabled: Number.isFinite(fixtureId) && fixtureId > 0,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useGetLeagues() {
+  return useQuery({
+    queryKey: ["standings", "leagues"],
+    queryFn: getLeagues,
+    staleTime: 60_000,
+  });
+}
+
+export function useGetLeagueStandings(leagueId: number) {
+  return useQuery({
+    queryKey: ["standings", leagueId],
+    queryFn: () => getLeagueStandings(leagueId),
+    enabled: Number.isFinite(leagueId) && leagueId > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
+export function useGetTeamInjuries(teamId: number) {
+  return useQuery({
+    queryKey: ["teams", teamId, "injuries"],
+    queryFn: () => getTeamInjuries(teamId),
+    enabled: Number.isFinite(teamId) && teamId > 0,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
   });
 }

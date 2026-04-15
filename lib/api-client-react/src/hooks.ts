@@ -1,11 +1,10 @@
-export {
-  useGetMe,
+import { useQuery } from "@tanstack/react-query";
+import {
+  useGetFixturesToday as useGetTodayFixtures,
+  getGetFixturesTodayQueryKey as getGetTodayFixturesQueryKey,
 
-  useGetTodayFixtures,
-  getGetTodayFixturesQueryKey,
-
-  useGetStandings,
-  getGetStandingsQueryKey,
+  useGetLeagues as useGetStandings,
+  getGetLeaguesQueryKey as getGetStandingsQueryKey,
 
   useGetFixture,
   getGetFixtureQueryKey,
@@ -27,6 +26,18 @@ export {
 
   useGetFixtureH2H,
   getGetFixtureH2HQueryKey,
+
+  useGetFixtureLineups,
+  getGetFixtureLineupsQueryKey,
+
+  useGetFixtureStats,
+  getGetFixtureStatsQueryKey,
+
+  useGetFixtureEvents,
+  getGetFixtureEventsQueryKey,
+
+  useGetFixturePrediction,
+  getGetFixturePredictionQueryKey,
 
   useGetTeamStatistics,
   getGetTeamStatisticsQueryKey,
@@ -74,11 +85,104 @@ export {
   getGetAdminUsersQueryKey,
 } from "./generated/api";
 
-/**
- * Compatibility aliases for old frontend imports
- */
-
 export {
-  useGetTodayFixtures as useGetFixturesToday,
-  getGetTodayFixturesQueryKey as getGetFixturesTodayQueryKey,
-} from "./generated/api";
+  useGetTodayFixtures,
+  getGetTodayFixturesQueryKey,
+
+  useGetStandings,
+  getGetStandingsQueryKey,
+
+  useGetFixture,
+  getGetFixtureQueryKey,
+
+  useGetFixtureFeatures,
+  getGetFixtureFeaturesQueryKey,
+
+  useGetFixtureSignals,
+  getGetFixtureSignalsQueryKey,
+
+  useGetFixtureOdds,
+  getGetFixtureOddsQueryKey,
+
+  useGetFixtureLiveOdds,
+  getGetFixtureLiveOddsQueryKey,
+
+  useGetFixtureOddsMarkets,
+  getGetFixtureOddsMarketsQueryKey,
+
+  useGetFixtureH2H,
+  getGetFixtureH2HQueryKey,
+
+  useGetFixtureLineups,
+  getGetFixtureLineupsQueryKey,
+
+  useGetFixtureStats,
+  getGetFixtureStatsQueryKey,
+
+  useGetFixtureEvents,
+  getGetFixtureEventsQueryKey,
+
+  useGetFixturePrediction,
+  getGetFixturePredictionQueryKey,
+
+  useGetTeamStatistics,
+  getGetTeamStatisticsQueryKey,
+
+  useGetTeamInjuries,
+  getGetTeamInjuriesQueryKey,
+
+  useGetTopPickFixtures,
+  getGetTopPickFixturesQueryKey,
+
+  useGetTopDiscipline,
+  getGetTopDisciplineQueryKey,
+
+  useGetLiveAnalysis,
+  getGetLiveAnalysisQueryKey,
+
+  useGetPostReview,
+  getGetPostReviewQueryKey,
+
+  useGetBettingTipForFixture,
+  getGetBettingTipForFixtureQueryKey,
+
+  useGetPlayer,
+  getGetPlayerQueryKey,
+
+  useGetFollowedFixtures,
+  getGetFollowedFixturesQueryKey,
+
+  useGetUnreadAlerts,
+  getGetUnreadAlertsQueryKey,
+
+  useGetAiAccuracy,
+  getGetAiAccuracyQueryKey,
+
+  useGetTeamVenue,
+  getGetTeamVenueQueryKey,
+
+  useGetTeamTrophies,
+  getGetTeamTrophiesQueryKey,
+
+  useGetAdminStats,
+  getGetAdminStatsQueryKey,
+
+  useGetAdminUsers,
+  getGetAdminUsersQueryKey,
+};
+
+/**
+ * Local compatibility hook.
+ * generated/api.ts does not export useGetMe.
+ */
+export function useGetMe() {
+  return useQuery({
+    queryKey: ["me"],
+    queryFn: async () => ({
+      user: null,
+      authenticated: false,
+      role: null,
+    }),
+    staleTime: 30_000,
+  });
+}

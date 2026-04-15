@@ -68,7 +68,9 @@ type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 /**
  * @summary Health check
  */
-export const getHealthCheckUrl = () => {
+export const BASE_PATH =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "http://localhost:3001";
   return `/api/healthz`;
 };
 

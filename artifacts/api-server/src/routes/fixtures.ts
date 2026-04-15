@@ -1,26 +1,52 @@
-import { Router } from "express";
+import { Router, type Request, type Response } from "express";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import {
-  fixtures,
-} from "@workspace/db/schema";
+import { fixtures } from "@workspace/db/schema";
 
 const router = Router();
 
+type ApiError = {
+  error: string;
+};
+
 function startOfDayUtc(date = new Date()): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0));
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      0,
+      0,
+      0,
+      0,
+    ),
+  );
 }
 
 function endOfDayUtc(date = new Date()): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+  return new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate(),
+      23,
+      59,
+      59,
+      999,
+    ),
+  );
 }
 
-function badRequest(res: any, message: string) {
-  return res.status(400).json({ error: message });
+function badRequest(res: Response, message: string) {
+  return res.status(400).json({ error: message } satisfies ApiError);
 }
 
-router.get("/fixtures/today", async (_req, res) => {
+function reqLogError(scope: string, error: unknown) {
+  console.error(`[routes:${scope}]`, error);
+}
+
+router.get("/fixtures/today", async (_req: Request, res: Response) => {
   try {
     const from = startOfDayUtc();
     const to = endOfDayUtc();
@@ -28,12 +54,7 @@ router.get("/fixtures/today", async (_req, res) => {
     const rows = await db
       .select()
       .from(fixtures)
-      .where(
-        and(
-          gte(fixtures.kickoff, from),
-          lte(fixtures.kickoff, to),
-        ),
-      )
+      .where(and(gte(fixtures.kickoff, from), lte(fixtures.kickoff, to)))
       .orderBy(asc(fixtures.kickoff))
       .limit(200);
 
@@ -44,11 +65,13 @@ router.get("/fixtures/today", async (_req, res) => {
     });
   } catch (error) {
     reqLogError("fixtures.today", error);
-    return res.status(500).json({ error: "Failed to load today's fixtures" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load today's fixtures" } satisfies ApiError);
   }
 });
 
-router.get("/fixtures/top-picks", async (_req, res) => {
+router.get("/fixtures/top-picks", async (_req: Request, res: Response) => {
   try {
     const now = new Date();
 
@@ -71,11 +94,13 @@ router.get("/fixtures/top-picks", async (_req, res) => {
     });
   } catch (error) {
     reqLogError("fixtures.topPicks", error);
-    return res.status(500).json({ error: "Failed to load top picks" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load top picks" } satisfies ApiError);
   }
 });
 
-router.get("/fixtures/:id", async (req, res) => {
+router.get("/fixtures/:id", async (req: Request, res: Response) => {
   try {
     const fixtureId = Number(req.params.id);
 
@@ -83,12 +108,16 @@ router.get("/fixtures/:id", async (req, res) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const row = await db.query.fixtures.findFirst({
-      where: eq(fixtures.fixtureId, fixtureId),
-    });
+    const rows = await db
+      .select()
+      .from(fixtures)
+      .where(eq(fixtures.fixtureId, fixtureId))
+      .limit(1);
+
+    const row = rows[0] ?? null;
 
     if (!row) {
-      return res.status(404).json({ error: "Fixture not found" });
+      return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
     }
 
     return res.json({
@@ -97,11 +126,13 @@ router.get("/fixtures/:id", async (req, res) => {
     });
   } catch (error) {
     reqLogError("fixtures.byId", error);
-    return res.status(500).json({ error: "Failed to load fixture" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load fixture" } satisfies ApiError);
   }
 });
 
-router.get("/fixtures/:id/features", async (req, res) => {
+router.get("/fixtures/:id/features", async (req: Request, res: Response) => {
   try {
     const fixtureId = Number(req.params.id);
 
@@ -109,12 +140,16 @@ router.get("/fixtures/:id/features", async (req, res) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const row = await db.query.fixtures.findFirst({
-      where: eq(fixtures.fixtureId, fixtureId),
-    });
+    const rows = await db
+      .select()
+      .from(fixtures)
+      .where(eq(fixtures.fixtureId, fixtureId))
+      .limit(1);
+
+    const row = rows[0] ?? null;
 
     if (!row) {
-      return res.status(404).json({ error: "Fixture not found" });
+      return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
     }
 
     const features = {
@@ -145,11 +180,13 @@ router.get("/fixtures/:id/features", async (req, res) => {
     });
   } catch (error) {
     reqLogError("fixtures.features", error);
-    return res.status(500).json({ error: "Failed to load fixture features" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load fixture features" } satisfies ApiError);
   }
 });
 
-router.get("/fixtures/:id/signals", async (req, res) => {
+router.get("/fixtures/:id/signals", async (req: Request, res: Response) => {
   try {
     const fixtureId = Number(req.params.id);
 
@@ -157,23 +194,30 @@ router.get("/fixtures/:id/signals", async (req, res) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const row = await db.query.fixtures.findFirst({
-      where: eq(fixtures.fixtureId, fixtureId),
-    });
+    const rows = await db
+      .select()
+      .from(fixtures)
+      .where(eq(fixtures.fixtureId, fixtureId))
+      .limit(1);
+
+    const row = rows[0] ?? null;
 
     if (!row) {
-      return res.status(404).json({ error: "Fixture not found" });
+      return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
     }
 
     const now = Date.now();
     const kickoffTs = row.kickoff ? new Date(row.kickoff).getTime() : null;
-    const minutesToKickoff = kickoffTs ? Math.round((kickoffTs - now) / 60000) : null;
+    const minutesToKickoff =
+      kickoffTs !== null ? Math.round((kickoffTs - now) / 60000) : null;
 
     const signals = {
       fixtureId: row.fixtureId,
       statusShort: row.statusShort,
       isUpcoming: row.statusShort === "NS" || row.statusShort === "TBD",
-      isLive: ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE", "SUSP"].includes(row.statusShort ?? ""),
+      isLive: ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE", "SUSP"].includes(
+        row.statusShort ?? "",
+      ),
       hasWeather: Boolean(row.weatherFetchedAt),
       hasReferee: Boolean(row.referee),
       minutesToKickoff,
@@ -188,11 +232,13 @@ router.get("/fixtures/:id/signals", async (req, res) => {
     });
   } catch (error) {
     reqLogError("fixtures.signals", error);
-    return res.status(500).json({ error: "Failed to load fixture signals" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load fixture signals" } satisfies ApiError);
   }
 });
 
-router.get("/standings/leagues", async (_req, res) => {
+router.get("/standings/leagues", async (_req: Request, res: Response) => {
   try {
     const rows = await db
       .select({
@@ -219,11 +265,13 @@ router.get("/standings/leagues", async (_req, res) => {
     });
   } catch (error) {
     reqLogError("standings.leagues", error);
-    return res.status(500).json({ error: "Failed to load leagues" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load leagues" } satisfies ApiError);
   }
 });
 
-router.get("/standings/:leagueId", async (req, res) => {
+router.get("/standings/:leagueId", async (req: Request, res: Response) => {
   try {
     const leagueId = Number(req.params.leagueId);
 
@@ -245,11 +293,13 @@ router.get("/standings/:leagueId", async (req, res) => {
     });
   } catch (error) {
     reqLogError("standings.byLeague", error);
-    return res.status(500).json({ error: "Failed to load standings league data" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load standings league data" } satisfies ApiError);
   }
 });
 
-router.get("/teams/:id/injuries", async (req, res) => {
+router.get("/teams/:id/injuries", async (req: Request, res: Response) => {
   try {
     const teamId = Number(req.params.id);
 
@@ -275,12 +325,10 @@ router.get("/teams/:id/injuries", async (req, res) => {
     });
   } catch (error) {
     reqLogError("teams.injuries", error);
-    return res.status(500).json({ error: "Failed to load team injuries" });
+    return res
+      .status(500)
+      .json({ error: "Failed to load team injuries" } satisfies ApiError);
   }
 });
-
-function reqLogError(scope: string, error: unknown) {
-  console.error(`[routes:${scope}]`, error);
-}
 
 export default router;

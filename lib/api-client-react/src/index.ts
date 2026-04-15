@@ -1,78 +1,78 @@
-// Generated API (primary source of truth)
 export * from "./generated/api";
 export * from "./generated/api.schemas";
-
-// Fetch config
+export * from "./hooks";
 export { setBaseUrl, setAuthTokenGetter } from "./custom-fetch";
 export type { AuthTokenGetter } from "./custom-fetch";
 
-/**
- * COMPATIBILITY LAYER
- * Frontend expects legacy naming → map to generated functions
- */
+export type Fixture = {
+  fixtureId: number;
+  leagueId: number;
+  leagueName: string;
+  leagueLogo: string;
+  seasonYear: number;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeamName: string;
+  awayTeamName: string;
+  homeTeamLogo: string;
+  awayTeamLogo: string;
+  kickoff: string;
+  statusShort: string | null;
+  statusElapsed: number | null;
+  homeGoals: number | null;
+  awayGoals: number | null;
+  venue: string | null;
+  venueCity: string | null;
+  referee: string | null;
+  weatherTemp: number | null;
+  weatherDesc: string | null;
+  weatherIcon: string | null;
+  weatherWind: number | null;
+  weatherHumidity: number | null;
+  weatherFetchedAt: string | null;
+  updatedAt: string;
+};
 
-// Fixtures
-export {
-  useGetFixturesToday as useGetTodayFixtures,
-  getGetFixturesTodayQueryKey as getGetTodayFixturesQueryKey,
-} from "./generated/api";
+export function getGetTodayFixturesQueryKey() {
+  return ["fixtures", "today"] as const;
+}
 
-// Standings
-export {
-  useGetLeagues as useGetStandings,
-  getGetLeaguesQueryKey as getGetStandingsQueryKey,
-} from "./generated/api";
+export function getGetStandingsQueryKey(leagueId?: number) {
+  return ["standings", leagueId ?? "all"] as const;
+}
 
-// Odds
-export {
-  useGetFixtureOdds,
-  getGetFixtureOddsQueryKey,
-} from "./generated/api";
+export function getGetFixtureOddsQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "odds"] as const;
+}
 
-// Live odds
-export {
-  useGetFixtureLiveOdds,
-  getGetFixtureLiveOddsQueryKey,
-} from "./generated/api";
+export function getGetFixtureLiveOddsQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "live-odds"] as const;
+}
 
-// Markets
-export {
-  useGetFixtureOddsMarkets,
-  getGetFixtureOddsMarketsQueryKey,
-} from "./generated/api";
+export function getGetFixtureOddsMarketsQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "odds-markets"] as const;
+}
 
-// H2H
-export {
-  useGetFixtureH2H,
-  getGetFixtureH2HQueryKey,
-} from "./generated/api";
+export function getGetFixtureH2HQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "h2h"] as const;
+}
 
-// Lineups
-export {
-  useGetFixtureLineups,
-  getGetFixtureLineupsQueryKey,
-} from "./generated/api";
+export function getGetFixtureLineupsQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "lineups"] as const;
+}
 
-// Stats
-export {
-  useGetFixtureStats,
-  getGetFixtureStatsQueryKey,
-} from "./generated/api";
+export function getGetFixtureStatsQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "stats"] as const;
+}
 
-// Events
-export {
-  useGetFixtureEvents,
-  getGetFixtureEventsQueryKey,
-} from "./generated/api;
+export function getGetFixtureEventsQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "events"] as const;
+}
 
-// Prediction
-export {
-  useGetFixturePrediction,
-  getGetFixturePredictionQueryKey,
-} from "./generated/api";
+export function getGetFixturePredictionQueryKey(fixtureId: number) {
+  return ["fixtures", fixtureId, "prediction"] as const;
+}
 
-// Team stats
-export {
-  useGetTeamStatistics,
-  getGetTeamStatisticsQueryKey,
-} from "./generated/api";
+export function getGetTeamStatisticsQueryKey(teamId: number) {
+  return ["teams", teamId, "statistics"] as const;
+}

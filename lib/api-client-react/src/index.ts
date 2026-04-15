@@ -68,4 +68,6 @@ export function getGetFixturePredictionQueryKey(fixtureId: number) {
 
 export function getGetTeamStatisticsQueryKey(teamId: number) {
   return ["teams", teamId, "statistics"] as const;
+export function getGetStandingsQueryKey(leagueId?: number) {
+  return ["standings", leagueId ?? "all"] as const;
 }

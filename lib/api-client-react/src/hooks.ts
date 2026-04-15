@@ -195,4 +195,17 @@ export function useGetTeamStatistics(teamId: number) {
     enabled: Number.isFinite(teamId) && teamId > 0,
     staleTime: 60_000,
   });
+  export function useGetStandings(leagueId?: number) {
+  return useQuery({
+    queryKey: ["standings", leagueId ?? "all"],
+    queryFn: async () => {
+      if (leagueId && Number.isFinite(leagueId) && leagueId > 0) {
+        return getLeagueStandings(leagueId);
+      }
+
+      return getLeagues();
+    },
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
 }

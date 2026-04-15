@@ -1,10 +1,10 @@
 import { Router } from "express";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
-import { db } from "@workspace/db/src";
+import { db } from "@workspace/db";
 import {
   fixtures,
-} from "@workspace/db/src/schema";
+} from "@workspace/db/schema";
 
 const router = Router();
 

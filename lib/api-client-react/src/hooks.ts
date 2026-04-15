@@ -110,18 +110,10 @@ export function useGetTeamInjuries(teamId: number) {
   });
 }
 
-/**
- * Compatibility hooks for old frontend imports.
- * They return safe empty payloads until the real endpoints are wired.
- */
-
 export function useGetFixtureOdds(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "odds"],
-    queryFn: async () => ({
-      ok: true,
-      items: [],
-    }),
+    queryFn: async () => ({ ok: true, items: [] }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -131,23 +123,27 @@ export function useGetFixtureOdds(fixtureId: number) {
 export function useGetFixtureLiveOdds(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "live-odds"],
-    queryFn: async () => ({
-      ok: true,
-      items: [],
-    }),
+    queryFn: async () => ({ ok: true, items: [] }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
     staleTime: 10_000,
     refetchInterval: 15_000,
   });
 }
 
+export function useGetFixtureOddsMarkets(fixtureId: number) {
+  return useQuery({
+    queryKey: ["fixtures", fixtureId, "odds-markets"],
+    queryFn: async () => ({ ok: true, items: [] }),
+    enabled: Number.isFinite(fixtureId) && fixtureId > 0,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
 export function useGetFixtureH2H(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "h2h"],
-    queryFn: async () => ({
-      ok: true,
-      items: [],
-    }),
+    queryFn: async () => ({ ok: true, items: [] }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
     staleTime: 60_000,
   });
@@ -156,10 +152,7 @@ export function useGetFixtureH2H(fixtureId: number) {
 export function useGetFixtureLineups(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "lineups"],
-    queryFn: async () => ({
-      ok: true,
-      items: [],
-    }),
+    queryFn: async () => ({ ok: true, items: [] }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
     staleTime: 30_000,
     refetchInterval: 60_000,
@@ -169,10 +162,7 @@ export function useGetFixtureLineups(fixtureId: number) {
 export function useGetFixtureStats(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "stats"],
-    queryFn: async () => ({
-      ok: true,
-      items: [],
-    }),
+    queryFn: async () => ({ ok: true, items: [] }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -182,10 +172,7 @@ export function useGetFixtureStats(fixtureId: number) {
 export function useGetFixtureEvents(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "events"],
-    queryFn: async () => ({
-      ok: true,
-      items: [],
-    }),
+    queryFn: async () => ({ ok: true, items: [] }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
     staleTime: 10_000,
     refetchInterval: 15_000,
@@ -195,11 +182,17 @@ export function useGetFixtureEvents(fixtureId: number) {
 export function useGetFixturePrediction(fixtureId: number) {
   return useQuery({
     queryKey: ["fixtures", fixtureId, "prediction"],
-    queryFn: async () => ({
-      ok: true,
-      item: null,
-    }),
+    queryFn: async () => ({ ok: true, item: null }),
     enabled: Number.isFinite(fixtureId) && fixtureId > 0,
+    staleTime: 60_000,
+  });
+}
+
+export function useGetTeamStatistics(teamId: number) {
+  return useQuery({
+    queryKey: ["teams", teamId, "statistics"],
+    queryFn: async () => ({ ok: true, item: null }),
+    enabled: Number.isFinite(teamId) && teamId > 0,
     staleTime: 60_000,
   });
 }

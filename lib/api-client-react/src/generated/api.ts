@@ -28,6 +28,12 @@ export type RequestOptions = RequestInit & {
 const BASE_PATH =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
 
+let _tokenGetter: (() => Promise<string | null>) | null = null;
+
+export function setTokenGetter(getter: () => Promise<string | null>) {
+  _tokenGetter = getter;
+}
+
 function buildUrl(path: string, query?: RequestOptions["query"]) {
   const url = new URL(`${BASE_PATH}${path}`);
   if (query) {
@@ -46,10 +52,17 @@ async function request<T = any>(
 ): Promise<T> {
   const { query, headers, ...rest } = options;
 
+  const authHeaders: Record<string, string> = {};
+  if (_tokenGetter) {
+    const token = await _tokenGetter();
+    if (token) authHeaders["Authorization"] = `Bearer ${token}`;
+  }
+
   const res = await fetch(buildUrl(path, query), {
     ...rest,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...(headers || {}),
     },
   });

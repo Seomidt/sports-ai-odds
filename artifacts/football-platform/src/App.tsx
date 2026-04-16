@@ -1,10 +1,10 @@
 import React, { useEffect, useRef } from "react";
-import { ClerkProvider, SignIn, SignUp, Show, useClerk, useUser } from '@clerk/react';
+import { ClerkProvider, SignIn, SignUp, Show, useClerk, useUser, useAuth } from '@clerk/react';
 import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wouter';
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useGetMe } from "@workspace/api-client-react";
+import { useGetMe, setTokenGetter } from "@workspace/api-client-react";
 
 import { SessionProvider } from "./lib/session";
 import { Home } from "./pages/Home";
@@ -96,6 +96,15 @@ function ClerkQueryClientCacheInvalidator() {
     return unsubscribe;
   }, [addListener, queryClient]);
 
+  return null;
+}
+
+function ClerkTokenInjector() {
+  const { getToken } = useAuth();
+  useEffect(() => {
+    setTokenGetter(() => getToken());
+    return () => setTokenGetter(() => Promise.resolve(null));
+  }, [getToken]);
   return null;
 }
 
@@ -209,6 +218,7 @@ function ClerkProviderWithRoutes() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkQueryClientCacheInvalidator />
+        <ClerkTokenInjector />
         <SessionProvider>
           <Switch>
             <Route path="/" component={HomeRedirect} />

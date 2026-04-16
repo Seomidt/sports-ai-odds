@@ -33,46 +33,5 @@ export type Fixture = {
   updatedAt: string;
 };
 
-export function getGetTodayFixturesQueryKey() {
-  return ["fixtures", "today"] as const;
-}
-
-export function getGetStandingsQueryKey(leagueId?: number) {
-  return ["standings", leagueId ?? "all"] as const;
-}
-
-export function getGetFixtureOddsQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "odds"] as const;
-}
-
-export function getGetFixtureLiveOddsQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "live-odds"] as const;
-}
-
-export function getGetFixtureOddsMarketsQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "odds-markets"] as const;
-}
-
-export function getGetFixtureH2HQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "h2h"] as const;
-}
-
-export function getGetFixtureLineupsQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "lineups"] as const;
-}
-
-export function getGetFixtureStatsQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "stats"] as const;
-}
-
-export function getGetFixtureEventsQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "events"] as const;
-}
-
-export function getGetFixturePredictionQueryKey(fixtureId: number) {
-  return ["fixtures", fixtureId, "prediction"] as const;
-}
-
-export function getGetTeamStatisticsQueryKey(teamId: number) {
-  return ["teams", teamId, "statistics"] as const;
-}
+export const getGetFixturesTodayQueryKey = getGetTodayFixturesQueryKey;
+export const useGetFixturesToday = useGetTodayFixtures;

@@ -100,6 +100,7 @@ function ClerkQueryClientCacheInvalidator() {
 }
 
 function AccessPendingPage() {
+  const { signOut } = useClerk();
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background text-center px-4">
       <div className="w-40 h-40 rounded-3xl overflow-hidden border border-white/10 bg-white/5 mb-6 shadow-2xl">
@@ -110,8 +111,8 @@ function AccessPendingPage() {
       <p className="text-muted-foreground max-w-md mb-8">
         Your account is signed in, but access has not been granted yet. If you should have access, ask an admin to approve your account.
       </p>
-      <button onClick={() => window.location.href = '/'} className="px-6 py-2 border border-white/10 rounded-md text-sm font-mono text-white hover:bg-white/5 transition-colors">
-        RETURN
+      <button onClick={() => signOut({ redirectUrl: '/' })} className="px-6 py-2 border border-white/10 rounded-md text-sm font-mono text-white hover:bg-white/5 transition-colors">
+        SIGN OUT
       </button>
     </div>
   );

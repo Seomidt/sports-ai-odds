@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
+import * as api from "./generated/api";
+
 export * from "./generated/api";
 export * from "./generated/api.schemas";
-export * from "./hooks";
 export { setBaseUrl, setAuthTokenGetter } from "./custom-fetch";
 export type { AuthTokenGetter } from "./custom-fetch";
 
@@ -33,5 +35,29 @@ export type Fixture = {
   updatedAt: string;
 };
 
-export const getGetFixturesTodayQueryKey = getGetTodayFixturesQueryKey;
-export const useGetFixturesToday = useGetTodayFixtures;
+/**
+ * Local compatibility hook.
+ * Backup/generated client does not expose useGetMe.
+ */
+export function useGetMe() {
+  return useQuery({
+    queryKey: ["me"],
+    queryFn: async () => ({
+      user: null,
+      authenticated: false,
+      role: null,
+    }),
+    staleTime: 30_000,
+  });
+}
+
+export function getGetMeQueryKey() {
+  return ["me"] as const;
+}
+
+/**
+ * Compatibility aliases for older frontend imports.
+ * Only alias names here. Do NOT add another hooks layer.
+ */
+export const useGetFixturesToday = api.useGetTodayFixtures;
+export const getGetFixturesTodayQueryKey = api.getGetTodayFixturesQueryKey;

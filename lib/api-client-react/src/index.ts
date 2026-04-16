@@ -36,12 +36,6 @@ export type Fixture = {
 };
 
 /**
- * Compatibility exports expected by older frontend files
- */
-export const useGetFixturesToday = api.useGetTodayFixtures;
-export const getGetFixturesTodayQueryKey = api.getGetTodayFixturesQueryKey;
-
-/**
  * Local compatibility hook.
  * generated/api.ts does not expose useGetMe.
  */
@@ -60,3 +54,10 @@ export function useGetMe() {
 export function getGetMeQueryKey() {
   return ["me"] as const;
 }
+
+/**
+ * Compatibility aliases for old frontend naming.
+ * generated/api exports useGetFixturesToday, while some pages import useGetTodayFixtures.
+ */
+export const useGetTodayFixtures = api.useGetFixturesToday;
+export const getGetTodayFixturesQueryKey = api.getGetFixturesTodayQueryKey;

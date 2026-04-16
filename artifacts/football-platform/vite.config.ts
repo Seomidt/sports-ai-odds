@@ -2,7 +2,6 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const port = Number(process.env.PORT ?? 5173);
 const basePath = process.env.BASE_PATH ?? "/";
@@ -10,8 +9,12 @@ const basePath = process.env.BASE_PATH ?? "/";
 const plugins: any[] = [
   react(),
   tailwindcss(),
-  runtimeErrorOverlay(),
 ];
+
+if (process.env.REPL_ID !== undefined) {
+  const { default: runtimeErrorOverlay } = await import("@replit/vite-plugin-runtime-error-modal");
+  plugins.push(runtimeErrorOverlay());
+}
 
 if (process.env.NODE_ENV !== "production" && process.env.REPL_ID !== undefined) {
   const { cartographer } = await import("@replit/vite-plugin-cartographer");

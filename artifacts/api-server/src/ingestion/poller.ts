@@ -2083,6 +2083,43 @@ async function scheduleDailySignalCron() {
   }, msUntilNext);
 }
 
+// ─── Nightly force sync (03:00 UTC) ───────────────────────────────────────────
+
+async function scheduleNightlyForceSync() {
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
+  const lastRunKey = "nightly-force-sync:lastRun";
+  const lastRun = await kvGet(lastRunKey);
+
+  const next3am = new Date(now);
+  next3am.setUTCHours(3, 0, 0, 0);
+  if (next3am.getTime() <= now.getTime()) next3am.setUTCDate(next3am.getUTCDate() + 1);
+
+  const past3amToday = now.getUTCHours() >= 3;
+  if (past3amToday && lastRun !== todayStr) {
+    const minLate = Math.round((now.getTime() - new Date(`${todayStr}T03:00:00Z`).getTime()) / 60_000);
+    console.log(`[nightly-sync] Missed today's 3am run by ${minLate} min — running catch-up now`);
+    await kvSet(lastRunKey, todayStr);
+    forceFullSync().catch(console.error);
+  } else if (lastRun !== todayStr) {
+    console.log(`[nightly-sync] Next 3am UTC run in ${Math.round((next3am.getTime() - now.getTime()) / 60_000)} min`);
+  } else {
+    console.log(`[nightly-sync] Already ran today (${todayStr}) — next at ${next3am.toISOString()}`);
+  }
+
+  const msUntilNext = next3am.getTime() - now.getTime();
+  setTimeout(async () => {
+    const d = new Date().toISOString().slice(0, 10);
+    await kvSet(lastRunKey, d);
+    forceFullSync().catch(console.error);
+    setInterval(async () => {
+      const d2 = new Date().toISOString().slice(0, 10);
+      await kvSet(lastRunKey, d2);
+      forceFullSync().catch(console.error);
+    }, 24 * 60 * 60 * 1000);
+  }, msUntilNext);
+}
+
 export interface ForceSyncResult {
   fixtures: number;
   oddsFetched: number;
@@ -2464,6 +2501,8 @@ export function startPoller() {
   scheduleAiTipsAtHour(18).catch(console.error);
   // Signal pre-compute: 05:00 UTC — caches signals for today's fixtures
   scheduleDailySignalCron().catch(console.error);
+  // Nightly force sync: 03:00 UTC — fills all gaps in the upcoming 7-day window
+  scheduleNightlyForceSync().catch(console.error);
 }
 
 // ─── Historical season seed ────────────────────────────────────────────────────

@@ -119,7 +119,7 @@ function AccessPendingPage() {
 
 function ProtectedRoute({ component: Component }: { component: React.ComponentType }) {
   const { isSignedIn, isLoaded } = useUser();
-  const { data: me, isLoading: meLoading } = useGetMe();
+  const { data: me, isLoading: meLoading } = useGetMe({ retry: false });
 
   if (!isLoaded) {
     return (
@@ -133,6 +133,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     return <Redirect to="/" />;
   }
 
+  // Only show loader briefly — if API is unreachable, fail fast and let user through
   if (meLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -141,6 +142,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
+  // Only block access when the API explicitly says accessDenied: true
   if (me?.accessDenied) {
     return <AccessPendingPage />;
   }

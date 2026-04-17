@@ -1,9 +1,10 @@
 import { Router } from "express";
-import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { aiBettingTips, fixtures, prematchSyntheses } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
+import { generateLeagueNews } from "../ai/analysisLayer.js";
 
 const router = Router();
 
@@ -565,6 +566,119 @@ router.get("/analysis/:id", async (req, res) => {
   } catch (error) {
     console.error("[routes:analysis.byId]", error);
     return res.status(500).json({ error: "Failed to load fixture analysis" });
+  }
+});
+
+router.get("/news", async (req, res) => {
+  const leagueId = Number(req.query.leagueId);
+  if (!Number.isFinite(leagueId) || leagueId <= 0) {
+    return res.status(400).json({ error: "leagueId required" });
+  }
+
+  try {
+    const now = Date.now();
+    const NEWS_TTL_MS = 24 * 60 * 60 * 1000;
+
+    const existing = await db
+      .select()
+      .from(newsArticles)
+      .where(eq(newsArticles.leagueId, leagueId))
+      .orderBy(asc(newsArticles.rank))
+      .limit(15);
+
+    const freshArticles = existing.filter(a => (now - a.generatedAt.getTime()) < NEWS_TTL_MS);
+
+    if (freshArticles.length >= 3) {
+      return res.json({
+        articles: freshArticles.map(a => ({
+          id: `${a.leagueId}-${a.teamId}`,
+          teamId: a.teamId,
+          teamName: a.teamName,
+          teamLogo: a.teamLogo,
+          rank: a.rank,
+          headline: a.headline,
+          body: a.body,
+          fixtureLine: a.fixtureLine ?? "",
+          homeGoals: a.homeGoals,
+          awayGoals: a.awayGoals,
+          opponent: a.opponent ?? "",
+          result: (a.result as "win" | "draw" | "loss" | "upcoming") ?? "upcoming",
+          kickoff: a.kickoff?.toISOString() ?? null,
+        })),
+        generatedAt: freshArticles[0]!.generatedAt.toISOString(),
+      });
+    }
+
+    const topTeamsRows = await db
+      .select({
+        teamId: standings.teamId,
+        teamName: standings.teamName,
+        teamLogo: standings.teamLogo,
+        rank: standings.rank,
+        points: standings.points,
+      })
+      .from(standings)
+      .where(eq(standings.leagueId, leagueId))
+      .orderBy(asc(standings.rank))
+      .limit(10);
+
+    if (topTeamsRows.length === 0) {
+      return res.status(404).json({ error: "No standings data for this league", articles: [] });
+    }
+
+    const teamIds = topTeamsRows.map(t => t.teamId);
+
+    const recentFixtures = await db
+      .select()
+      .from(fixtures)
+      .where(
+        and(
+          inArray(fixtures.statusShort, ["FT", "AET", "PEN"]),
+          or(inArray(fixtures.homeTeamId, teamIds), inArray(fixtures.awayTeamId, teamIds)),
+        )
+      )
+      .orderBy(desc(fixtures.kickoff))
+      .limit(100);
+
+    const recentMatches: Array<{
+      teamId: number; teamName: string; opponentName: string;
+      homeGoals: number | null; awayGoals: number | null;
+      isHome: boolean; kickoff: string | null; statusShort: string | null;
+    }> = [];
+
+    for (const f of recentFixtures) {
+      if (f.homeTeamId && teamIds.includes(f.homeTeamId)) {
+        recentMatches.push({
+          teamId: f.homeTeamId,
+          teamName: f.homeTeamName ?? "",
+          opponentName: f.awayTeamName ?? "",
+          homeGoals: f.homeGoals,
+          awayGoals: f.awayGoals,
+          isHome: true,
+          kickoff: f.kickoff?.toISOString() ?? null,
+          statusShort: f.statusShort,
+        });
+      }
+      if (f.awayTeamId && teamIds.includes(f.awayTeamId)) {
+        recentMatches.push({
+          teamId: f.awayTeamId,
+          teamName: f.awayTeamName ?? "",
+          opponentName: f.homeTeamName ?? "",
+          homeGoals: f.homeGoals,
+          awayGoals: f.awayGoals,
+          isHome: false,
+          kickoff: f.kickoff?.toISOString() ?? null,
+          statusShort: f.statusShort,
+        });
+      }
+    }
+
+    const articles = await generateLeagueNews(leagueId, topTeamsRows, recentMatches);
+
+    return res.json({ articles, generatedAt: new Date().toISOString() });
+  } catch (err) {
+    console.error("[routes:news]", err);
+    return res.status(500).json({ error: "Failed to load news" });
   }
 });
 

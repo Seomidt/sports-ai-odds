@@ -1,12 +1,13 @@
 import { Router, type Request, type Response } from "express";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { getAuth } from "@clerk/express";
 
 import { db } from "@workspace/db";
 import {
   fixtures, standings, fixtureEvents, fixtureStats, fixtureLineups,
   oddsSnapshots, h2hFixtures, oddsMarkets, liveOddsSnapshots,
   predictions, coaches, sidelinedPlayers, playerSeasonStats, teamSeasonStats,
-  fixtureSignals, trophies, playerStats as playerStatsTable,
+  fixtureSignals, trophies, playerStats as playerStatsTable, followedFixtures,
 } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
@@ -110,8 +111,19 @@ router.get("/fixtures/top-picks", async (_req: Request, res: Response) => {
   }
 });
 
-router.get("/fixtures/followed", async (_req: Request, res: Response) => {
-  return res.json({ fixtureIds: [] });
+router.get("/fixtures/followed", async (req: Request, res: Response) => {
+  try {
+    const { userId } = getAuth(req);
+    if (!userId) return res.json({ fixtureIds: [] });
+    const rows = await db
+      .select({ fixtureId: followedFixtures.fixtureId })
+      .from(followedFixtures)
+      .where(eq(followedFixtures.userId, userId));
+    return res.json({ fixtureIds: rows.map(r => r.fixtureId) });
+  } catch (err) {
+    reqLogError("fixtures.followed", err);
+    return res.json({ fixtureIds: [] });
+  }
 });
 
 router.post("/fixtures/:id/follow", async (_req: Request, res: Response) => {
@@ -187,6 +199,7 @@ router.get("/fixtures/:id/features", async (req: Request, res: Response) => {
         referee: row.referee,
         weatherTemp: row.weatherTemp,
         weatherDesc: row.weatherDesc,
+        weatherIcon: row.weatherIcon,
         weatherWind: row.weatherWind,
         weatherHumidity: row.weatherHumidity,
         weatherFetchedAt: row.weatherFetchedAt,

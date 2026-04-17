@@ -2091,23 +2091,23 @@ async function scheduleNightlyForceSync() {
   const lastRunKey = "nightly-force-sync:lastRun";
   const lastRun = await kvGet(lastRunKey);
 
-  const next3am = new Date(now);
-  next3am.setUTCHours(3, 0, 0, 0);
-  if (next3am.getTime() <= now.getTime()) next3am.setUTCDate(next3am.getUTCDate() + 1);
+  const next1am = new Date(now);
+  next1am.setUTCHours(1, 0, 0, 0);
+  if (next1am.getTime() <= now.getTime()) next1am.setUTCDate(next1am.getUTCDate() + 1);
 
-  const past3amToday = now.getUTCHours() >= 3;
-  if (past3amToday && lastRun !== todayStr) {
-    const minLate = Math.round((now.getTime() - new Date(`${todayStr}T03:00:00Z`).getTime()) / 60_000);
-    console.log(`[nightly-sync] Missed today's 3am run by ${minLate} min — running catch-up now`);
+  const past1amToday = now.getUTCHours() >= 1;
+  if (past1amToday && lastRun !== todayStr) {
+    const minLate = Math.round((now.getTime() - new Date(`${todayStr}T01:00:00Z`).getTime()) / 60_000);
+    console.log(`[nightly-sync] Missed today's 1am run by ${minLate} min — running catch-up now`);
     await kvSet(lastRunKey, todayStr);
     forceFullSync().catch(console.error);
   } else if (lastRun !== todayStr) {
-    console.log(`[nightly-sync] Next 3am UTC run in ${Math.round((next3am.getTime() - now.getTime()) / 60_000)} min`);
+    console.log(`[nightly-sync] Next 1am UTC run in ${Math.round((next1am.getTime() - now.getTime()) / 60_000)} min`);
   } else {
-    console.log(`[nightly-sync] Already ran today (${todayStr}) — next at ${next3am.toISOString()}`);
+    console.log(`[nightly-sync] Already ran today (${todayStr}) — next at ${next1am.toISOString()}`);
   }
 
-  const msUntilNext = next3am.getTime() - now.getTime();
+  const msUntilNext = next1am.getTime() - now.getTime();
   setTimeout(async () => {
     const d = new Date().toISOString().slice(0, 10);
     await kvSet(lastRunKey, d);

@@ -2,18 +2,7 @@
   "version": 2,
   "installCommand": "pnpm install --frozen-lockfile",
   "buildCommand": "pnpm --filter @workspace/football-platform run build",
-  "outputDirectory": "public",
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "https://sports-ai-odds-production.up.railway.app/api/$1"
-    },
-    {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

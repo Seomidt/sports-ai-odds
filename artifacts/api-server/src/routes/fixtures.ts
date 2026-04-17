@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
 import { fixtures } from "@workspace/db/schema";
+import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
@@ -48,21 +49,19 @@ function reqLogError(scope: string, error: unknown) {
 
 router.get("/fixtures/today", async (_req: Request, res: Response) => {
   try {
-    const from = startOfDayUtc();
-    const to = endOfDayUtc();
-
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(and(gte(fixtures.kickoff, from), lte(fixtures.kickoff, to)))
-      .orderBy(asc(fixtures.kickoff))
-      .limit(200);
-
-    return res.json({
-      ok: true,
-      count: rows.length,
-      items: rows,
+    const dateKey = new Date().toISOString().slice(0, 10);
+    const result = await getOrFetch(`fixtures:today:${dateKey}`, TTL.MIN1, async () => {
+      const from = startOfDayUtc();
+      const to = endOfDayUtc();
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(and(gte(fixtures.kickoff, from), lte(fixtures.kickoff, to)))
+        .orderBy(asc(fixtures.kickoff))
+        .limit(200);
+      return { ok: true, count: rows.length, items: rows };
     });
+    return res.json(result);
   } catch (error) {
     reqLogError("fixtures.today", error);
     return res
@@ -73,25 +72,22 @@ router.get("/fixtures/today", async (_req: Request, res: Response) => {
 
 router.get("/fixtures/top-picks", async (_req: Request, res: Response) => {
   try {
-    const now = new Date();
-
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(
-        and(
-          gte(fixtures.kickoff, now),
-          inArray(fixtures.statusShort, ["NS", "TBD"]),
-        ),
-      )
-      .orderBy(asc(fixtures.kickoff))
-      .limit(20);
-
-    return res.json({
-      ok: true,
-      count: rows.length,
-      items: rows,
+    const result = await getOrFetch("fixtures:top-picks", TTL.MIN1, async () => {
+      const now = new Date();
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(
+          and(
+            gte(fixtures.kickoff, now),
+            inArray(fixtures.statusShort, ["NS", "TBD"]),
+          ),
+        )
+        .orderBy(asc(fixtures.kickoff))
+        .limit(20);
+      return { ok: true, count: rows.length, items: rows };
     });
+    return res.json(result);
   } catch (error) {
     reqLogError("fixtures.topPicks", error);
     return res
@@ -108,22 +104,20 @@ router.get("/fixtures/:id", async (req: Request, res: Response) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(eq(fixtures.fixtureId, fixtureId))
-      .limit(1);
+    const result = await getOrFetch(`fixture:${fixtureId}`, TTL.MIN1, async () => {
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(eq(fixtures.fixtureId, fixtureId))
+        .limit(1);
+      return rows[0] ?? null;
+    });
 
-    const row = rows[0] ?? null;
-
-    if (!row) {
+    if (!result) {
       return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
     }
 
-    return res.json({
-      ok: true,
-      item: row,
-    });
+    return res.json({ ok: true, item: result });
   } catch (error) {
     reqLogError("fixtures.byId", error);
     return res
@@ -140,44 +134,42 @@ router.get("/fixtures/:id/features", async (req: Request, res: Response) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(eq(fixtures.fixtureId, fixtureId))
-      .limit(1);
+    const result = await getOrFetch(`fixture:${fixtureId}:features`, TTL.MIN2, async () => {
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(eq(fixtures.fixtureId, fixtureId))
+        .limit(1);
+      const row = rows[0] ?? null;
+      if (!row) return null;
+      return {
+        fixtureId: row.fixtureId,
+        kickoff: row.kickoff,
+        statusShort: row.statusShort,
+        leagueId: row.leagueId,
+        leagueName: row.leagueName,
+        seasonYear: row.seasonYear,
+        homeTeamId: row.homeTeamId,
+        homeTeamName: row.homeTeamName,
+        awayTeamId: row.awayTeamId,
+        awayTeamName: row.awayTeamName,
+        venue: row.venue,
+        venueCity: row.venueCity,
+        referee: row.referee,
+        weatherTemp: row.weatherTemp,
+        weatherDesc: row.weatherDesc,
+        weatherWind: row.weatherWind,
+        weatherHumidity: row.weatherHumidity,
+        weatherFetchedAt: row.weatherFetchedAt,
+        updatedAt: row.updatedAt,
+      };
+    });
 
-    const row = rows[0] ?? null;
-
-    if (!row) {
+    if (!result) {
       return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
     }
 
-    const features = {
-      fixtureId: row.fixtureId,
-      kickoff: row.kickoff,
-      statusShort: row.statusShort,
-      leagueId: row.leagueId,
-      leagueName: row.leagueName,
-      seasonYear: row.seasonYear,
-      homeTeamId: row.homeTeamId,
-      homeTeamName: row.homeTeamName,
-      awayTeamId: row.awayTeamId,
-      awayTeamName: row.awayTeamName,
-      venue: row.venue,
-      venueCity: row.venueCity,
-      referee: row.referee,
-      weatherTemp: row.weatherTemp,
-      weatherDesc: row.weatherDesc,
-      weatherWind: row.weatherWind,
-      weatherHumidity: row.weatherHumidity,
-      weatherFetchedAt: row.weatherFetchedAt,
-      updatedAt: row.updatedAt,
-    };
-
-    return res.json({
-      ok: true,
-      item: features,
-    });
+    return res.json({ ok: true, item: result });
   } catch (error) {
     reqLogError("fixtures.features", error);
     return res
@@ -194,13 +186,14 @@ router.get("/fixtures/:id/signals", async (req: Request, res: Response) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(eq(fixtures.fixtureId, fixtureId))
-      .limit(1);
-
-    const row = rows[0] ?? null;
+    const row = await getOrFetch(`fixture:${fixtureId}`, TTL.MIN1, async () => {
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(eq(fixtures.fixtureId, fixtureId))
+        .limit(1);
+      return rows[0] ?? null;
+    });
 
     if (!row) {
       return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
@@ -211,24 +204,22 @@ router.get("/fixtures/:id/signals", async (req: Request, res: Response) => {
     const minutesToKickoff =
       kickoffTs !== null ? Math.round((kickoffTs - now) / 60000) : null;
 
-    const signals = {
-      fixtureId: row.fixtureId,
-      statusShort: row.statusShort,
-      isUpcoming: row.statusShort === "NS" || row.statusShort === "TBD",
-      isLive: ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE", "SUSP"].includes(
-        row.statusShort ?? "",
-      ),
-      hasWeather: Boolean(row.weatherFetchedAt),
-      hasReferee: Boolean(row.referee),
-      minutesToKickoff,
-      homeGoals: row.homeGoals,
-      awayGoals: row.awayGoals,
-      updatedAt: row.updatedAt,
-    };
-
     return res.json({
       ok: true,
-      item: signals,
+      item: {
+        fixtureId: row.fixtureId,
+        statusShort: row.statusShort,
+        isUpcoming: row.statusShort === "NS" || row.statusShort === "TBD",
+        isLive: ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE", "SUSP"].includes(
+          row.statusShort ?? "",
+        ),
+        hasWeather: Boolean(row.weatherFetchedAt),
+        hasReferee: Boolean(row.referee),
+        minutesToKickoff,
+        homeGoals: row.homeGoals,
+        awayGoals: row.awayGoals,
+        updatedAt: row.updatedAt,
+      },
     });
   } catch (error) {
     reqLogError("fixtures.signals", error);
@@ -240,29 +231,27 @@ router.get("/fixtures/:id/signals", async (req: Request, res: Response) => {
 
 router.get("/standings/leagues", async (_req: Request, res: Response) => {
   try {
-    const rows = await db
-      .select({
-        leagueId: fixtures.leagueId,
-        leagueName: fixtures.leagueName,
-        leagueLogo: fixtures.leagueLogo,
-        seasonYear: fixtures.seasonYear,
-        fixtureCount: sql<number>`count(*)`,
-      })
-      .from(fixtures)
-      .groupBy(
-        fixtures.leagueId,
-        fixtures.leagueName,
-        fixtures.leagueLogo,
-        fixtures.seasonYear,
-      )
-      .orderBy(desc(sql`count(*)`), asc(fixtures.leagueName))
-      .limit(100);
-
-    return res.json({
-      ok: true,
-      count: rows.length,
-      items: rows,
+    const result = await getOrFetch("standings:leagues", TTL.MIN10, async () => {
+      const rows = await db
+        .select({
+          leagueId: fixtures.leagueId,
+          leagueName: fixtures.leagueName,
+          leagueLogo: fixtures.leagueLogo,
+          seasonYear: fixtures.seasonYear,
+          fixtureCount: sql<number>`count(*)`,
+        })
+        .from(fixtures)
+        .groupBy(
+          fixtures.leagueId,
+          fixtures.leagueName,
+          fixtures.leagueLogo,
+          fixtures.seasonYear,
+        )
+        .orderBy(desc(sql`count(*)`), asc(fixtures.leagueName))
+        .limit(100);
+      return { ok: true, count: rows.length, items: rows };
     });
+    return res.json(result);
   } catch (error) {
     reqLogError("standings.leagues", error);
     return res
@@ -279,18 +268,16 @@ router.get("/standings/:leagueId", async (req: Request, res: Response) => {
       return badRequest(res, "Invalid league id");
     }
 
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(eq(fixtures.leagueId, leagueId))
-      .orderBy(desc(fixtures.kickoff))
-      .limit(100);
-
-    return res.json({
-      ok: true,
-      count: rows.length,
-      items: rows,
+    const result = await getOrFetch(`standings:league:${leagueId}`, TTL.MIN10, async () => {
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(eq(fixtures.leagueId, leagueId))
+        .orderBy(desc(fixtures.kickoff))
+        .limit(100);
+      return { ok: true, count: rows.length, items: rows };
     });
+    return res.json(result);
   } catch (error) {
     reqLogError("standings.byLeague", error);
     return res

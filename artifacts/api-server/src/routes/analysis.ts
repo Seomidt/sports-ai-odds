@@ -3,6 +3,7 @@ import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
 import { db } from "@workspace/db";
 import { fixtures } from "@workspace/db/schema";
+import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
 
@@ -96,18 +97,18 @@ router.get("/analysis/:id", async (req, res) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const row = await db.query.fixtures.findFirst({
-      where: eq(fixtures.fixtureId, fixtureId),
+    const result = await getOrFetch(`analysis:${fixtureId}`, TTL.MIN1, async () => {
+      const row = await db.query.fixtures.findFirst({
+        where: eq(fixtures.fixtureId, fixtureId),
+      });
+      return row ? buildFixtureAnalysis(row) : null;
     });
 
-    if (!row) {
+    if (!result) {
       return res.status(404).json({ error: "Fixture not found" });
     }
 
-    return res.json({
-      ok: true,
-      item: buildFixtureAnalysis(row),
-    });
+    return res.json({ ok: true, item: result });
   } catch (error) {
     console.error("[routes:analysis.byId]", error);
     return res.status(500).json({ error: "Failed to load fixture analysis" });
@@ -116,25 +117,22 @@ router.get("/analysis/:id", async (req, res) => {
 
 router.get("/analysis/upcoming", async (_req, res) => {
   try {
-    const now = new Date();
-
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(
-        and(
-          gte(fixtures.kickoff, now),
-          inArray(fixtures.statusShort, UPCOMING_STATUSES),
-        ),
-      )
-      .orderBy(asc(fixtures.kickoff))
-      .limit(25);
-
-    return res.json({
-      ok: true,
-      count: rows.length,
-      items: rows.map(buildFixtureAnalysis),
+    const result = await getOrFetch("analysis:upcoming", TTL.MIN1, async () => {
+      const now = new Date();
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(
+          and(
+            gte(fixtures.kickoff, now),
+            inArray(fixtures.statusShort, UPCOMING_STATUSES),
+          ),
+        )
+        .orderBy(asc(fixtures.kickoff))
+        .limit(25);
+      return { ok: true, count: rows.length, items: rows.map(buildFixtureAnalysis) };
     });
+    return res.json(result);
   } catch (error) {
     console.error("[routes:analysis.upcoming]", error);
     return res.status(500).json({ error: "Failed to load upcoming analysis" });
@@ -143,18 +141,16 @@ router.get("/analysis/upcoming", async (_req, res) => {
 
 router.get("/analysis/live", async (_req, res) => {
   try {
-    const rows = await db
-      .select()
-      .from(fixtures)
-      .where(inArray(fixtures.statusShort, LIVE_STATUSES))
-      .orderBy(desc(fixtures.kickoff))
-      .limit(25);
-
-    return res.json({
-      ok: true,
-      count: rows.length,
-      items: rows.map(buildFixtureAnalysis),
+    const result = await getOrFetch("analysis:live", TTL.S30, async () => {
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(inArray(fixtures.statusShort, LIVE_STATUSES))
+        .orderBy(desc(fixtures.kickoff))
+        .limit(25);
+      return { ok: true, count: rows.length, items: rows.map(buildFixtureAnalysis) };
     });
+    return res.json(result);
   } catch (error) {
     console.error("[routes:analysis.live]", error);
     return res.status(500).json({ error: "Failed to load live analysis" });

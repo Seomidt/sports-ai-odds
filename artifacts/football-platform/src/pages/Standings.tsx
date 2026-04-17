@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
@@ -182,8 +182,8 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
 }
 
 export function Standings() {
-  const [activeLeagueId, setActiveLeagueId] = useState<number>(39);
-  const [activeLeagueName, setActiveLeagueName] = useState<string>("Premier League");
+  const [activeLeagueId, setActiveLeagueId] = useState<number | null>(null);
+  const [activeLeagueName, setActiveLeagueName] = useState<string>("");
 
   const { data: leaguesData, isLoading: leaguesLoading } = useQuery<{ leagues: LeagueEntry[] }>({
     queryKey: ["standings-leagues"],
@@ -193,6 +193,13 @@ export function Standings() {
   });
 
   const leagues = leaguesData?.leagues ?? [];
+
+  useEffect(() => {
+    if (leagues.length > 0 && activeLeagueId === null) {
+      setActiveLeagueId(leagues[0].leagueId);
+      setActiveLeagueName(leagues[0].leagueName);
+    }
+  }, [leagues, activeLeagueId]);
 
   return (
     <Layout>
@@ -208,7 +215,7 @@ export function Standings() {
 
         <div className="flex items-center gap-3">
           <Select
-            value={leaguesLoading ? "" : String(activeLeagueId)}
+            value={activeLeagueId !== null ? String(activeLeagueId) : ""}
             onValueChange={(v) => {
               const id = Number(v);
               const found = leagues.find(l => l.leagueId === id);
@@ -216,7 +223,7 @@ export function Standings() {
               setActiveLeagueName(found?.leagueName ?? "");
             }}
           >
-            <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50 disabled:opacity-50" disabled={leaguesLoading}>
+            <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50 disabled:opacity-50" disabled={leaguesLoading || activeLeagueId === null}>
               <SelectValue placeholder={leaguesLoading ? "Loading leagues..." : "Select league"} />
             </SelectTrigger>
             <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
@@ -230,18 +237,20 @@ export function Standings() {
           {leaguesLoading && <Activity className="w-4 h-4 text-primary animate-pulse shrink-0" />}
         </div>
 
-        <div className="glass-card rounded-xl overflow-hidden">
-          <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6">
-            <img
-              src={LEAGUE_LOGO(activeLeagueId)}
-              alt=""
-              className="w-6 h-6 object-contain"
-              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-            <span className="font-mono font-bold text-sm text-white tracking-wide">{activeLeagueName}</span>
+        {activeLeagueId !== null && (
+          <div className="glass-card rounded-xl overflow-hidden">
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6">
+              <img
+                src={LEAGUE_LOGO(activeLeagueId)}
+                alt=""
+                className="w-6 h-6 object-contain"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+              <span className="font-mono font-bold text-sm text-white tracking-wide">{activeLeagueName}</span>
+            </div>
+            <StandingsTable key={activeLeagueId} leagueId={activeLeagueId} />
           </div>
-          <StandingsTable key={activeLeagueId} leagueId={activeLeagueId} />
-        </div>
+        )}
       </div>
     </Layout>
   );

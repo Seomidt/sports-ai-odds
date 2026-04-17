@@ -6,7 +6,7 @@ import {
   fixtures, standings, fixtureEvents, fixtureStats, fixtureLineups,
   oddsSnapshots, h2hFixtures, oddsMarkets, liveOddsSnapshots,
   predictions, coaches, sidelinedPlayers, playerSeasonStats, teamSeasonStats,
-  fixtureSignals,
+  fixtureSignals, trophies, playerStats as playerStatsTable,
 } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
@@ -398,35 +398,43 @@ router.get("/fixtures/:id/intel", async (req: Request, res: Response) => {
 
     const result = await getOrFetch(`fixture:${fixtureId}:intel`, TTL.MIN10, async () => {
       const [fix] = await db
-        .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId, leagueId: fixtures.leagueId, seasonYear: fixtures.seasonYear })
-        .from(fixtures)
-        .where(eq(fixtures.fixtureId, fixtureId))
-        .limit(1);
+        .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId })
+        .from(fixtures).where(eq(fixtures.fixtureId, fixtureId)).limit(1);
       if (!fix) return null;
 
-      const [predRows, homeCoachRows, awayCoachRows, homeSidelined, awaySidelined, topScorers] = await Promise.all([
+      const [predRows, homeCoachRows, awayCoachRows, homeSidelinedRows, awaySidelinedRows, scorers, assists, homeTrophyRows, awayTrophyRows] = await Promise.all([
         db.select().from(predictions).where(eq(predictions.fixtureId, fixtureId)).limit(1),
-        db.select({ name: coaches.name }).from(coaches).where(eq(coaches.teamId, fix.homeTeamId)).limit(1),
-        db.select({ name: coaches.name }).from(coaches).where(eq(coaches.teamId, fix.awayTeamId)).limit(1),
-        db.select({ playerName: sidelinedPlayers.playerName, reason: sidelinedPlayers.type })
+        db.select({ name: coaches.name, nationality: coaches.nationality, age: coaches.age }).from(coaches).where(eq(coaches.teamId, fix.homeTeamId)).limit(1),
+        db.select({ name: coaches.name, nationality: coaches.nationality, age: coaches.age }).from(coaches).where(eq(coaches.teamId, fix.awayTeamId)).limit(1),
+        db.select({ playerName: sidelinedPlayers.playerName, type: sidelinedPlayers.type, startDate: sidelinedPlayers.startDate, endDate: sidelinedPlayers.endDate })
           .from(sidelinedPlayers).where(eq(sidelinedPlayers.teamId, fix.homeTeamId)).limit(10),
-        db.select({ playerName: sidelinedPlayers.playerName, reason: sidelinedPlayers.type })
+        db.select({ playerName: sidelinedPlayers.playerName, type: sidelinedPlayers.type, startDate: sidelinedPlayers.startDate, endDate: sidelinedPlayers.endDate })
           .from(sidelinedPlayers).where(eq(sidelinedPlayers.teamId, fix.awayTeamId)).limit(10),
-        db.select({ playerName: playerSeasonStats.playerName, teamId: playerSeasonStats.teamId, goals: playerSeasonStats.goals, assists: playerSeasonStats.assists })
-          .from(playerSeasonStats)
-          .where(inArray(playerSeasonStats.teamId, [fix.homeTeamId, fix.awayTeamId]))
-          .orderBy(desc(playerSeasonStats.goals))
-          .limit(10),
+        db.select({ playerName: playerSeasonStats.playerName, teamId: playerSeasonStats.teamId, goals: playerSeasonStats.goals, assists: playerSeasonStats.assists, appearances: playerSeasonStats.appearances, rating: playerSeasonStats.rating })
+          .from(playerSeasonStats).where(inArray(playerSeasonStats.teamId, [fix.homeTeamId, fix.awayTeamId])).orderBy(desc(playerSeasonStats.goals)).limit(10),
+        db.select({ playerName: playerSeasonStats.playerName, teamId: playerSeasonStats.teamId, goals: playerSeasonStats.goals, assists: playerSeasonStats.assists, appearances: playerSeasonStats.appearances })
+          .from(playerSeasonStats).where(inArray(playerSeasonStats.teamId, [fix.homeTeamId, fix.awayTeamId])).orderBy(desc(playerSeasonStats.assists)).limit(10),
+        db.select({ leagueName: trophies.leagueName, place: trophies.place, season: trophies.season }).from(trophies).where(eq(trophies.teamId, fix.homeTeamId)).limit(10),
+        db.select({ leagueName: trophies.leagueName, place: trophies.place, season: trophies.season }).from(trophies).where(eq(trophies.teamId, fix.awayTeamId)).limit(10),
       ]);
 
       const pred = predRows[0] ?? null;
       return {
-        prediction: pred ? { homeWinPct: pred.homeWinPercent, drawPct: pred.drawPercent, awayWinPct: pred.awayWinPercent, goalsHome: pred.goalsHome, goalsAway: pred.goalsAway, advice: pred.adviceText } : null,
-        homeCoach: homeCoachRows[0] ? { name: homeCoachRows[0].name } : null,
-        awayCoach: awayCoachRows[0] ? { name: awayCoachRows[0].name } : null,
-        homeSidelined,
-        awaySidelined,
-        topScorers,
+        // All prediction fields (both naming conventions for different UI components)
+        prediction: pred ? {
+          homeWinPercent: pred.homeWinPercent, drawPercent: pred.drawPercent, awayWinPercent: pred.awayWinPercent,
+          homeWinPct: pred.homeWinPercent, drawPct: pred.drawPercent, awayWinPct: pred.awayWinPercent,
+          goalsHome: pred.goalsHome, goalsAway: pred.goalsAway,
+          adviceText: pred.adviceText, advice: pred.adviceText, winner: pred.winner,
+        } : null,
+        homeCoach: homeCoachRows[0] ?? null,
+        awayCoach: awayCoachRows[0] ?? null,
+        homeSidelined: homeSidelinedRows.map(r => ({ ...r, reason: r.type })),
+        awaySidelined: awaySidelinedRows.map(r => ({ ...r, reason: r.type })),
+        topScorers: scorers,
+        topAssists: assists,
+        homeTrophies: homeTrophyRows,
+        awayTrophies: awayTrophyRows,
       };
     });
 
@@ -435,6 +443,22 @@ router.get("/fixtures/:id/intel", async (req: Request, res: Response) => {
   } catch (error) {
     reqLogError("fixtures.intel", error);
     return res.status(500).json({ error: "Failed to load fixture intel" } satisfies ApiError);
+  }
+});
+
+router.get("/fixtures/:id/player-stats", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const result = await getOrFetch(`fixture:${fixtureId}:player-stats`, TTL.MIN10, async () => {
+      const rows = await db.select().from(playerStatsTable).where(eq(playerStatsTable.fixtureId, fixtureId));
+      return { playerStats: rows };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.playerStats", error);
+    return res.status(500).json({ error: "Failed to load player stats" } satisfies ApiError);
   }
 });
 

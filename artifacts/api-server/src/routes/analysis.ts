@@ -413,6 +413,61 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
   }
 });
 
+// ── Per-fixture live analysis ─────────────────────────────────────────────────
+
+router.get("/analysis/:id/live", async (req, res) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ error: "Invalid fixture id" });
+    }
+
+    const result = await getOrFetch(`analysis:${fixtureId}:live`, TTL.S30, async () => {
+      const row = await db.query.fixtures.findFirst({ where: eq(fixtures.fixtureId, fixtureId) });
+      if (!row) return null;
+      const analysis = buildFixtureAnalysis(row);
+      return {
+        phase: analysis.summary.phase,
+        headline: analysis.summary.title,
+        narrative: analysis.summary.note,
+        key_factors: [],
+        momentum_verdict: null,
+        alert_worthy: false,
+      };
+    });
+
+    if (!result) return res.status(404).json({ error: "Fixture not found" });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.liveById]", error);
+    return res.status(500).json({ error: "Failed to load live analysis" });
+  }
+});
+
+// ── Post-match review — tips with outcomes for a completed fixture ─────────────
+
+router.get("/analysis/:id/post-review", async (req, res) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ error: "Invalid fixture id" });
+    }
+
+    const result = await getOrFetch(`analysis:${fixtureId}:post-review`, TTL.MIN10, async () => {
+      const reviews = await db
+        .select()
+        .from(aiBettingTips)
+        .where(eq(aiBettingTips.fixtureId, fixtureId))
+        .orderBy(desc(aiBettingTips.trustScore));
+      return { reviews, review: reviews[0] ?? null };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.postReview]", error);
+    return res.status(500).json({ error: "Failed to load post-review" });
+  }
+});
+
 // ── Single fixture betting tip — used by Match page PRE-MATCH tab ─────────────
 
 router.get("/analysis/:id/betting-tip", async (req, res) => {

@@ -375,6 +375,68 @@ router.get("/analysis/daily-summary", async (_req, res) => {
   }
 });
 
+// ── Prematch tips — all upcoming tips grouped by fixtureId ───────────────────
+
+router.get("/analysis/prematch-tips", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:prematch-tips", TTL.MIN5, async () => {
+      const now = new Date();
+      const tips = await db
+        .select({
+          id: aiBettingTips.id,
+          fixtureId: aiBettingTips.fixtureId,
+          betType: aiBettingTips.betType,
+          betSide: aiBettingTips.betSide,
+          recommendation: aiBettingTips.recommendation,
+          trustScore: aiBettingTips.trustScore,
+          aiProbability: aiBettingTips.aiProbability,
+          edge: aiBettingTips.edge,
+          marketOdds: aiBettingTips.marketOdds,
+          valueRating: aiBettingTips.valueRating,
+        })
+        .from(aiBettingTips)
+        .where(gte(aiBettingTips.kickoff, now))
+        .orderBy(desc(aiBettingTips.trustScore));
+
+      const grouped: Record<number, typeof tips> = {};
+      for (const tip of tips) {
+        if (!grouped[tip.fixtureId]) grouped[tip.fixtureId] = [];
+        grouped[tip.fixtureId].push(tip);
+      }
+
+      return { tips: grouped };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.prematchTips]", error);
+    return res.status(500).json({ error: "Failed to load prematch tips" });
+  }
+});
+
+// ── Single fixture AI tips ────────────────────────────────────────────────────
+
+router.get("/analysis/:id/tips", async (req, res) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ error: "Invalid fixture id" });
+    }
+
+    const result = await getOrFetch(`analysis:${fixtureId}:tips`, TTL.MIN5, async () => {
+      const tips = await db
+        .select()
+        .from(aiBettingTips)
+        .where(eq(aiBettingTips.fixtureId, fixtureId))
+        .orderBy(desc(aiBettingTips.trustScore));
+      return { tips };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.tipsByFixture]", error);
+    return res.status(500).json({ error: "Failed to load fixture tips" });
+  }
+});
+
 // ── Single fixture analysis — must be last to avoid catching named routes ────
 
 router.get("/analysis/:id", async (req, res) => {

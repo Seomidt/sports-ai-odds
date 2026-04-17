@@ -105,6 +105,18 @@ router.get("/fixtures/top-picks", async (_req: Request, res: Response) => {
   }
 });
 
+router.get("/fixtures/followed", async (_req: Request, res: Response) => {
+  return res.json({ fixtureIds: [] });
+});
+
+router.post("/fixtures/:id/follow", async (_req: Request, res: Response) => {
+  return res.json({ ok: true });
+});
+
+router.delete("/fixtures/:id/follow", async (_req: Request, res: Response) => {
+  return res.json({ ok: true });
+});
+
 router.get("/fixtures/:id", async (req: Request, res: Response) => {
   try {
     const fixtureId = Number(req.params.id);

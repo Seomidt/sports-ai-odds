@@ -1,8 +1,13 @@
 import { Router, type Request, type Response } from "express";
-import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { fixtures, standings, fixtureEvents, fixtureStats, fixtureLineups } from "@workspace/db/schema";
+import {
+  fixtures, standings, fixtureEvents, fixtureStats, fixtureLineups,
+  oddsSnapshots, h2hFixtures, oddsMarkets, liveOddsSnapshots,
+  predictions, coaches, sidelinedPlayers, playerSeasonStats, teamSeasonStats,
+  fixtureSignals,
+} from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
@@ -210,41 +215,21 @@ router.get("/fixtures/:id/signals", async (req: Request, res: Response) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const row = await getOrFetch(`fixture:${fixtureId}`, TTL.MIN1, async () => {
+    const phase = typeof req.query.phase === "string" ? req.query.phase : null;
+    const cacheKey = `fixture:${fixtureId}:signals:${phase ?? "all"}`;
+
+    const result = await getOrFetch(cacheKey, TTL.MIN2, async () => {
+      const conditions = [eq(fixtureSignals.fixtureId, fixtureId)];
+      if (phase) conditions.push(eq(fixtureSignals.phase, phase));
       const rows = await db
         .select()
-        .from(fixtures)
-        .where(eq(fixtures.fixtureId, fixtureId))
-        .limit(1);
-      return rows[0] ?? null;
+        .from(fixtureSignals)
+        .where(and(...conditions))
+        .orderBy(asc(fixtureSignals.triggeredAt));
+      return { signals: rows };
     });
 
-    if (!row) {
-      return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
-    }
-
-    const now = Date.now();
-    const kickoffTs = row.kickoff ? new Date(row.kickoff).getTime() : null;
-    const minutesToKickoff =
-      kickoffTs !== null ? Math.round((kickoffTs - now) / 60000) : null;
-
-    return res.json({
-      ok: true,
-      item: {
-        fixtureId: row.fixtureId,
-        statusShort: row.statusShort,
-        isUpcoming: row.statusShort === "NS" || row.statusShort === "TBD",
-        isLive: ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE", "SUSP"].includes(
-          row.statusShort ?? "",
-        ),
-        hasWeather: Boolean(row.weatherFetchedAt),
-        hasReferee: Boolean(row.referee),
-        minutesToKickoff,
-        homeGoals: row.homeGoals,
-        awayGoals: row.awayGoals,
-        updatedAt: row.updatedAt,
-      },
-    });
+    return res.json(result);
   } catch (error) {
     reqLogError("fixtures.signals", error);
     return res
@@ -307,6 +292,169 @@ router.get("/standings/:leagueId", async (req: Request, res: Response) => {
     return res
       .status(500)
       .json({ error: "Failed to load standings league data" } satisfies ApiError);
+  }
+});
+
+router.get("/fixtures/:id/odds", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const result = await getOrFetch(`fixture:${fixtureId}:odds`, TTL.MIN2, async () => {
+      const rows = await db
+        .select()
+        .from(oddsSnapshots)
+        .where(eq(oddsSnapshots.fixtureId, fixtureId))
+        .orderBy(desc(oddsSnapshots.snappedAt))
+        .limit(1);
+      return { odds: rows[0] ?? null };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.odds", error);
+    return res.status(500).json({ error: "Failed to load fixture odds" } satisfies ApiError);
+  }
+});
+
+router.get("/fixtures/:id/live-odds", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const result = await getOrFetch(`fixture:${fixtureId}:live-odds`, TTL.S30, async () => {
+      const rows = await db
+        .select()
+        .from(liveOddsSnapshots)
+        .where(eq(liveOddsSnapshots.fixtureId, fixtureId))
+        .orderBy(desc(liveOddsSnapshots.snappedAt))
+        .limit(20);
+      return { liveOdds: rows };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.liveOdds", error);
+    return res.status(500).json({ error: "Failed to load live odds" } satisfies ApiError);
+  }
+});
+
+router.get("/fixtures/:id/odds-markets", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const result = await getOrFetch(`fixture:${fixtureId}:odds-markets`, TTL.MIN2, async () => {
+      const rows = await db
+        .select()
+        .from(oddsMarkets)
+        .where(eq(oddsMarkets.fixtureId, fixtureId))
+        .orderBy(desc(oddsMarkets.snappedAt))
+        .limit(5);
+      return { oddsMarkets: rows };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.oddsMarkets", error);
+    return res.status(500).json({ error: "Failed to load odds markets" } satisfies ApiError);
+  }
+});
+
+router.get("/fixtures/:id/h2h", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const result = await getOrFetch(`fixture:${fixtureId}:h2h`, TTL.MIN10, async () => {
+      const [fix] = await db
+        .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId })
+        .from(fixtures)
+        .where(eq(fixtures.fixtureId, fixtureId))
+        .limit(1);
+      if (!fix) return { h2h: [] };
+
+      const rows = await db
+        .select()
+        .from(h2hFixtures)
+        .where(
+          or(
+            and(eq(h2hFixtures.forTeam1Id, fix.homeTeamId), eq(h2hFixtures.forTeam2Id, fix.awayTeamId)),
+            and(eq(h2hFixtures.forTeam1Id, fix.awayTeamId), eq(h2hFixtures.forTeam2Id, fix.homeTeamId)),
+          ),
+        )
+        .orderBy(desc(h2hFixtures.kickoff))
+        .limit(20);
+      return { h2h: rows };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.h2h", error);
+    return res.status(500).json({ error: "Failed to load H2H data" } satisfies ApiError);
+  }
+});
+
+router.get("/fixtures/:id/intel", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const result = await getOrFetch(`fixture:${fixtureId}:intel`, TTL.MIN10, async () => {
+      const [fix] = await db
+        .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId, leagueId: fixtures.leagueId, seasonYear: fixtures.seasonYear })
+        .from(fixtures)
+        .where(eq(fixtures.fixtureId, fixtureId))
+        .limit(1);
+      if (!fix) return null;
+
+      const [predRows, homeCoachRows, awayCoachRows, homeSidelined, awaySidelined, topScorers] = await Promise.all([
+        db.select().from(predictions).where(eq(predictions.fixtureId, fixtureId)).limit(1),
+        db.select({ name: coaches.name }).from(coaches).where(eq(coaches.teamId, fix.homeTeamId)).limit(1),
+        db.select({ name: coaches.name }).from(coaches).where(eq(coaches.teamId, fix.awayTeamId)).limit(1),
+        db.select({ playerName: sidelinedPlayers.playerName, reason: sidelinedPlayers.type })
+          .from(sidelinedPlayers).where(eq(sidelinedPlayers.teamId, fix.homeTeamId)).limit(10),
+        db.select({ playerName: sidelinedPlayers.playerName, reason: sidelinedPlayers.type })
+          .from(sidelinedPlayers).where(eq(sidelinedPlayers.teamId, fix.awayTeamId)).limit(10),
+        db.select({ playerName: playerSeasonStats.playerName, teamId: playerSeasonStats.teamId, goals: playerSeasonStats.goals, assists: playerSeasonStats.assists })
+          .from(playerSeasonStats)
+          .where(inArray(playerSeasonStats.teamId, [fix.homeTeamId, fix.awayTeamId]))
+          .orderBy(desc(playerSeasonStats.goals))
+          .limit(10),
+      ]);
+
+      const pred = predRows[0] ?? null;
+      return {
+        prediction: pred ? { homeWinPct: pred.homeWinPercent, drawPct: pred.drawPercent, awayWinPct: pred.awayWinPercent, goalsHome: pred.goalsHome, goalsAway: pred.goalsAway, advice: pred.adviceText } : null,
+        homeCoach: homeCoachRows[0] ? { name: homeCoachRows[0].name } : null,
+        awayCoach: awayCoachRows[0] ? { name: awayCoachRows[0].name } : null,
+        homeSidelined,
+        awaySidelined,
+        topScorers,
+      };
+    });
+
+    if (!result) return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.intel", error);
+    return res.status(500).json({ error: "Failed to load fixture intel" } satisfies ApiError);
+  }
+});
+
+router.get("/teams/:id/statistics", async (req: Request, res: Response) => {
+  try {
+    const teamId = Number(req.params.id);
+    if (!Number.isFinite(teamId) || teamId <= 0) return badRequest(res, "Invalid team id");
+    const season = req.query.season ? Number(req.query.season) : null;
+
+    const cacheKey = `team:${teamId}:statistics:${season ?? "all"}`;
+    const result = await getOrFetch(cacheKey, TTL.MIN10, async () => {
+      const conditions = [eq(teamSeasonStats.teamId, teamId)];
+      if (season && Number.isFinite(season)) conditions.push(eq(teamSeasonStats.seasonYear, season));
+      const rows = await db.select().from(teamSeasonStats).where(and(...conditions)).orderBy(desc(teamSeasonStats.seasonYear)).limit(5);
+      return { statistics: rows };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("teams.statistics", error);
+    return res.status(500).json({ error: "Failed to load team statistics" } satisfies ApiError);
   }
 });
 

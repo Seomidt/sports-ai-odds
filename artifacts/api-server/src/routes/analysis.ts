@@ -2,7 +2,7 @@ import { Router } from "express";
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { aiBettingTips, fixtures } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, prematchSyntheses } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
@@ -410,6 +410,54 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
   } catch (error) {
     console.error("[routes:analysis.prematchTips]", error);
     return res.status(500).json({ error: "Failed to load prematch tips" });
+  }
+});
+
+// ── Single fixture betting tip — used by Match page PRE-MATCH tab ─────────────
+
+router.get("/analysis/:id/betting-tip", async (req, res) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ error: "Invalid fixture id" });
+    }
+
+    const result = await getOrFetch(`analysis:${fixtureId}:betting-tip`, TTL.MIN5, async () => {
+      const tips = await db
+        .select()
+        .from(aiBettingTips)
+        .where(eq(aiBettingTips.fixtureId, fixtureId))
+        .orderBy(desc(aiBettingTips.trustScore));
+      return { tips, tip: tips[0] ?? null };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.bettingTip]", error);
+    return res.status(500).json({ error: "Failed to load betting tip" });
+  }
+});
+
+// ── Pre-match synthesis — persisted AI match briefing ─────────────────────────
+
+router.get("/analysis/:id/prematch-synthesis", async (req, res) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return res.status(400).json({ error: "Invalid fixture id" });
+    }
+
+    const result = await getOrFetch(`analysis:${fixtureId}:prematch-synthesis`, TTL.MIN10, async () => {
+      const [row] = await db
+        .select()
+        .from(prematchSyntheses)
+        .where(eq(prematchSyntheses.fixtureId, fixtureId))
+        .limit(1);
+      return { synthesis: row ?? null };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.prematchSynthesis]", error);
+    return res.status(500).json({ error: "Failed to load prematch synthesis" });
   }
 });
 

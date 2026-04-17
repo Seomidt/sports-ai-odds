@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { fixtures } from "@workspace/db/schema";
+import { fixtures, standings } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
@@ -59,7 +59,16 @@ router.get("/fixtures/today", async (_req: Request, res: Response) => {
         .where(and(gte(fixtures.kickoff, from), lte(fixtures.kickoff, to)))
         .orderBy(asc(fixtures.kickoff))
         .limit(200);
-      return { ok: true, count: rows.length, items: rows };
+
+      // Group by league
+      const leagueMap = new Map<number, { leagueId: number; leagueName: string | null; leagueLogo: string | null; fixtures: typeof rows }>();
+      for (const row of rows) {
+        if (!leagueMap.has(row.leagueId)) {
+          leagueMap.set(row.leagueId, { leagueId: row.leagueId, leagueName: row.leagueName ?? null, leagueLogo: row.leagueLogo ?? null, fixtures: [] });
+        }
+        leagueMap.get(row.leagueId)!.fixtures.push(row);
+      }
+      return { leagues: Array.from(leagueMap.values()) };
     });
     return res.json(result);
   } catch (error) {
@@ -271,11 +280,11 @@ router.get("/standings/:leagueId", async (req: Request, res: Response) => {
     const result = await getOrFetch(`standings:league:${leagueId}`, TTL.MIN10, async () => {
       const rows = await db
         .select()
-        .from(fixtures)
-        .where(eq(fixtures.leagueId, leagueId))
-        .orderBy(desc(fixtures.kickoff))
-        .limit(100);
-      return { ok: true, count: rows.length, items: rows };
+        .from(standings)
+        .where(eq(standings.leagueId, leagueId))
+        .orderBy(asc(standings.rank))
+        .limit(25);
+      return { standings: rows };
     });
     return res.json(result);
   } catch (error) {

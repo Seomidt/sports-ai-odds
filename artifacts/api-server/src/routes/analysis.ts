@@ -1,8 +1,8 @@
 import { Router } from "express";
-import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { fixtures } from "@workspace/db/schema";
+import { aiBettingTips, fixtures } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
@@ -192,6 +192,212 @@ router.get("/analysis/window", async (req, res) => {
   } catch (error) {
     console.error("[routes:analysis.window]", error);
     return res.status(500).json({ error: "Failed to load analysis window" });
+  }
+});
+
+// ── Value odds — upcoming AI tips sorted by edge/value ───────────────────────
+
+router.get("/analysis/value-odds", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:value-odds", TTL.MIN1, async () => {
+      const now = new Date();
+      const tips = await db
+        .select()
+        .from(aiBettingTips)
+        .where(
+          and(
+            gte(aiBettingTips.kickoff, now),
+            isNotNull(aiBettingTips.edge),
+          ),
+        )
+        .orderBy(
+          desc(aiBettingTips.edge),
+          desc(aiBettingTips.trustScore),
+        )
+        .limit(100);
+
+      // Add computed fields for frontend sorting/display
+      const enriched = tips.map((t) => {
+        const valueScore =
+          t.valueRating === "strong_value" ? 4
+          : t.valueRating === "value" ? 3
+          : t.valueRating === "fair" ? 2
+          : 1;
+        const combinedScore = (t.edge ?? 0) * 10 + (t.trustScore ?? 0) / 10;
+        return { ...t, valueScore, combinedScore };
+      });
+
+      return { tips: enriched };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.valueOdds]", error);
+    return res.status(500).json({ error: "Failed to load value odds" });
+  }
+});
+
+// ── AI accuracy — reviewed tips hit rate ─────────────────────────────────────
+
+router.get("/analysis/accuracy", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:accuracy", TTL.MIN10, async () => {
+      const [row] = await db
+        .select({
+          reviewed: sql<number>`count(*) filter (where ${aiBettingTips.outcome} is not null)`,
+          hits: sql<number>`count(*) filter (where ${aiBettingTips.outcome} = 'hit')`,
+        })
+        .from(aiBettingTips);
+
+      const reviewed = Number(row?.reviewed ?? 0);
+      const hits = Number(row?.hits ?? 0);
+      const hitRate = reviewed > 0 ? Math.round((hits / reviewed) * 100) : null;
+
+      return { hitRate, reviewed, hits };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.accuracy]", error);
+    return res.status(500).json({ error: "Failed to load accuracy" });
+  }
+});
+
+// ── Daily summary — today picks, yesterday results, streak, ROI ───────────────
+
+router.get("/analysis/daily-summary", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:daily-summary", TTL.MIN5, async () => {
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+      const yesterdayStart = new Date(todayStart.getTime() - 86400_000);
+      const yesterdayEnd = new Date(todayStart.getTime() - 1);
+
+      const [todayPicks, yesterdayTips, yesterdayFixtures, allReviewed] = await Promise.all([
+        // Today's tips
+        db.select({
+          id: aiBettingTips.id,
+          fixtureId: aiBettingTips.fixtureId,
+          homeTeam: aiBettingTips.homeTeam,
+          awayTeam: aiBettingTips.awayTeam,
+          kickoff: aiBettingTips.kickoff,
+          leagueName: aiBettingTips.leagueName,
+          recommendation: aiBettingTips.recommendation,
+          betType: aiBettingTips.betType,
+          trustScore: aiBettingTips.trustScore,
+          marketOdds: aiBettingTips.marketOdds,
+          valueRating: aiBettingTips.valueRating,
+          edge: aiBettingTips.edge,
+        })
+          .from(aiBettingTips)
+          .where(and(gte(aiBettingTips.kickoff, todayStart), lte(aiBettingTips.kickoff, todayEnd)))
+          .orderBy(desc(aiBettingTips.edge)),
+
+        // Yesterday's tips with outcome
+        db.select({
+          id: aiBettingTips.id,
+          fixtureId: aiBettingTips.fixtureId,
+          homeTeam: aiBettingTips.homeTeam,
+          awayTeam: aiBettingTips.awayTeam,
+          kickoff: aiBettingTips.kickoff,
+          leagueName: aiBettingTips.leagueName,
+          recommendation: aiBettingTips.recommendation,
+          betType: aiBettingTips.betType,
+          trustScore: aiBettingTips.trustScore,
+          marketOdds: aiBettingTips.marketOdds,
+          valueRating: aiBettingTips.valueRating,
+          edge: aiBettingTips.edge,
+          outcome: aiBettingTips.outcome,
+          reviewHeadline: aiBettingTips.reviewHeadline,
+        })
+          .from(aiBettingTips)
+          .where(and(gte(aiBettingTips.kickoff, yesterdayStart), lte(aiBettingTips.kickoff, yesterdayEnd)))
+          .orderBy(desc(aiBettingTips.trustScore)),
+
+        // Yesterday's fixtures without tips (uncovered)
+        db.select({
+          fixtureId: fixtures.fixtureId,
+          homeTeam: fixtures.homeTeamName,
+          awayTeam: fixtures.awayTeamName,
+          kickoff: fixtures.kickoff,
+          leagueName: fixtures.leagueName,
+          statusShort: fixtures.statusShort,
+        })
+          .from(fixtures)
+          .where(and(gte(fixtures.kickoff, yesterdayStart), lte(fixtures.kickoff, yesterdayEnd)))
+          .limit(50),
+
+        // All reviewed tips for streak/ROI
+        db.select({
+          outcome: aiBettingTips.outcome,
+          marketOdds: aiBettingTips.marketOdds,
+          reviewedAt: aiBettingTips.reviewedAt,
+        })
+          .from(aiBettingTips)
+          .where(isNotNull(aiBettingTips.outcome))
+          .orderBy(desc(aiBettingTips.reviewedAt))
+          .limit(200),
+      ]);
+
+      // Uncovered = fixtures yesterday with no tip
+      const coveredIds = new Set(yesterdayTips.map((t) => t.fixtureId));
+      const yesterdayUncovered = yesterdayFixtures
+        .filter((f) => !coveredIds.has(f.fixtureId))
+        .map((f) => ({
+          fixtureId: f.fixtureId,
+          homeTeam: f.homeTeam ?? "",
+          awayTeam: f.awayTeam ?? "",
+          kickoff: f.kickoff?.toISOString() ?? "",
+          leagueName: f.leagueName,
+          statusShort: f.statusShort,
+        }));
+
+      // Yesterday results
+      const wins = yesterdayTips.filter((t) => t.outcome === "hit").length;
+      const losses = yesterdayTips.filter((t) => t.outcome === "miss").length;
+      const pushes = yesterdayTips.filter((t) => t.outcome === "partial").length;
+      const pending = yesterdayTips.filter((t) => !t.outcome).length;
+
+      // Win streak (from most recent reviewed tips)
+      let streakCount = 0;
+      let streakType: "win" | "loss" | "none" = "none";
+      for (const t of allReviewed) {
+        if (streakCount === 0) {
+          streakType = t.outcome === "hit" ? "win" : "loss";
+          streakCount = 1;
+        } else if ((streakType === "win" && t.outcome === "hit") || (streakType === "loss" && t.outcome === "miss")) {
+          streakCount++;
+        } else {
+          break;
+        }
+      }
+      const badge =
+        streakType === "win" && streakCount >= 10 ? "elite"
+        : streakType === "win" && streakCount >= 7 ? "hot"
+        : streakType === "win" && streakCount >= 3 ? "warming"
+        : null;
+
+      // ROI (all reviewed)
+      let netReturn = 0;
+      for (const t of allReviewed) {
+        if (t.outcome === "hit") netReturn += (t.marketOdds ?? 2) - 1;
+        else if (t.outcome === "miss") netReturn -= 1;
+      }
+      const totalBets = allReviewed.length;
+      const roi = { total: totalBets, totalBets, netReturn: Math.round(netReturn * 100) / 100 };
+
+      return {
+        todayPicks,
+        yesterdayTips,
+        yesterdayUncovered,
+        yesterdayResults: { wins, losses, pushes, total: yesterdayTips.length, pending },
+        streak: { current: streakCount, type: streakType, badge },
+        roi,
+      };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.dailySummary]", error);
+    return res.status(500).json({ error: "Failed to load daily summary" });
   }
 });
 

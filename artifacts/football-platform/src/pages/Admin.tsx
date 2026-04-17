@@ -101,10 +101,14 @@ interface AiStats {
 }
 
 function AiStatsSection() {
+  const { getToken } = useAuth();
   const { data, isLoading } = useQuery<AiStats>({
     queryKey: ["aiStats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/ai-stats");
+      const token = await getToken();
+      const res = await fetch("/api/admin/ai-stats", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error("Failed to fetch AI stats");
       return res.json();
     },
@@ -222,13 +226,17 @@ interface DbStats {
 
 function HistoricalDataSection() {
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const queryClient = useQueryClient();
   const [seasons, setSeasons] = useState("2");
 
   const { data: status, isLoading } = useQuery<SeedStatus>({
     queryKey: ["seedStatus"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/seed-history/status");
+      const token = await getToken();
+      const res = await fetch("/api/admin/seed-history/status", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error("Failed to fetch seed status");
       return res.json();
     },
@@ -242,7 +250,10 @@ function HistoricalDataSection() {
   const { data: dbStats } = useQuery<DbStats>({
     queryKey: ["dbStats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/db-stats");
+      const token = await getToken();
+      const res = await fetch("/api/admin/db-stats", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (!res.ok) throw new Error("Failed to fetch DB stats");
       return res.json();
     },
@@ -252,7 +263,11 @@ function HistoricalDataSection() {
 
   const handleSeed = async () => {
     try {
-      const res = await fetch(`/api/admin/seed-history?seasons=${seasons}`, { method: "POST" });
+      const token = await getToken();
+      const res = await fetch(`/api/admin/seed-history?seasons=${seasons}`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
       if (res.status === 409) {
         toast({ title: "Seed already running", variant: "destructive" });
         return;
@@ -570,11 +585,17 @@ interface SyncResult { fixtures: number; oddsFetched: number; predictionsFetched
 
 function ForceSyncSection() {
   const { toast } = useToast();
+  const { getToken } = useAuth();
   const [fixtureIdInput, setFixtureIdInput] = useState("");
   const [loadingFull, setLoadingFull] = useState(false);
   const [loadingFixture, setLoadingFixture] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const token = await getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const stopPolling = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -585,7 +606,7 @@ function ForceSyncSection() {
     let failCount = 0;
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch("/api/admin/sync-status");
+        const res = await fetch("/api/admin/sync-status", { headers: await authHeaders() });
         // 401/403 during token refresh — silently retry, don't stop
         if (res.status === 401 || res.status === 403) {
           failCount++;
@@ -625,17 +646,17 @@ function ForceSyncSection() {
     setSyncResult(null);
     setLoadingFull(true);
     try {
-      const res = await fetch("/api/admin/force-full-sync", { method: "POST" });
-      const data = await res.json();
+      const res = await fetch("/api/admin/force-full-sync", { method: "POST", headers: await authHeaders() });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON body */ }
       if (!res.ok) {
-        toast({ title: data.error ?? "Sync fejlede", variant: "destructive" });
+        toast({ title: data.error ?? `Sync fejlede (${res.status})`, variant: "destructive" });
         setLoadingFull(false);
         return;
       }
-      // Started — now poll for completion
       startPolling();
-    } catch {
-      toast({ title: "Netværksfejl", variant: "destructive" });
+    } catch (err) {
+      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
       setLoadingFull(false);
     }
   };
@@ -648,15 +669,16 @@ function ForceSyncSection() {
     }
     setLoadingFixture(true);
     try {
-      const res = await fetch(`/api/admin/force-sync/${id}`, { method: "POST" });
-      const data = await res.json();
+      const res = await fetch(`/api/admin/force-sync/${id}`, { method: "POST", headers: await authHeaders() });
+      let data: any = {};
+      try { data = await res.json(); } catch { /* non-JSON body */ }
       if (!res.ok) {
-        toast({ title: data.error ?? "Sync failed", variant: "destructive" });
+        toast({ title: data.error ?? `Sync failed (${res.status})`, variant: "destructive" });
       } else {
         toast({ title: "Fixture sync started", description: data.message });
       }
-    } catch {
-      toast({ title: "Network error", variant: "destructive" });
+    } catch (err) {
+      toast({ title: `Network error: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
     } finally {
       setLoadingFixture(false);
     }

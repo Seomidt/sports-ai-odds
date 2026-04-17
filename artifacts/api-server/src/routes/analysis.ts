@@ -89,32 +89,6 @@ function buildFixtureAnalysis(row: typeof fixtures.$inferSelect) {
   };
 }
 
-router.get("/analysis/:id", async (req, res) => {
-  try {
-    const fixtureId = Number(req.params.id);
-
-    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
-      return badRequest(res, "Invalid fixture id");
-    }
-
-    const result = await getOrFetch(`analysis:${fixtureId}`, TTL.MIN1, async () => {
-      const row = await db.query.fixtures.findFirst({
-        where: eq(fixtures.fixtureId, fixtureId),
-      });
-      return row ? buildFixtureAnalysis(row) : null;
-    });
-
-    if (!result) {
-      return res.status(404).json({ error: "Fixture not found" });
-    }
-
-    return res.json({ ok: true, item: result });
-  } catch (error) {
-    console.error("[routes:analysis.byId]", error);
-    return res.status(500).json({ error: "Failed to load fixture analysis" });
-  }
-});
-
 router.get("/analysis/upcoming", async (_req, res) => {
   try {
     const result = await getOrFetch("analysis:upcoming", TTL.MIN1, async () => {
@@ -398,6 +372,34 @@ router.get("/analysis/daily-summary", async (_req, res) => {
   } catch (error) {
     console.error("[routes:analysis.dailySummary]", error);
     return res.status(500).json({ error: "Failed to load daily summary" });
+  }
+});
+
+// ── Single fixture analysis — must be last to avoid catching named routes ────
+
+router.get("/analysis/:id", async (req, res) => {
+  try {
+    const fixtureId = Number(req.params.id);
+
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) {
+      return badRequest(res, "Invalid fixture id");
+    }
+
+    const result = await getOrFetch(`analysis:${fixtureId}`, TTL.MIN1, async () => {
+      const row = await db.query.fixtures.findFirst({
+        where: eq(fixtures.fixtureId, fixtureId),
+      });
+      return row ? buildFixtureAnalysis(row) : null;
+    });
+
+    if (!result) {
+      return res.status(404).json({ error: "Fixture not found" });
+    }
+
+    return res.json({ ok: true, item: result });
+  } catch (error) {
+    console.error("[routes:analysis.byId]", error);
+    return res.status(500).json({ error: "Failed to load fixture analysis" });
   }
 });
 

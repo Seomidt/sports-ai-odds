@@ -2083,31 +2083,32 @@ async function scheduleDailySignalCron() {
   }, msUntilNext);
 }
 
-// ─── Nightly force sync (03:00 UTC) ───────────────────────────────────────────
+// ─── Force sync cron (runs at configurable UTC hours) ─────────────────────────
 
-async function scheduleNightlyForceSync() {
+async function scheduleForceSync(utcHour: number) {
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
-  const lastRunKey = "nightly-force-sync:lastRun";
+  const padded = String(utcHour).padStart(2, "0");
+  const lastRunKey = `force-sync-cron:${padded}:lastRun`;
   const lastRun = await kvGet(lastRunKey);
 
-  const next1am = new Date(now);
-  next1am.setUTCHours(1, 0, 0, 0);
-  if (next1am.getTime() <= now.getTime()) next1am.setUTCDate(next1am.getUTCDate() + 1);
+  const nextRun = new Date(now);
+  nextRun.setUTCHours(utcHour, 0, 0, 0);
+  if (nextRun.getTime() <= now.getTime()) nextRun.setUTCDate(nextRun.getUTCDate() + 1);
 
-  const past1amToday = now.getUTCHours() >= 1;
-  if (past1amToday && lastRun !== todayStr) {
-    const minLate = Math.round((now.getTime() - new Date(`${todayStr}T01:00:00Z`).getTime()) / 60_000);
-    console.log(`[nightly-sync] Missed today's 1am run by ${minLate} min — running catch-up now`);
+  const pastHourToday = now.getUTCHours() >= utcHour;
+  if (pastHourToday && lastRun !== todayStr) {
+    const minLate = Math.round((now.getTime() - new Date(`${todayStr}T${padded}:00:00Z`).getTime()) / 60_000);
+    console.log(`[force-sync-cron] Missed ${padded}:00 UTC run by ${minLate} min — running catch-up now`);
     await kvSet(lastRunKey, todayStr);
     forceFullSync().catch(console.error);
   } else if (lastRun !== todayStr) {
-    console.log(`[nightly-sync] Next 1am UTC run in ${Math.round((next1am.getTime() - now.getTime()) / 60_000)} min`);
+    console.log(`[force-sync-cron] Next ${padded}:00 UTC run in ${Math.round((nextRun.getTime() - now.getTime()) / 60_000)} min`);
   } else {
-    console.log(`[nightly-sync] Already ran today (${todayStr}) — next at ${next1am.toISOString()}`);
+    console.log(`[force-sync-cron] ${padded}:00 UTC already ran today — next at ${nextRun.toISOString()}`);
   }
 
-  const msUntilNext = next1am.getTime() - now.getTime();
+  const msUntilNext = nextRun.getTime() - now.getTime();
   setTimeout(async () => {
     const d = new Date().toISOString().slice(0, 10);
     await kvSet(lastRunKey, d);
@@ -2501,8 +2502,11 @@ export function startPoller() {
   scheduleAiTipsAtHour(18).catch(console.error);
   // Signal pre-compute: 05:00 UTC — caches signals for today's fixtures
   scheduleDailySignalCron().catch(console.error);
-  // Nightly force sync: 03:00 UTC — fills all gaps in the upcoming 7-day window
-  scheduleNightlyForceSync().catch(console.error);
+  // Force sync: 01:00, 07:00, 13:00, 19:00 UTC — fills gaps + generates AI tips 4x/day
+  scheduleForceSync(1).catch(console.error);
+  scheduleForceSync(7).catch(console.error);
+  scheduleForceSync(13).catch(console.error);
+  scheduleForceSync(19).catch(console.error);
 }
 
 // ─── Historical season seed ────────────────────────────────────────────────────

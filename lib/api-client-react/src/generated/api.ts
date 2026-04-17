@@ -25,8 +25,7 @@ export type RequestOptions = RequestInit & {
   query?: Record<string, string | number | boolean | undefined | null>;
 };
 
-const BASE_PATH =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001";
+const BASE_PATH = import.meta.env.VITE_API_BASE_URL ?? "";
 
 let _tokenGetter: (() => Promise<string | null>) | null = null;
 
@@ -35,15 +34,14 @@ export function setTokenGetter(getter: () => Promise<string | null>) {
 }
 
 function buildUrl(path: string, query?: RequestOptions["query"]) {
-  const url = new URL(`${BASE_PATH}${path}`);
-  if (query) {
-    Object.entries(query).forEach(([k, v]) => {
-      if (v !== undefined && v !== null) {
-        url.searchParams.set(k, String(v));
-      }
-    });
-  }
-  return url.toString();
+  const base = `${BASE_PATH}${path}`;
+  if (!query) return base;
+  const params = new URLSearchParams();
+  Object.entries(query).forEach(([k, v]) => {
+    if (v !== undefined && v !== null) params.set(k, String(v));
+  });
+  const qs = params.toString();
+  return qs ? `${base}?${qs}` : base;
 }
 
 async function request<T = any>(

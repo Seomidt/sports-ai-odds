@@ -72,20 +72,45 @@ function scheduleAiFlush(): void {
 }
 
 export function getAiStats() {
+  const now = Date.now();
   const totalCost =
     (totalInputTokens / 1_000_000) * INPUT_COST_PER_M +
     (totalOutputTokens / 1_000_000) * OUTPUT_COST_PER_M;
-  const last24h = Date.now() - 24 * 60 * 60 * 1000;
-  const recentEntries = aiUsageLog.filter((e) => e.at > last24h);
+
+  const last24h = now - 24 * 60 * 60 * 1000;
+  const last7d = now - 7 * 24 * 60 * 60 * 1000;
+  const todayStart = Date.UTC(
+    new Date().getUTCFullYear(),
+    new Date().getUTCMonth(),
+    new Date().getUTCDate(),
+  );
+
+  const entries24h = aiUsageLog.filter((e) => e.at > last24h);
+  const entries7d = aiUsageLog.filter((e) => e.at > last7d);
+  const entriesToday = aiUsageLog.filter((e) => e.at >= todayStart);
+
+  const sum = (arr: AiUsageEntry[], key: "inputTokens" | "outputTokens") =>
+    arr.reduce((s, e) => s + e[key], 0);
+
+  const last7dInput = sum(entries7d, "inputTokens");
+  const last7dOutput = sum(entries7d, "outputTokens");
+  const daysWithData = Math.max(1, new Set(entries7d.map((e) => new Date(e.at).toISOString().slice(0, 10))).size);
+
   return {
     totalInputTokens,
     totalOutputTokens,
     totalTokens: totalInputTokens + totalOutputTokens,
     estimatedCostUsd: Math.round(totalCost * 10000) / 10000,
-    last24hInputTokens: recentEntries.reduce((s, e) => s + e.inputTokens, 0),
-    last24hOutputTokens: recentEntries.reduce((s, e) => s + e.outputTokens, 0),
+    todayInputTokens: sum(entriesToday, "inputTokens"),
+    todayOutputTokens: sum(entriesToday, "outputTokens"),
+    last24hInputTokens: sum(entries24h, "inputTokens"),
+    last24hOutputTokens: sum(entries24h, "outputTokens"),
+    last7dInputTokens: last7dInput,
+    last7dOutputTokens: last7dOutput,
+    last7dTokens: last7dInput + last7dOutput,
+    avgDailyTokens: Math.round((last7dInput + last7dOutput) / daysWithData),
     callsTotal: aiUsageLog.length,
-    model: "claude-haiku-4-5",
+    model: "claude-haiku-4-5-20251001",
     pricingNote: `$${INPUT_COST_PER_M}/MTok in · $${OUTPUT_COST_PER_M}/MTok out`,
   };
 }
@@ -93,7 +118,7 @@ export function getAiStats() {
 async function callClaude(prompt: string): Promise<string | null> {
   try {
     const msg = await client.messages.create({
-      model: "claude-haiku-4-5",
+      model: "claude-haiku-4-5-20251001",
       max_tokens: 1200,
       messages: [{ role: "user", content: prompt }],
     });

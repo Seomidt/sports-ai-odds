@@ -258,7 +258,7 @@ router.get("/standings/leagues", async (_req: Request, res: Response) => {
         )
         .orderBy(desc(sql`count(*)`), asc(fixtures.leagueName))
         .limit(100);
-      return { ok: true, count: rows.length, items: rows };
+      return { leagues: rows };
     });
     return res.json(result);
   } catch (error) {

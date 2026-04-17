@@ -20,6 +20,16 @@ let syncRunning = false;
 let syncError: string | null = null;
 let syncResult: { fixtures: number; oddsFetched: number; predictionsFetched: number; h2hFetched: number; injuriesFetched: number; tipsQueued: number } | null = null;
 
+// ── Ping (no auth — for routing diagnostics) ──────────────────────────────────
+
+router.get("/admin/ping", (_req, res) => {
+  return res.json({ ok: true, time: new Date().toISOString() });
+});
+
+router.post("/admin/ping", (_req, res) => {
+  return res.json({ ok: true, method: "POST", time: new Date().toISOString() });
+});
+
 // ── API telemetry ──────────────────────────────────────────────────────────────
 
 router.get("/admin/stats", requireAdmin, (_req, res) => {

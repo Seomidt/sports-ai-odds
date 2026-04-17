@@ -91,11 +91,14 @@ interface AiStats {
   totalOutputTokens: number;
   totalTokens: number;
   estimatedCostUsd: number;
+  todayInputTokens: number;
+  todayOutputTokens: number;
   last24hInputTokens: number;
   last24hOutputTokens: number;
   last7dInputTokens?: number;
   last7dOutputTokens?: number;
   last7dTokens?: number;
+  avgDailyTokens?: number;
   callsTotal: number;
   model: string;
   pricingNote: string;
@@ -143,17 +146,31 @@ function AiStatsSection() {
             </div>
           </div>
 
-          {/* Last 7d */}
+          {/* Today */}
           <div className="glass-card p-5 rounded-xl">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono text-muted-foreground uppercase">Last 7 Days</span>
+              <span className="text-xs font-mono text-muted-foreground uppercase">Today (UTC)</span>
+              <Activity className="w-4 h-4 text-primary" />
+            </div>
+            <div className="text-2xl font-mono font-bold text-white">
+              {((data.todayInputTokens ?? 0) + (data.todayOutputTokens ?? 0)).toLocaleString()}
+            </div>
+            <div className="text-xs text-muted-foreground font-mono mt-1">
+              {(data.todayInputTokens ?? 0).toLocaleString()} in · {(data.todayOutputTokens ?? 0).toLocaleString()} out
+            </div>
+          </div>
+
+          {/* 7-day average */}
+          <div className="glass-card p-5 rounded-xl">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-mono text-muted-foreground uppercase">7-Day Avg / Day</span>
               <Clock className="w-4 h-4 text-amber-400" />
             </div>
             <div className="text-2xl font-mono font-bold text-white">
-              {(data.last7dTokens ?? data.totalTokens).toLocaleString()}
+              {(data.avgDailyTokens ?? 0).toLocaleString()}
             </div>
             <div className="text-xs text-muted-foreground font-mono mt-1">
-              {(data.last7dInputTokens ?? data.last24hInputTokens).toLocaleString()} in · {(data.last7dOutputTokens ?? data.last24hOutputTokens).toLocaleString()} out
+              {(data.last7dTokens ?? 0).toLocaleString()} total last 7 days
             </div>
           </div>
 
@@ -168,20 +185,6 @@ function AiStatsSection() {
             </div>
             <div className="text-[10px] text-muted-foreground font-mono mt-1 leading-relaxed">
               {data.pricingNote}
-            </div>
-          </div>
-
-          {/* Last 24h */}
-          <div className="glass-card p-5 rounded-xl">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs font-mono text-muted-foreground uppercase">Last 24h</span>
-              <Activity className="w-4 h-4 text-amber-400" />
-            </div>
-            <div className="text-2xl font-mono font-bold text-white">
-              {(data.last24hInputTokens + data.last24hOutputTokens).toLocaleString()}
-            </div>
-            <div className="text-xs text-muted-foreground font-mono mt-1">
-              {data.last24hInputTokens.toLocaleString()} in · {data.last24hOutputTokens.toLocaleString()} out
             </div>
           </div>
 

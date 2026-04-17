@@ -208,8 +208,7 @@ export function Standings() {
 
         <div className="flex items-center gap-3">
           <Select
-            value={String(activeLeagueId)}
-            disabled={leaguesLoading}
+            value={leaguesLoading ? "" : String(activeLeagueId)}
             onValueChange={(v) => {
               const id = Number(v);
               const found = leagues.find(l => l.leagueId === id);
@@ -217,27 +216,15 @@ export function Standings() {
               setActiveLeagueName(found?.leagueName ?? "");
             }}
           >
-            <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50 disabled:opacity-50">
-              <div className="flex items-center gap-2 min-w-0">
-                <img
-                  src={LEAGUE_LOGO(activeLeagueId)}
-                  alt=""
-                  className="w-5 h-5 object-contain shrink-0"
-                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-                />
-                <SelectValue />
-              </div>
+            <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50 disabled:opacity-50" disabled={leaguesLoading}>
+              <SelectValue placeholder={leaguesLoading ? "Loading leagues..." : "Select league"} />
             </SelectTrigger>
             <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
-              {leaguesLoading ? (
-                <SelectItem value={String(activeLeagueId)} className="text-white">Loading leagues...</SelectItem>
-              ) : (
-                leagues.map(l => (
-                  <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                    {l.leagueName}
-                  </SelectItem>
-                ))
-              )}
+              {leagues.map(l => (
+                <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
+                  {l.leagueName}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
           {leaguesLoading && <Activity className="w-4 h-4 text-primary animate-pulse shrink-0" />}

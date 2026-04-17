@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { fixtures, standings } from "@workspace/db/schema";
+import { fixtures, standings, fixtureEvents, fixtureStats, fixtureLineups } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 
 const router = Router();
@@ -114,19 +114,22 @@ router.get("/fixtures/:id", async (req: Request, res: Response) => {
     }
 
     const result = await getOrFetch(`fixture:${fixtureId}`, TTL.MIN1, async () => {
-      const rows = await db
-        .select()
-        .from(fixtures)
-        .where(eq(fixtures.fixtureId, fixtureId))
-        .limit(1);
-      return rows[0] ?? null;
+      const [fixtureRows, events, stats, lineups] = await Promise.all([
+        db.select().from(fixtures).where(eq(fixtures.fixtureId, fixtureId)).limit(1),
+        db.select().from(fixtureEvents).where(eq(fixtureEvents.fixtureId, fixtureId)),
+        db.select().from(fixtureStats).where(eq(fixtureStats.fixtureId, fixtureId)),
+        db.select().from(fixtureLineups).where(eq(fixtureLineups.fixtureId, fixtureId)),
+      ]);
+      const row = fixtureRows[0] ?? null;
+      if (!row) return null;
+      return { fixture: row, events, stats, lineups };
     });
 
     if (!result) {
       return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
     }
 
-    return res.json({ ok: true, item: result });
+    return res.json(result);
   } catch (error) {
     reqLogError("fixtures.byId", error);
     return res

@@ -650,11 +650,17 @@ function ForceSyncSection() {
     setSyncResult(null);
     setLoadingFull(true);
     try {
-      const res = await fetch("/api/admin/force-full-sync", { method: "POST", headers: await authHeaders() });
+      const headers = await authHeaders();
+      const res = await fetch("/api/admin/force-full-sync", { method: "POST", headers });
+      let body = "";
       let data: any = {};
-      try { data = await res.json(); } catch { /* non-JSON body */ }
+      try { body = await res.text(); data = JSON.parse(body); } catch { /* non-JSON */ }
       if (!res.ok) {
-        toast({ title: data.error ?? `Sync fejlede (${res.status})`, variant: "destructive" });
+        toast({
+          title: data.error ?? `Sync fejlede (${res.status})`,
+          description: body.length < 200 ? body : `Status: ${res.status}`,
+          variant: "destructive",
+        });
         setLoadingFull(false);
         return;
       }
@@ -662,6 +668,16 @@ function ForceSyncSection() {
     } catch (err) {
       toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
       setLoadingFull(false);
+    }
+  };
+
+  const handleTestPing = async () => {
+    try {
+      const res = await fetch("/api/admin/ping", { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      toast({ title: res.ok ? `POST ping OK (${res.status})` : `POST ping fejl (${res.status})`, description: JSON.stringify(data) });
+    } catch (err) {
+      toast({ title: `Ping netværksfejl`, description: String(err), variant: "destructive" });
     }
   };
 
@@ -706,6 +722,12 @@ function ForceSyncSection() {
           className="w-full h-11 bg-primary text-primary-foreground text-sm font-mono font-bold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           {loadingFull ? "Syncing — please wait..." : "Force Full Sync"}
+        </button>
+        <button
+          onClick={handleTestPing}
+          className="w-full h-8 bg-white/5 border border-white/10 text-muted-foreground text-xs font-mono rounded-md hover:bg-white/10 transition-colors"
+        >
+          Test POST routing (ping)
         </button>
         <p className="text-[10px] text-muted-foreground/60 font-mono">
           Knappen er aktiv mens den kører. Kun manglende data hentes.

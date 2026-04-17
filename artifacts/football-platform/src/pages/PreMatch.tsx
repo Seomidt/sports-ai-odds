@@ -3,10 +3,11 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, Zap, TrendingUp, Target, ChevronDown, Wind, CloudRain, AlertTriangle } from "lucide-react";
+import { Activity, Clock, Zap, TrendingUp, Target, CloudRain, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
@@ -293,21 +294,24 @@ export function PreMatch() {
         </header>
 
         {leagues.length > 1 && (
-          <div className="relative inline-block">
-            <select
-              value={selectedLeague}
-              onChange={(e) => setSelectedLeague(e.target.value === "all" ? "all" : Number(e.target.value))}
-              className="appearance-none bg-white/5 border border-white/10 text-white text-sm font-mono rounded-lg pl-3 pr-8 py-2 focus:outline-none focus:border-primary/50 cursor-pointer hover:bg-white/10 transition-colors"
-            >
-              <option value="all">All Leagues ({leagues.length})</option>
+          <Select
+            value={String(selectedLeague)}
+            onValueChange={(v) => setSelectedLeague(v === "all" ? "all" : Number(v))}
+          >
+            <SelectTrigger className="w-auto min-w-[200px] bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono">
+              <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
+                All Leagues ({leagues.length})
+              </SelectItem>
               {leagues.map((l) => (
-                <option key={l.leagueId} value={l.leagueId}>
+                <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
                   {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          </div>
+            </SelectContent>
+          </Select>
         )}
 
         {isLoading ? (

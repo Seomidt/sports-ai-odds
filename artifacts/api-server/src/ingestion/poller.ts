@@ -1906,7 +1906,7 @@ async function startupSignalCompute() {
  * getBettingTips() skips fixtures already having ≥10 tips.
  * Processes up to BATCH_SIZE per call to avoid hammering the AI API.
  */
-async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
+export async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
   const now = new Date();
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 

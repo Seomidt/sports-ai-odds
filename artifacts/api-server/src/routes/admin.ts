@@ -11,6 +11,7 @@ import {
   syncOddsForFixture,
   getSeedStatus,
   seedHistoricalData,
+  bulkGenerateAiTips,
 } from "../ingestion/poller.js";
 
 const router = Router();
@@ -128,6 +129,13 @@ router.post("/admin/force-sync/:id", requireAdmin, async (req, res) => {
   }
   syncOddsForFixture(fixtureId).catch(console.error);
   return res.json({ ok: true, message: `Sync started for fixture ${fixtureId}` });
+});
+
+// ── Force AI tip generation ───────────────────────────────────────────────────
+
+router.post("/admin/force-ai-tips", requireAdmin, (_req, res) => {
+  bulkGenerateAiTips(200).catch(console.error);
+  return res.json({ ok: true, message: "AI tip generation started for up to 200 upcoming fixtures" });
 });
 
 // ── User management ───────────────────────────────────────────────────────────

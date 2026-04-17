@@ -2,9 +2,10 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGetStandings, getGetStandingsQueryKey } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, TrendingUp, TrendingDown, Minus, ChevronDown } from "lucide-react";
+import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -206,36 +207,39 @@ export function Standings() {
         </header>
 
         <div className="flex items-center gap-3">
-          <div className="relative flex-1">
-            <img
-              src={LEAGUE_LOGO(activeLeagueId)}
-              alt=""
-              className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 object-contain pointer-events-none"
-              onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-            />
-            <select
-              value={activeLeagueId}
-              disabled={leaguesLoading}
-              onChange={e => {
-                const id = Number(e.target.value);
-                const found = leagues.find(l => l.leagueId === id);
-                setActiveLeagueId(id);
-                setActiveLeagueName(found?.leagueName ?? "");
-              }}
-              className="w-full appearance-none bg-white/5 border border-white/10 text-white text-sm font-mono rounded-lg pl-10 pr-9 py-2.5 focus:outline-none focus:border-primary/50 cursor-pointer hover:bg-white/8 transition-colors disabled:opacity-50"
-            >
+          <Select
+            value={String(activeLeagueId)}
+            disabled={leaguesLoading}
+            onValueChange={(v) => {
+              const id = Number(v);
+              const found = leagues.find(l => l.leagueId === id);
+              setActiveLeagueId(id);
+              setActiveLeagueName(found?.leagueName ?? "");
+            }}
+          >
+            <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50 disabled:opacity-50">
+              <div className="flex items-center gap-2 min-w-0">
+                <img
+                  src={LEAGUE_LOGO(activeLeagueId)}
+                  alt=""
+                  className="w-5 h-5 object-contain shrink-0"
+                  onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                />
+                <SelectValue />
+              </div>
+            </SelectTrigger>
+            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
               {leaguesLoading ? (
-                <option>Loading leagues...</option>
+                <SelectItem value={String(activeLeagueId)} className="text-white">Loading leagues...</SelectItem>
               ) : (
                 leagues.map(l => (
-                  <option key={l.leagueId} value={l.leagueId} className="bg-[#0f0f1a] text-white">
+                  <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
                     {l.leagueName}
-                  </option>
+                  </SelectItem>
                 ))
               )}
-            </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50 pointer-events-none" />
-          </div>
+            </SelectContent>
+          </Select>
           {leaguesLoading && <Activity className="w-4 h-4 text-primary animate-pulse shrink-0" />}
         </div>
 

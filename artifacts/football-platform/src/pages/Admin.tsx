@@ -593,6 +593,7 @@ function ForceSyncSection() {
   const [fixtureIdInput, setFixtureIdInput] = useState("");
   const [loadingFull, setLoadingFull] = useState(false);
   const [loadingFixture, setLoadingFixture] = useState(false);
+  const [loadingAi, setLoadingAi] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -681,6 +682,24 @@ function ForceSyncSection() {
     }
   };
 
+  const handleForceAiTips = async () => {
+    setLoadingAi(true);
+    try {
+      const headers = await authHeaders();
+      const res = await fetch("/api/admin/force-ai-tips", { method: "POST", headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: data.error ?? `AI tips fejl (${res.status})`, variant: "destructive" });
+      } else {
+        toast({ title: "AI tip generation startet", description: "Kører i baggrunden for alle kommende kampe" });
+      }
+    } catch (err) {
+      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
   const handleForceFixtureSync = async () => {
     const id = parseInt(fixtureIdInput.trim(), 10);
     if (!id) {
@@ -722,6 +741,14 @@ function ForceSyncSection() {
           className="w-full h-11 bg-primary text-primary-foreground text-sm font-mono font-bold rounded-md hover:bg-primary/90 disabled:opacity-50 transition-colors"
         >
           {loadingFull ? "Syncing — please wait..." : "Force Full Sync"}
+        </button>
+        <button
+          onClick={handleForceAiTips}
+          disabled={loadingAi}
+          className="w-full h-10 bg-violet-500/20 border border-violet-500/30 text-violet-300 text-sm font-mono font-bold rounded-md hover:bg-violet-500/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+        >
+          <Brain className="w-4 h-4" />
+          {loadingAi ? "Starting..." : "Force AI Tips Generation"}
         </button>
         <button
           onClick={handleTestPing}

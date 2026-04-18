@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 import { and, asc, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
-import { getAuth } from "@clerk/express";
+import { getUserFromRequest } from "../middlewares/requireAuth.js";
 
 import { db } from "@workspace/db";
 import {
@@ -113,12 +113,12 @@ router.get("/fixtures/top-picks", async (_req: Request, res: Response) => {
 
 router.get("/fixtures/followed", async (req: Request, res: Response) => {
   try {
-    const { userId } = getAuth(req);
-    if (!userId) return res.json({ fixtureIds: [] });
+    const user = await getUserFromRequest(req);
+    if (!user) return res.json({ fixtureIds: [] });
     const rows = await db
       .select({ fixtureId: followedFixtures.fixtureId })
       .from(followedFixtures)
-      .where(eq(followedFixtures.userId, userId));
+      .where(eq(followedFixtures.userId, user.id));
     return res.json({ fixtureIds: rows.map(r => r.fixtureId) });
   } catch (err) {
     reqLogError("fixtures.followed", err);

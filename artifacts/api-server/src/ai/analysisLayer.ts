@@ -40,8 +40,8 @@ async function kvGet(key: string): Promise<string | null> {
 
 // ─── Token tracking ───────────────────────────────────────────────────────────
 
-const INPUT_COST_PER_M = 0.80;
-const OUTPUT_COST_PER_M = 4.00;
+const INPUT_COST_PER_M = 1.00;
+const OUTPUT_COST_PER_M = 5.00;
 
 interface AiUsageEntry { at: number; inputTokens: number; outputTokens: number; }
 let aiUsageLog: AiUsageEntry[] = [];
@@ -112,12 +112,15 @@ export function getAiStats() {
   };
 }
 
-async function callClaude(prompt: string): Promise<string | null> {
+async function callClaude(userMessage: string, system?: string): Promise<string | null> {
   try {
     const msg = await client.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1200,
-      messages: [{ role: "user", content: prompt }],
+      ...(system ? {
+        system: [{ type: "text" as const, text: system, cache_control: { type: "ephemeral" as const } }],
+      } : {}),
+      messages: [{ role: "user", content: userMessage }],
     });
     const inputTok = msg.usage?.input_tokens ?? 0;
     const outputTok = msg.usage?.output_tokens ?? 0;
@@ -134,6 +137,44 @@ async function callClaude(prompt: string): Promise<string | null> {
     return null;
   }
 }
+
+// Haiku 4.5 requires ≥4096 stable tokens for cache hits (~16 KB). This block is
+// currently ~500 tokens — caching is silently skipped. Expand the static analysis
+// guidance below (e.g. detailed market theory) to reach the threshold if call
+// volume warrants paying the 1.25× cache-write premium.
+const BETTING_SYSTEM = `You are a professional football betting analyst. Your task is to analyse all available betting markets for an upcoming football match and return your best tips in JSON format.
+
+INSTRUCTIONS:
+- Give 8-10 tips covering different bet_types — do NOT repeat the same bet_type twice
+- Required: match_result, over_under, btts, correct_score, first_team_score — then pick 3-5 more from: corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil, first_half_goals
+- For over_under you may pick over15, over25 or over35 as bet_side — choose the line with best edge
+- For double_chance: bet_side is "1X", "X2", or "12"
+- For draw_no_bet / win_to_nil: bet_side is "home" or "away"
+- For first_half_goals: bet_side is "over" (over 1.5 goals in 1st half) or "btts"
+- For correct_score: recommendation = the most likely scoreline e.g. "1-1" or "2-1"; bet_side = same scoreline in format "H:A" e.g. "1:1". Pick the scoreline with best value from top 5 available. Only pick if trust_score >= 4.
+- For first_team_score: bet_side = "home" or "away". Pick based on attacking pressure, home advantage, top scorer availability, and odds value.
+- If odds are N/A for a market, set trust_score ≤ 3 but still include the tip
+- edge = (estimated_probability × odds) - 1; higher is better
+- Trust score: 1-4 = weak, 5-7 = moderate, 8-10 = strong conviction
+- Reasoning: max 35 words per tip, cite the data
+- No emojis. State facts only.
+
+Respond ONLY valid JSON:
+{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over25","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"1-1","bet_type":"correct_score","bet_side":"1:1","trust_score":5,"estimated_probability":0.12,"reasoning":"..."},{"recommendation":"Home Team Scores First","bet_type":"first_team_score","bet_side":"home","trust_score":6,"estimated_probability":0.55,"reasoning":"..."}]}
+
+bet_side reference:
+match_result: "home","away","draw"
+over_under: "over15","over25","over35","under15","under25","under35"
+btts: "yes","no"
+corners: "over","under"
+asian_handicap: "home","away"
+total_cards: "over","under"
+double_chance: "1X","X2","12"
+draw_no_bet: "home","away"
+win_to_nil: "home","away"
+first_half_goals: "over","btts"
+correct_score: scoreline in "H:A" format e.g. "1:0","1:1","2:1","0:0"
+first_team_score: "home","away"`;
 
 function parseJson<T>(raw: string | null, schema: z.ZodType<T>, fallback: T): T {
   if (!raw) return fallback;
@@ -937,7 +978,7 @@ Use these to calibrate corners and total_cards tips even when odds are N/A.` : "
     ? `Match conditions: ${Math.round(ctx.weather.temp ?? 0)}°C, ${ctx.weather.desc}, wind ${Math.round(ctx.weather.wind ?? 0)} m/s${ctx.weather.humidity != null ? `, humidity ${ctx.weather.humidity}%` : ""}${ctx.weather.isAdverse ? ` — ADVERSE CONDITIONS (${ctx.weather.adverseReason})` : ""}\nNote: Adverse weather suppresses goals and corners; adjust Over/Under and BTTS trust accordingly. Strong winds reduce accurate passing and set pieces.`
     : "";
 
-  const prompt = `You are a professional football betting analyst. Analyse ALL 10 markets below for this upcoming match and return your best tips.
+  const userMessage = `Analyse ALL 10 markets for this upcoming match:
 
 Match: ${ctx.matchLabel}
 League: ${ctx.leagueName ?? "Unknown"} | Positions: ${ctx.homeTeam} #${ctx.homeRank ?? "?"} vs ${ctx.awayTeam} #${ctx.awayRank ?? "?"}
@@ -973,41 +1014,9 @@ Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}
 
 Your accuracy history: ${accuracy.summary}
-${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRate}% hit rate.` : "First tip — be conservative."}
+${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRate}% hit rate.` : "First tip — be conservative."}`;
 
-INSTRUCTIONS:
-- Give 8-10 tips covering different bet_types — do NOT repeat the same bet_type twice
-- Required: match_result, over_under, btts, correct_score, first_team_score — then pick 3-5 more from: corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil, first_half_goals
-- For over_under you may pick over15, over25 or over35 as bet_side — choose the line with best edge
-- For double_chance: bet_side is "1X", "X2", or "12"
-- For draw_no_bet / win_to_nil: bet_side is "home" or "away"
-- For first_half_goals: bet_side is "over" (over 1.5 goals in 1st half) or "btts"
-- For correct_score: recommendation = the most likely scoreline e.g. "1-1" or "2-1"; bet_side = same scoreline in format "H:A" e.g. "1:1". Pick the scoreline with best value from top 5 available. Only pick if trust_score >= 4.
-- For first_team_score: bet_side = "home" or "away". Pick based on attacking pressure, home advantage, top scorer availability, and odds value.
-- If odds are N/A for a market, set trust_score ≤ 3 but still include the tip
-- edge = (estimated_probability × odds) - 1; higher is better
-- Trust score: 1-4 = weak, 5-7 = moderate, 8-10 = strong conviction
-- Reasoning: max 35 words per tip, cite the data
-- No emojis. State facts only.
-
-Respond ONLY valid JSON:
-{"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over25","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"1-1","bet_type":"correct_score","bet_side":"1:1","trust_score":5,"estimated_probability":0.12,"reasoning":"..."},{"recommendation":"Home Team Scores First","bet_type":"first_team_score","bet_side":"home","trust_score":6,"estimated_probability":0.55,"reasoning":"..."}]}
-
-bet_side reference:
-match_result: "home","away","draw"
-over_under: "over15","over25","over35","under15","under25","under35"
-btts: "yes","no"
-corners: "over","under"
-asian_handicap: "home","away"
-total_cards: "over","under"
-double_chance: "1X","X2","12"
-draw_no_bet: "home","away"
-win_to_nil: "home","away"
-first_half_goals: "over","btts"
-correct_score: scoreline in "H:A" format e.g. "1:0","1:1","2:1","0:0"
-first_team_score: "home","away"`;
-
-  const raw = await callClaude(prompt);
+  const raw = await callClaude(userMessage, BETTING_SYSTEM);
   const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);
 
   if (!parsed?.tips?.length) return null;

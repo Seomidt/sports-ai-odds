@@ -31,6 +31,24 @@ router.post("/admin/ping", (_req, res) => {
   return res.json({ ok: true, method: "POST", time: new Date().toISOString() });
 });
 
+// ── Bootstrap admin (no auth — upserts ADMIN_EMAIL as admin in DB) ────────────
+// Safe to call multiple times; only ever promotes the configured admin email.
+
+router.post("/admin/bootstrap", async (_req, res) => {
+  const adminEmail = (process.env["ADMIN_EMAIL"] ?? "seomidt@gmail.com").toLowerCase().trim();
+  try {
+    const [user] = await db
+      .insert(allowedUsers)
+      .values({ email: adminEmail, role: "admin" })
+      .onConflictDoUpdate({ target: allowedUsers.email, set: { role: "admin" } })
+      .returning();
+    return res.json({ ok: true, email: user?.email, role: user?.role });
+  } catch (err) {
+    console.error("[admin] bootstrap error:", err);
+    return res.status(500).json({ error: "Bootstrap failed" });
+  }
+});
+
 // ── API telemetry ──────────────────────────────────────────────────────────────
 
 router.get("/admin/stats", requireAdmin, (_req, res) => {

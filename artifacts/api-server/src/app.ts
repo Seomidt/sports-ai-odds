@@ -1,8 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttpImport from "pino-http";
-import { clerkMiddleware } from "@clerk/express";
-import { CLERK_PROXY_PATH, clerkProxyMiddleware } from "./middlewares/clerkProxyMiddleware.js";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import { STRIPE_ENABLED } from "./billing/stripeClient.js";
@@ -13,8 +11,6 @@ const pinoHttp = pinoHttpImport as unknown as (options?: unknown) => express.Req
 const app: Express = express();
 
 app.use(pinoHttp({ logger }));
-
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 
 const ALLOWED_ORIGINS = new Set(
   (process.env.ALLOWED_ORIGINS ?? "")
@@ -71,8 +67,6 @@ if (STRIPE_ENABLED) {
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-app.use(clerkMiddleware());
 
 app.use("/api", router);
 

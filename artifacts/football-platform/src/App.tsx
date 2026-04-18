@@ -3,7 +3,7 @@ import { Switch, Route, useLocation, Router as WouterRouter, Redirect } from 'wo
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useGetMe, setAuthTokenGetter } from "@workspace/api-client-react";
+import { useGetMe, setAuthTokenGetter, setTokenGetter } from "@workspace/api-client-react";
 
 import { SessionProvider } from "./lib/session";
 import { Home } from "./pages/Home";
@@ -42,10 +42,13 @@ const queryClient = new QueryClient({
 
 function SupabaseTokenInjector() {
   useEffect(() => {
-    setAuthTokenGetter(() =>
-      supabase.auth.getSession().then((r) => r.data.session?.access_token ?? null)
-    );
-    return () => setAuthTokenGetter(() => Promise.resolve(null));
+    const getter = () => supabase.auth.getSession().then((r) => r.data.session?.access_token ?? null);
+    setAuthTokenGetter(getter);
+    setTokenGetter(getter);
+    return () => {
+      setAuthTokenGetter(() => Promise.resolve(null));
+      setTokenGetter(() => Promise.resolve(null));
+    };
   }, []);
   return null;
 }

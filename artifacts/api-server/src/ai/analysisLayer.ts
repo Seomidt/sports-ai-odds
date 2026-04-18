@@ -4,7 +4,11 @@ import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatur
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
-const client = new Anthropic();
+let _client: Anthropic | null = null;
+function getClient(): Anthropic {
+  if (!_client) _client = new Anthropic();
+  return _client;
+}
 
 // ─── TTL in-memory cache (for live analysis only) ─────────────────────────────
 
@@ -118,7 +122,7 @@ export function getAiStats() {
 
 async function callClaude(userMessage: string, system?: string): Promise<string | null> {
   try {
-    const msg = await client.messages.create({
+    const msg = await getClient().messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1200,
       ...(system ? {

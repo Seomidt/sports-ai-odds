@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { clerkClient } from "@clerk/express";
+import { supabaseAdmin } from "../lib/supabase.js";
 import { db } from "@workspace/db";
 import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets } from "@workspace/db/schema";
 import { eq, sql } from "drizzle-orm";
@@ -208,23 +208,24 @@ router.patch("/admin/users/:id", requireAdmin, async (req, res) => {
   }
 });
 
-// ── Clerk users ───────────────────────────────────────────────────────────────
+// ── Supabase users ────────────────────────────────────────────────────────────
 
-router.get("/admin/clerk-users", requireAdmin, async (_req, res) => {
+router.get("/admin/supabase-users", requireAdmin, async (_req, res) => {
   try {
-    const response = await clerkClient.users.getUserList({ limit: 100, orderBy: "-created_at" });
-    const users = response.data.map((u) => ({
+    const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 100 });
+    if (error) throw error;
+    const users = data.users.map((u) => ({
       id: u.id,
-      email: u.emailAddresses.find((e) => e.id === u.primaryEmailAddressId)?.emailAddress ?? "",
-      firstName: u.firstName,
-      lastName: u.lastName,
-      createdAt: u.createdAt,
-      lastSignInAt: u.lastSignInAt,
+      email: u.email ?? "",
+      firstName: null,
+      lastName: null,
+      createdAt: u.created_at ? new Date(u.created_at).getTime() : null,
+      lastSignInAt: u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : null,
     }));
-    return res.json({ users, total: response.totalCount });
+    return res.json(users);
   } catch (err) {
-    console.error("[admin] clerk-users error:", err);
-    return res.status(500).json({ error: "Failed to fetch Clerk users" });
+    console.error("[admin] supabase-users error:", err);
+    return res.status(500).json({ error: "Failed to fetch Supabase users" });
   }
 });
 

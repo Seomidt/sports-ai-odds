@@ -824,16 +824,17 @@ export function Admin() {
 }
 
 function AdminContent() {
+  const { getToken } = useAuth();
   const { data: me } = useGetMe();
   const { data: statsData, isLoading: isLoadingStats } = useGetAdminStats();
   const { data: usersData, isLoading: isLoadingUsers } = useGetAdminUsers();
 
-  const API_BASE = import.meta.env.BASE_URL?.replace(/\/$/, "") + "/api";
   const { data: clerkUsersData, isLoading: isLoadingClerkUsers } = useQuery({
     queryKey: ["admin", "clerk-users"],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/admin/clerk-users`, {
-        headers: { "Content-Type": "application/json" },
+      const token = await getToken();
+      const res = await fetch("/api/admin/clerk-users", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to fetch Clerk users");
       return res.json() as Promise<{ users: { id: string; email: string; firstName: string | null; lastName: string | null; createdAt: number; lastSignInAt: number | null }[]; total: number }>;

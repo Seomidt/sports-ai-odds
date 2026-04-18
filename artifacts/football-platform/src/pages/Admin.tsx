@@ -102,6 +102,13 @@ interface AiStats {
   callsTotal: number;
   model: string;
   pricingNote: string;
+  lastError: string | null;
+  lastRunAt: number | null;
+}
+
+interface AiHealth {
+  apiKeyConfigured: boolean;
+  keyEnvVar: string;
 }
 
 function AiStatsSection() {
@@ -120,12 +127,75 @@ function AiStatsSection() {
     staleTime: 15_000,
   });
 
+  const { data: health } = useQuery<AiHealth>({
+    queryKey: ["aiHealth"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/admin/ai-health", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to fetch AI health");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: dbStats } = useQuery<DbStats>({
+    queryKey: ["dbStatsAi"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/admin/db-stats", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to fetch DB stats");
+      return res.json();
+    },
+    refetchInterval: 30_000,
+    staleTime: 15_000,
+  });
+
   return (
     <div className="border-t border-white/10 pt-8">
       <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-6 border-b border-white/10 pb-2 flex items-center">
         <Brain className="w-5 h-5 mr-2 text-violet-400" />
         AI USAGE
       </h2>
+
+      {health && (
+        <div className={`flex flex-wrap items-center gap-4 p-4 rounded-xl border mb-6 ${
+          health.apiKeyConfigured
+            ? "bg-teal-500/5 border-teal-500/20"
+            : "bg-red-500/10 border-red-500/30"
+        }`}>
+          <div className="flex items-center gap-2">
+            {health.apiKeyConfigured
+              ? <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+              : <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
+            <span className={`text-xs font-mono font-bold ${health.apiKeyConfigured ? "text-teal-400" : "text-red-400"}`}>
+              {health.apiKeyConfigured ? "API KEY CONFIGURED" : `API KEY MISSING — set ${health.keyEnvVar} on Railway`}
+            </span>
+          </div>
+          {dbStats && (
+            <div className="flex items-center gap-3 ml-auto text-xs font-mono text-muted-foreground">
+              <span className="text-teal-400 font-bold">{dbStats.upcomingWithTips}</span>
+              <span>/ {dbStats.upcomingFixtures} upcoming with tips</span>
+              {dbStats.upcomingWithoutTips > 0 && (
+                <span className="text-amber-400 font-bold">{dbStats.upcomingWithoutTips} missing</span>
+              )}
+            </div>
+          )}
+          {data?.lastRunAt && (
+            <span className="text-xs font-mono text-muted-foreground">
+              Last run: {format(new Date(data.lastRunAt), "MMM dd HH:mm")}
+            </span>
+          )}
+          {data?.lastError && (
+            <span className="text-xs font-mono text-red-400 truncate max-w-xs" title={data.lastError}>
+              Error: {data.lastError}
+            </span>
+          )}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex justify-center py-8"><Activity className="w-6 h-6 text-primary animate-pulse" /></div>
@@ -226,6 +296,9 @@ interface DbStats {
   fixtureSignals: number;
   aiTips: number;
   oddsMarkets: number;
+  upcomingFixtures: number;
+  upcomingWithTips: number;
+  upcomingWithoutTips: number;
 }
 
 function HistoricalDataSection() {
@@ -595,6 +668,9 @@ function ForceSyncSection() {
   const [loadingFixture, setLoadingFixture] = useState(false);
   const [loadingAi, setLoadingAi] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [aiTipsError, setAiTipsError] = useState<string | null>(null);
+  const [aiTipsSuccess, setAiTipsSuccess] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const authHeaders = async (): Promise<Record<string, string>> => {
@@ -630,8 +706,10 @@ function ForceSyncSection() {
           stopPolling();
           setLoadingFull(false);
           if (data.error) {
+            setSyncError(data.error);
             toast({ title: "Sync fejlede", description: data.error, variant: "destructive" });
           } else if (data.result) {
+            setSyncError(null);
             setSyncResult(data.result);
           }
         }
@@ -684,17 +762,24 @@ function ForceSyncSection() {
 
   const handleForceAiTips = async () => {
     setLoadingAi(true);
+    setAiTipsError(null);
+    setAiTipsSuccess(false);
     try {
       const headers = await authHeaders();
       const res = await fetch("/api/admin/force-ai-tips", { method: "POST", headers });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast({ title: data.error ?? `AI tips fejl (${res.status})`, variant: "destructive" });
+        const msg = data.error ?? `AI tips fejl (${res.status})`;
+        setAiTipsError(msg);
+        toast({ title: msg, variant: "destructive" });
       } else {
+        setAiTipsSuccess(true);
         toast({ title: "AI tip generation startet", description: "Kører i baggrunden for alle kommende kampe" });
       }
     } catch (err) {
-      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
+      const msg = `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`;
+      setAiTipsError(msg);
+      toast({ title: msg, variant: "destructive" });
     } finally {
       setLoadingAi(false);
     }
@@ -759,6 +844,24 @@ function ForceSyncSection() {
         <p className="text-[10px] text-muted-foreground/60 font-mono">
           Knappen er aktiv mens den kører. Kun manglende data hentes.
         </p>
+
+        {aiTipsError && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+            <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">AI Tips fejl</div>
+            <p className="text-xs font-mono text-red-400">{aiTipsError}</p>
+          </div>
+        )}
+        {aiTipsSuccess && !aiTipsError && (
+          <div className="bg-teal-500/10 border border-teal-500/20 rounded-lg p-3">
+            <p className="text-xs font-mono text-teal-400">Generation startet — check AI USAGE for progress</p>
+          </div>
+        )}
+        {syncError && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+            <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">Sync fejl</div>
+            <p className="text-xs font-mono text-red-400">{syncError}</p>
+          </div>
+        )}
 
         {syncResult && (
           <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-4 font-mono text-xs space-y-1.5">

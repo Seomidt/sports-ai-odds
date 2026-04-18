@@ -2,7 +2,7 @@ import { Router } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { db } from "@workspace/db";
 import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets } from "@workspace/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAuth.js";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
 import { getAiStats } from "../ai/analysisLayer.js";
@@ -47,6 +47,9 @@ router.get("/admin/ai-stats", requireAdmin, (_req, res) => {
 
 router.get("/admin/db-stats", requireAdmin, async (_req, res) => {
   try {
+    const now = new Date();
+    const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
     const [
       [fixturesRow],
       [teamsRow],
@@ -54,6 +57,7 @@ router.get("/admin/db-stats", requireAdmin, async (_req, res) => {
       [signalsRow],
       [tipsRow],
       [oddsRow],
+      upcomingRows,
     ] = await Promise.all([
       db.select({ count: sql<number>`count(*)::int` }).from(fixtures),
       db.select({ count: sql<number>`count(*)::int` }).from(teams),
@@ -61,7 +65,27 @@ router.get("/admin/db-stats", requireAdmin, async (_req, res) => {
       db.select({ count: sql<number>`count(*)::int` }).from(fixtureSignals),
       db.select({ count: sql<number>`count(*)::int` }).from(aiBettingTips),
       db.select({ count: sql<number>`count(*)::int` }).from(oddsMarkets),
+      db.select({ fixtureId: fixtures.fixtureId })
+        .from(fixtures)
+        .where(
+          and(
+            gte(fixtures.kickoff, now),
+            lte(fixtures.kickoff, in7Days),
+            inArray(fixtures.statusShort, ["NS", "TBD"]),
+          ),
+        ),
     ]);
+
+    const upcomingIds = upcomingRows.map((r) => r.fixtureId);
+    let upcomingWithTips = 0;
+
+    if (upcomingIds.length > 0) {
+      const tipsRows = await db
+        .selectDistinct({ fixtureId: aiBettingTips.fixtureId })
+        .from(aiBettingTips)
+        .where(inArray(aiBettingTips.fixtureId, upcomingIds));
+      upcomingWithTips = tipsRows.length;
+    }
 
     return res.json({
       fixtures: fixturesRow?.count ?? 0,
@@ -70,6 +94,9 @@ router.get("/admin/db-stats", requireAdmin, async (_req, res) => {
       fixtureSignals: signalsRow?.count ?? 0,
       aiTips: tipsRow?.count ?? 0,
       oddsMarkets: oddsRow?.count ?? 0,
+      upcomingFixtures: upcomingIds.length,
+      upcomingWithTips,
+      upcomingWithoutTips: upcomingIds.length - upcomingWithTips,
     });
   } catch (err) {
     console.error("[admin] db-stats error:", err);
@@ -222,7 +249,7 @@ router.get("/admin/supabase-users", requireAdmin, async (_req, res) => {
       createdAt: u.created_at ? new Date(u.created_at).getTime() : null,
       lastSignInAt: u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : null,
     }));
-    return res.json(users);
+    return res.json({ users, total: users.length });
   } catch (err) {
     console.error("[admin] supabase-users error:", err);
     return res.status(500).json({ error: "Failed to fetch Supabase users" });

@@ -37,6 +37,6 @@ export function useAuth(): AuthState {
     isSignedIn: session !== null,
     isLoading,
     signOut: () => supabase.auth.signOut().then(() => undefined),
-    getToken: () => Promise.resolve(session?.access_token ?? null),
+    getToken: () => supabase.auth.getSession().then((r) => r.data.session?.access_token ?? null),
   };
 }

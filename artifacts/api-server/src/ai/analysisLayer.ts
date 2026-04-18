@@ -47,6 +47,8 @@ interface AiUsageEntry { at: number; inputTokens: number; outputTokens: number; 
 let aiUsageLog: AiUsageEntry[] = [];
 let totalInputTokens = 0;
 let totalOutputTokens = 0;
+let lastAiError: string | null = null;
+let lastAiRunAt: number | null = null;
 
 /** Load cumulative AI token usage from DB. Call once on startup. */
 export async function initAiStats(): Promise<void> {
@@ -109,6 +111,8 @@ export function getAiStats() {
     callsTotal: aiUsageLog.length,
     model: "claude-haiku-4-5-20251001",
     pricingNote: `$${INPUT_COST_PER_M}/MTok in · $${OUTPUT_COST_PER_M}/MTok out`,
+    lastError: lastAiError,
+    lastRunAt: lastAiRunAt,
   };
 }
 
@@ -129,10 +133,13 @@ async function callClaude(userMessage: string, system?: string): Promise<string 
     scheduleAiFlush();
     aiUsageLog.push({ at: Date.now(), inputTokens: inputTok, outputTokens: outputTok });
     if (aiUsageLog.length > 500) aiUsageLog = aiUsageLog.slice(-500);
+    lastAiRunAt = Date.now();
+    lastAiError = null;
     const block = msg.content[0];
     if (block?.type === "text") return block.text;
     return null;
   } catch (err) {
+    lastAiError = err instanceof Error ? err.message : String(err);
     console.error("[ai] Claude error:", err);
     return null;
   }

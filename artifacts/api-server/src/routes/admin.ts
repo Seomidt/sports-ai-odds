@@ -138,6 +138,16 @@ router.post("/admin/force-ai-tips", requireAdmin, (_req, res) => {
   return res.json({ ok: true, message: "AI tip generation started for up to 200 upcoming fixtures" });
 });
 
+// ── AI health check ───────────────────────────────────────────────────────────
+
+router.get("/admin/ai-health", requireAdmin, (_req, res) => {
+  const hasKey = !!(process.env["ANTHROPIC_API_KEY"] ?? process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"]);
+  return res.json({
+    apiKeyConfigured: hasKey,
+    keyEnvVar: process.env["ANTHROPIC_API_KEY"] ? "ANTHROPIC_API_KEY" : process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"] ? "AI_INTEGRATIONS_ANTHROPIC_API_KEY" : "MISSING",
+  });
+});
+
 // ── User management ───────────────────────────────────────────────────────────
 
 router.get("/admin/users", requireAdmin, async (_req, res) => {

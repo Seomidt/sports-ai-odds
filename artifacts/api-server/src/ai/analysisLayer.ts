@@ -5,7 +5,7 @@ import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
 const client = new Anthropic({
-  apiKey: process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"],
+  apiKey: process.env["ANTHROPIC_API_KEY"] ?? process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"],
   baseURL: process.env["AI_INTEGRATIONS_ANTHROPIC_BASE_URL"],
 });
 
@@ -854,11 +854,11 @@ export async function getBettingTips(fixtureId: number) {
 
   const ctx = await buildBettingContext(fixtureId);
 
-  // Only bail if we have literally no data at all — form/H2H/signals is enough to generate tips
   const hasOdds = !!(ctx.odds.home || ctx.odds.draw || ctx.odds.away);
   const hasSignals = Object.keys(ctx.signals ?? {}).length > 0;
   const hasPrediction = !!ctx.prediction;
-  if (!hasOdds && !hasSignals && !hasPrediction) {
+  const hasStats = !!(ctx.homeSeasonStats || ctx.awaySeasonStats || ctx.homeRank || ctx.awayRank);
+  if (!hasOdds && !hasSignals && !hasPrediction && !hasStats) {
     return null;
   }
 

@@ -1,8 +1,20 @@
+import { useEffect } from "react";
+import { useLocation } from "wouter";
 import { Auth } from "@supabase/auth-ui-react";
 import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { supabase } from "@/lib/supabase";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function Login() {
+  const { isSignedIn, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (!isLoading && isSignedIn) {
+      setLocation("/dashboard");
+    }
+  }, [isSignedIn, isLoading, setLocation]);
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-8 shadow-xl">

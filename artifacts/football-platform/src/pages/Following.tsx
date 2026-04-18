@@ -3,7 +3,7 @@ import type { Alert } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
 import { Activity, Bell, Info, Star, CheckCircle2 } from "lucide-react";
 import { useSession } from "@/lib/session";
-import { useUser } from "@clerk/react";
+import { useAuth } from "@/hooks/useAuth";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -63,7 +63,7 @@ function FixtureCard({ id }: { id: number }) {
 
 export function Following() {
   const { sessionId } = useSession();
-  const { user } = useUser();
+  const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [explainingAlertId, setExplainingAlertId] = useState<number | null>(null);

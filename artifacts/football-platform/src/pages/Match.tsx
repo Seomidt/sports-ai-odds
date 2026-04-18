@@ -22,7 +22,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { Link } from "wouter";
 import { useSession } from "@/lib/session";
-import { useUser } from "@clerk/react";
+import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useState, Component, useCallback } from "react";
@@ -33,7 +33,7 @@ export function Match() {
   const [, params] = useRoute("/match/:id");
   const id = Number(params?.id);
   const { sessionId } = useSession();
-  const { user } = useUser();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [, navigate] = useLocation();
 

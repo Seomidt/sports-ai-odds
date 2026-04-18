@@ -21,7 +21,6 @@ export default function Login() {
         <h1 className="text-2xl font-bold text-white mb-6 text-center">Sign in</h1>
         <Auth
           supabaseClient={supabase}
-          providers={["google"]}
           redirectTo={window.location.origin}
           appearance={{
             theme: ThemeSupa,

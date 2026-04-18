@@ -1,4 +1,4 @@
-import { useAuth } from "@clerk/react";
+import { useAuth } from "@/hooks/useAuth";
 import {
   useGetAdminStats,
   useGetAdminUsers, 
@@ -830,10 +830,10 @@ function AdminContent() {
   const { data: usersData, isLoading: isLoadingUsers } = useGetAdminUsers();
 
   const { data: clerkUsersData, isLoading: isLoadingClerkUsers } = useQuery({
-    queryKey: ["admin", "clerk-users"],
+    queryKey: ["admin", "supabase-users"],
     queryFn: async () => {
       const token = await getToken();
-      const res = await fetch("/api/admin/clerk-users", {
+      const res = await fetch("/api/admin/supabase-users", {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to fetch Clerk users");

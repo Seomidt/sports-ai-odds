@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper, Zap } from "lucide-react";
-import { useClerk, useUser } from "@clerk/react";
+import { useAuth } from "@/hooks/useAuth";
 import { useGetMe } from "@workspace/api-client-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { TopSignalBanner } from "./TopSignalBanner";
@@ -10,8 +10,7 @@ const appLogo = "/logo.png";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
-  const { signOut } = useClerk();
-  const { user } = useUser();
+  const { signOut, user } = useAuth();
   const { data: me } = useGetMe({
     query: {
       staleTime: 5 * 60 * 1000,
@@ -72,7 +71,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <User className="w-4 h-4" />
             </div>
             <div className="ml-3 overflow-hidden">
-              <p className="text-sm font-medium text-white truncate">{user?.primaryEmailAddress?.emailAddress}</p>
+              <p className="text-sm font-medium text-white truncate">{user?.email}</p>
               <p className="text-xs text-muted-foreground capitalize">{me?.role || "User"}</p>
             </div>
           </div>
@@ -131,7 +130,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <User className="w-4 h-4" />
                 </div>
                 <div className="ml-3 overflow-hidden">
-                  <p className="text-sm font-medium text-white truncate">{user?.primaryEmailAddress?.emailAddress}</p>
+                  <p className="text-sm font-medium text-white truncate">{user?.email}</p>
                   <p className="text-xs text-muted-foreground capitalize">{me?.role || "User"}</p>
                 </div>
               </div>

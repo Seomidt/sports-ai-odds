@@ -4,10 +4,7 @@ import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatur
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
-const client = new Anthropic({
-  apiKey: process.env["ANTHROPIC_API_KEY"] ?? process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"],
-  baseURL: process.env["AI_INTEGRATIONS_ANTHROPIC_BASE_URL"],
-});
+const client = new Anthropic();
 
 // ─── TTL in-memory cache (for live analysis only) ─────────────────────────────
 

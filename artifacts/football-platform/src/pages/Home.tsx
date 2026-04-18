@@ -159,12 +159,12 @@ export function Home() {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-20">
-            <Link href="/sign-up">
+            <Link href="/login">
               <div className="h-12 px-8 flex items-center justify-center rounded-md bg-primary text-primary-foreground font-semibold hover:bg-primary/90 transition-colors cursor-pointer font-mono tracking-wider">
                 GET ACCESS <ArrowRight className="ml-2 w-4 h-4" />
               </div>
             </Link>
-            <Link href="/sign-in">
+            <Link href="/login">
               <div className="h-12 px-8 flex items-center justify-center rounded-md glass-card text-white font-semibold hover:bg-white/10 transition-colors cursor-pointer font-mono tracking-wider">
                 SIGN IN
               </div>
@@ -323,12 +323,12 @@ export function Home() {
             Access is by invitation only. Request access and an admin will approve your account.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/sign-up">
+            <Link href="/login">
               <div className="h-14 px-10 flex items-center justify-center rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 transition-colors cursor-pointer font-mono tracking-wider text-base">
                 REQUEST ACCESS <ArrowRight className="ml-2 w-5 h-5" />
               </div>
             </Link>
-            <Link href="/sign-in">
+            <Link href="/login">
               <div className="h-14 px-10 flex items-center justify-center rounded-md glass-card text-white font-bold hover:bg-white/10 transition-colors cursor-pointer font-mono tracking-wider text-base">
                 SIGN IN
               </div>

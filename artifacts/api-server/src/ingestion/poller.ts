@@ -2389,9 +2389,9 @@ export function startPoller() {
   setTimeout(() => syncTransfersForTrackedTeams().catch(console.error), 90 * 1000);
   setTimeout(() => syncH2HForUpcomingFixtures().catch(console.error), 2 * 60 * 1000);
   setTimeout(() => syncOdds().catch(console.error), 2.5 * 60 * 1000);
-  // Early AI tips pass: uses whatever odds are already in the DB (from prior syncs)
-  // Generates tips for any fixture with existing odds but missing picks.
-  // A second, fuller pass follows at 14 min after fresh odds are fetched.
+  // Immediate AI tips pass: runs 10s after boot using whatever is already in DB
+  setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 10 * 1000);
+  // Second early pass: after odds sync has refreshed
   setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 3 * 60 * 1000);
   setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 3.5 * 60 * 1000);
   setTimeout(() => syncTeamSeasonStats().catch(console.error), 4 * 60 * 1000);

@@ -116,7 +116,7 @@ function ProtectedRoute({ component: Component }: { component: React.ComponentTy
     );
   }
 
-  if (me?.accessDenied) {
+  if (me?.authenticated && me?.accessDenied) {
     return <AccessPendingPage />;
   }
 

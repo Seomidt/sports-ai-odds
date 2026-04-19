@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
 import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses, predictionReviews } from "@workspace/db/schema";
 import { z } from "zod";
-import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
+import { eq, and, gte, isNotNull, desc, sql } from "drizzle-orm";
 import { calculateConfidence } from "./confidence.js";
 import { emitSuperValueAlert } from "../alerts/alertEngine.js";
 
@@ -201,25 +201,103 @@ function parseJson<T>(raw: string | null, schema: z.ZodType<T>, fallback: T): T 
 
 // ─── Accuracy history ─────────────────────────────────────────────────────────
 
-async function getAccuracyHistory(): Promise<{ hitRate: number; totalReviewed: number; hits: number; summary: string }> {
-  const reviewed = await db.query.aiBettingTips.findMany({
-    where: (t, { isNotNull: notNull }) => notNull(t.outcome),
-    orderBy: (t, { desc: d }) => [d(t.reviewedAt)],
-    limit: 50,
-  });
+// Fase 1.9 — Generel AI-kalibrering fra 90-dages track record.
+// Aggregerer hit-rate, Brier og ROI per primary market + per confidence-tier så
+// LLM'en kan selvkalibrere sine trust-scores på ALLE fremtidige kampe
+// (ikke bare den aktuelle).
+let _accuracyCache: { value: AccuracyHistory; expiresAt: number } | null = null;
+const ACCURACY_TTL_MS = 10 * 60 * 1000;
 
-  if (reviewed.length === 0) {
-    return { hitRate: 0, totalReviewed: 0, hits: 0, summary: "No review history yet." };
+interface AccuracyHistory {
+  hitRate: number;
+  totalReviewed: number;
+  hits: number;
+  summary: string;
+}
+
+async function getAccuracyHistory(): Promise<AccuracyHistory> {
+  if (_accuracyCache && Date.now() < _accuracyCache.expiresAt) return _accuracyCache.value;
+
+  const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      betType: aiBettingTips.betType,
+      confidence: aiBettingTips.confidence,
+      outcome: aiBettingTips.outcome,
+      brierScore: predictionReviews.brierScore,
+      roiImpact: predictionReviews.roiImpact,
+    })
+    .from(aiBettingTips)
+    .leftJoin(predictionReviews, eq(aiBettingTips.id, predictionReviews.predictionId))
+    .where(and(isNotNull(aiBettingTips.outcome), gte(aiBettingTips.reviewedAt, since)))
+    .limit(2000);
+
+  if (rows.length === 0) {
+    const empty: AccuracyHistory = {
+      hitRate: 0,
+      totalReviewed: 0,
+      hits: 0,
+      summary: "No 90d review history yet — be conservative on trust scores (cap at 7) until track record builds.",
+    };
+    _accuracyCache = { value: empty, expiresAt: Date.now() + ACCURACY_TTL_MS };
+    return empty;
   }
 
-  const hits = reviewed.filter((r) => r.outcome === "hit").length;
-  const hitRate = Math.round((hits / reviewed.length) * 100);
-  return {
-    hitRate,
-    totalReviewed: reviewed.length,
-    hits,
-    summary: `${hits}/${reviewed.length} tips correct (${hitRate}% hit rate, last ${reviewed.length} reviewed)`,
+  const hits = rows.filter((r) => r.outcome === "hit").length;
+  const hitRate = Math.round((hits / rows.length) * 100);
+
+  const PRIMARY = ["match_result", "over_under_2_5", "btts"] as const;
+  type MarketBucket = { total: number; hits: number; brierSum: number; brierN: number; roiSum: number; roiN: number };
+  const byMarket = new Map<string, MarketBucket>();
+  const bucket = (k: string) => {
+    let b = byMarket.get(k);
+    if (!b) { b = { total: 0, hits: 0, brierSum: 0, brierN: 0, roiSum: 0, roiN: 0 }; byMarket.set(k, b); }
+    return b;
   };
+  for (const r of rows) {
+    const key = (PRIMARY as readonly string[]).includes(r.betType) ? r.betType : "other";
+    const b = bucket(key);
+    b.total++;
+    if (r.outcome === "hit") b.hits++;
+    if (r.brierScore != null) { b.brierSum += r.brierScore; b.brierN++; }
+    if (r.roiImpact != null) { b.roiSum += r.roiImpact; b.roiN++; }
+  }
+
+  const byConf: Record<string, { total: number; hits: number }> = {
+    high: { total: 0, hits: 0 },
+    medium: { total: 0, hits: 0 },
+    low: { total: 0, hits: 0 },
+  };
+  for (const r of rows) {
+    const c = (r.confidence ?? "").toLowerCase();
+    if (!byConf[c]) continue;
+    byConf[c].total++;
+    if (r.outcome === "hit") byConf[c].hits++;
+  }
+
+  const marketOrder = [...PRIMARY, "other"];
+  const marketLines = marketOrder
+    .filter((m) => byMarket.has(m))
+    .map((m) => {
+      const s = byMarket.get(m)!;
+      const rate = Math.round((s.hits / s.total) * 100);
+      const brier = s.brierN > 0 ? (s.brierSum / s.brierN).toFixed(3) : "n/a";
+      const roi = s.roiN > 0 ? `${(s.roiSum / s.roiN >= 0 ? "+" : "")}${((s.roiSum / s.roiN) * 100).toFixed(1)}%` : "n/a";
+      return `${m}=${rate}% (${s.hits}/${s.total}) brier=${brier} roi=${roi}`;
+    })
+    .join(" | ");
+
+  const confLines = (["high", "medium", "low"] as const)
+    .filter((c) => byConf[c].total > 0)
+    .map((c) => `${c}=${Math.round((byConf[c].hits / byConf[c].total) * 100)}% (${byConf[c].hits}/${byConf[c].total})`)
+    .join(" | ");
+
+  const summary = `90d track record: ${hits}/${rows.length} correct (${hitRate}% overall). Per market: ${marketLines}.${confLines ? ` Per confidence: ${confLines}.` : ""}`;
+
+  const result: AccuracyHistory = { hitRate, totalReviewed: rows.length, hits, summary };
+  _accuracyCache = { value: result, expiresAt: Date.now() + ACCURACY_TTL_MS };
+  return result;
 }
 
 // ─── Context builder ──────────────────────────────────────────────────────────
@@ -1026,8 +1104,9 @@ ${h2hAiNotesSection ? "\n" + h2hAiNotesSection : ""}
 Signal data:
 ${JSON.stringify(ctx.signals, null, 2)}
 
-Your accuracy history: ${accuracy.summary}
-${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRate}% hit rate.` : "First tip — be conservative."}`;
+GENERAL MODEL CALIBRATION (applies to ALL tips, not just this match):
+${accuracy.summary}
+${accuracy.totalReviewed > 0 ? `Use this track record to calibrate trust scores system-wide. If a market underperforms (hit rate below implied probability or negative ROI), lower trust and edge for that market. If a confidence tier is miscalibrated (e.g. "high" tips hitting below 60%), tighten your bar for calling something "high". This is feedback on your own past predictions — adjust accordingly.` : "No track record yet — cap trust scores at 7 until results accumulate."}`;
 
   const raw = await callClaude(userMessage, BETTING_SYSTEM);
   const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);

@@ -21,6 +21,8 @@ interface ValueTip {
   betSide: string | null;
   trustScore: number;
   aiProbability: number | null;
+  impliedProbability: number | null;
+  confidence: "high" | "medium" | "low" | null;
   edge: number | null;
   reasoning: string;
   marketOdds: number | null;
@@ -43,6 +45,7 @@ interface TipSummary {
   marketOdds: number | null;
   valueRating: string | null;
   edge: number | null;
+  confidence: "high" | "medium" | "low" | null;
 }
 
 interface YesterdayTip extends TipSummary {
@@ -248,7 +251,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                   <div className="text-xs text-muted-foreground/70 truncate">
                     Top: <span className="text-white/80">{topPick.recommendation}</span>
                     {topPick.edge != null && (
-                      <span className="text-teal-400 font-mono ml-1">+{Math.round(topPick.edge * 100)}% edge</span>
+                      <span className="text-teal-400 font-mono ml-1">+{(topPick.edge * 100).toFixed(1)}pp</span>
                     )}
                     {topPick.marketOdds != null && topPick.edge == null && (
                       <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
@@ -282,13 +285,25 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {tip.edge != null ? (
-                        <span className="font-mono text-sm font-bold text-teal-400">+{Math.round(tip.edge * 100)}%</span>
+                        <span className={`font-mono text-sm font-bold tabular-nums ${
+                          tip.edge >= 0.05 ? 'text-teal-400' :
+                          tip.edge >= -0.05 ? 'text-violet-400' :
+                          'text-amber-400'
+                        }`}>
+                          {tip.edge >= 0 ? '+' : ''}{(tip.edge * 100).toFixed(1)}pp
+                        </span>
                       ) : tip.marketOdds != null ? (
                         <span className="font-mono text-sm font-bold text-teal-400">{tip.marketOdds.toFixed(2)}</span>
                       ) : null}
-                      <span className={`text-sm font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : 'text-amber-400'}`}>
-                        {tip.trustScore}<span className="text-[10px] text-muted-foreground/40">/10</span>
-                      </span>
+                      {tip.confidence && (
+                        <span className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${
+                          tip.confidence === 'high' ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
+                          tip.confidence === 'medium' ? 'text-violet-300 bg-violet-400/10 border-violet-400/25' :
+                          'text-amber-400 bg-amber-400/10 border-amber-400/25'
+                        }`}>
+                          {tip.confidence}
+                        </span>
+                      )}
                       <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/25" />
                     </div>
                   </div>
@@ -450,6 +465,18 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
     : 'border-white/8';
   const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
 
+  const edgePp = tip.edge != null ? tip.edge * 100 : null;
+  const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
+  const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
+  const impliedProb = tip.impliedProbability ?? impliedFromOdds;
+  const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
+
+  const confStyles: Record<string, string> = {
+    high: 'text-teal-300 bg-teal-400/10 border-teal-400/30',
+    medium: 'text-violet-300 bg-violet-400/10 border-violet-400/25',
+    low: 'text-amber-400 bg-amber-400/10 border-amber-400/25',
+  };
+
   return (
     <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden`}>
       {/* ── Clickable main area ── */}
@@ -459,16 +486,24 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             <span className={`text-xs font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(tip.betType)}</span>
             <ValueBadge rating={tip.valueRating} />
+            {tip.confidence && (
+              <span
+                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${confStyles[tip.confidence]}`}
+                title="Data-derived confidence (edge realism, data completeness, odds stability, league accuracy)"
+              >
+                {tip.confidence}
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {tip.edge != null && (
+            {edgePp != null && (
               <div className={`px-2 py-0.5 rounded text-xs font-mono font-bold tabular-nums border ${
-                tip.edge >= 0.15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
-                tip.edge >= 0.05 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
-                tip.edge >= -0.05 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
+                edgePp >= 15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
+                edgePp >= 5 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
+                edgePp >= -5 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
                 'text-amber-400 bg-amber-400/10 border-amber-400/20'
               }`}>
-                {tip.edge >= 0 ? '+' : ''}{(tip.edge * 100).toFixed(1)}% edge
+                {edgePp >= 0 ? '+' : ''}{edgePp.toFixed(1)}pp
               </div>
             )}
             {tip.marketOdds != null && (
@@ -477,32 +512,14 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           </div>
         </div>
 
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-lg font-bold text-white leading-tight">{tip.recommendation}</div>
-          <div className="flex flex-col items-end gap-0.5 shrink-0 ml-2">
-            <div className="flex items-center gap-1">
-              <span className={`text-xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white/40'}`}>
-                {tip.trustScore}
-              </span>
-              <span className="text-xs text-muted-foreground font-mono">/10</span>
+        <div className="mb-3">
+          <div className="text-lg font-bold text-white leading-tight mb-1">{tip.recommendation}</div>
+          {(aiPct != null || implPct != null) && (
+            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
+              {aiPct != null && <span>AI <span className="text-white/85 tabular-nums font-bold">{aiPct}%</span></span>}
+              {implPct != null && <span>Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span></span>}
             </div>
-            {tip.aiProbability != null && (
-              <div className="text-[10px] font-mono text-muted-foreground/40">{(tip.aiProbability * 100).toFixed(0)}% prob</div>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-0.5 mb-3">
-          {Array.from({ length: 10 }, (_, i) => (
-            <div
-              key={i}
-              className={`flex-1 h-1 rounded-sm ${
-                i < tip.trustScore
-                  ? (tip.trustScore >= 7 ? 'bg-teal-400' : tip.trustScore >= 5 ? 'bg-amber-400' : 'bg-white/30')
-                  : 'bg-white/10'
-              }`}
-            />
-          ))}
+          )}
         </div>
 
         <div className="flex items-center gap-2 mb-2 text-sm text-white/60">

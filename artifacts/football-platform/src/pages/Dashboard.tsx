@@ -578,11 +578,20 @@ function PerformancePanel() {
     staleTime: 5 * 60_000,
   });
 
-  if (!data || !data.totalTips) return null;
+  if (!data) return null;
 
   const fmtPct = (v: number | null, digits = 1) => (v == null ? "—" : `${(v * 100).toFixed(digits)}%`);
   const fmtRoi = (v: number | null) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
   const fmtBrier = (v: number | null) => (v == null ? "—" : v.toFixed(3));
+
+  if (!data.totalTips) {
+    return (
+      <div className="rounded-xl border border-white/6 bg-white/2 p-4 flex items-center gap-3 text-xs text-muted-foreground font-mono">
+        <span className="px-2 py-1 rounded bg-white/5 text-white/70">PERFORMANCE</span>
+        <span>Ingen afsluttede tips i predictionReviews endnu — kør backfill eller vent på første post-match review.</span>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl border border-white/6 bg-white/2 p-4 flex items-center gap-6 flex-wrap">

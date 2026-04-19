@@ -198,7 +198,16 @@ function EmptyState({ phase }: { phase: Tab }) {
 }
 
 export function Fixtures() {
-  const { data, isLoading } = useGetTodayFixtures();
+  const { data, isLoading } = useGetTodayFixtures({
+    staleTime: 15_000,
+    gcTime: 5 * 60_000,
+    refetchInterval: (query) => {
+      const fixtures = (query.state.data?.leagues ?? []).flatMap((l) => l.fixtures);
+      const hasLive = fixtures.some((f) => LIVE_STATUSES.has(f.statusShort ?? ""));
+      return hasLive ? 20_000 : 3 * 60_000;
+    },
+    refetchIntervalInBackground: true,
+  });
   const [activeTab, setActiveTab] = useState<Tab>("live");
 
   const allFixtures: Fixture[] = (data?.leagues ?? []).flatMap((league) => league.fixtures);

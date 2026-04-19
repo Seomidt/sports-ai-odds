@@ -128,7 +128,9 @@ function TipPreview({ fixtureId, allTips }: { fixtureId: number; allTips: Record
   const impliedFromOdds = matchTip.marketOdds != null && matchTip.marketOdds > 1 ? 1 / matchTip.marketOdds : null;
   const impliedProb = matchTip.impliedProbability ?? impliedFromOdds;
   const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
-  const edgePp = matchTip.edge != null ? matchTip.edge * 100 : null;
+  const edgePp = matchTip.aiProbability != null && impliedProb != null
+    ? (matchTip.aiProbability - impliedProb) * 100
+    : null;
 
   return (
     <div className="border-t border-white/5 pt-2.5 mt-1 space-y-1.5">

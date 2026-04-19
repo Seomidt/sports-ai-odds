@@ -362,11 +362,13 @@ function ConfidenceBadgeLarge({ confidence }: { confidence: "high" | "medium" | 
 function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null }) {
   const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
-  const edgePp = tip.edge != null ? tip.edge * 100 : null;
   const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
   const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
   const impliedProb = tip.impliedProbability ?? impliedFromOdds;
   const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
+  const edgePp = tip.aiProbability != null && impliedProb != null
+    ? (tip.aiProbability - impliedProb) * 100
+    : null;
 
   return (
     <div className={`glass-card p-5 rounded-xl border ${borderColor} space-y-4`}>
@@ -1060,15 +1062,23 @@ function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeT
                   <div className="text-lg font-bold text-white">{review.recommendation}</div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <ConfidenceBadgeLarge confidence={review.confidence} />
-                    {review.edge != null && (
-                      <span className={`text-xs font-mono font-bold tabular-nums ${
-                        review.edge >= 0.05 ? 'text-teal-400' :
-                        review.edge >= -0.05 ? 'text-violet-400' :
-                        'text-amber-400'
-                      }`}>
-                        {review.edge >= 0 ? '+' : ''}{(review.edge * 100).toFixed(1)}pp
-                      </span>
-                    )}
+                    {(() => {
+                      const impliedFromOdds = review.marketOdds != null && review.marketOdds > 1 ? 1 / review.marketOdds : null;
+                      const impliedProb = review.impliedProbability ?? impliedFromOdds;
+                      const edgePp = review.aiProbability != null && impliedProb != null
+                        ? (review.aiProbability - impliedProb) * 100
+                        : null;
+                      if (edgePp == null) return null;
+                      return (
+                        <span className={`text-xs font-mono font-bold tabular-nums ${
+                          edgePp >= 5 ? 'text-teal-400' :
+                          edgePp >= -5 ? 'text-violet-400' :
+                          'text-amber-400'
+                        }`}>
+                          {edgePp >= 0 ? '+' : ''}{edgePp.toFixed(1)}pp
+                        </span>
+                      );
+                    })()}
                     {review.marketOdds != null && (
                       <>
                         <span className="text-white/20">·</span>

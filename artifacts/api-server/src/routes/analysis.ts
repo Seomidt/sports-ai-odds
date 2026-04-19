@@ -270,6 +270,9 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           marketOdds: aiBettingTips.marketOdds,
           valueRating: aiBettingTips.valueRating,
           edge: aiBettingTips.edge,
+          aiProbability: aiBettingTips.aiProbability,
+          impliedProbability: aiBettingTips.impliedProbability,
+          confidence: aiBettingTips.confidence,
         })
           .from(aiBettingTips)
           .where(and(gte(aiBettingTips.kickoff, todayStart), lte(aiBettingTips.kickoff, todayEnd)))
@@ -289,6 +292,9 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           marketOdds: aiBettingTips.marketOdds,
           valueRating: aiBettingTips.valueRating,
           edge: aiBettingTips.edge,
+          aiProbability: aiBettingTips.aiProbability,
+          impliedProbability: aiBettingTips.impliedProbability,
+          confidence: aiBettingTips.confidence,
           outcome: aiBettingTips.outcome,
           reviewHeadline: aiBettingTips.reviewHeadline,
         })

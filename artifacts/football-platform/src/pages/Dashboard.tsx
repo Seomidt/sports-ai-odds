@@ -45,6 +45,8 @@ interface TipSummary {
   marketOdds: number | null;
   valueRating: string | null;
   edge: number | null;
+  aiProbability: number | null;
+  impliedProbability: number | null;
   confidence: "high" | "medium" | "low" | null;
 }
 
@@ -250,10 +252,12 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                 {topPick && !todayOpen && (
                   <div className="text-xs text-muted-foreground/70 truncate">
                     Top: <span className="text-white/80">{topPick.recommendation}</span>
-                    {topPick.edge != null && (
-                      <span className="text-teal-400 font-mono ml-1">+{(topPick.edge * 100).toFixed(1)}pp</span>
-                    )}
-                    {topPick.marketOdds != null && topPick.edge == null && (
+                    {(() => {
+                      const impl = topPick.impliedProbability ?? (topPick.marketOdds && topPick.marketOdds > 1 ? 1 / topPick.marketOdds : null);
+                      const pp = topPick.aiProbability != null && impl != null ? (topPick.aiProbability - impl) * 100 : null;
+                      return pp != null ? <span className="text-teal-400 font-mono ml-1">{pp >= 0 ? '+' : ''}{pp.toFixed(1)}pp</span> : null;
+                    })()}
+                    {topPick.marketOdds != null && topPick.aiProbability == null && (
                       <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
                     )}
                   </div>
@@ -284,17 +288,25 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {tip.edge != null ? (
-                        <span className={`font-mono text-sm font-bold tabular-nums ${
-                          tip.edge >= 0.05 ? 'text-teal-400' :
-                          tip.edge >= -0.05 ? 'text-violet-400' :
-                          'text-amber-400'
-                        }`}>
-                          {tip.edge >= 0 ? '+' : ''}{(tip.edge * 100).toFixed(1)}pp
-                        </span>
-                      ) : tip.marketOdds != null ? (
-                        <span className="font-mono text-sm font-bold text-teal-400">{tip.marketOdds.toFixed(2)}</span>
-                      ) : null}
+                      {(() => {
+                        const impl = tip.impliedProbability ?? (tip.marketOdds && tip.marketOdds > 1 ? 1 / tip.marketOdds : null);
+                        const pp = tip.aiProbability != null && impl != null ? (tip.aiProbability - impl) * 100 : null;
+                        if (pp != null) {
+                          return (
+                            <span className={`font-mono text-sm font-bold tabular-nums ${
+                              pp >= 5 ? 'text-teal-400' :
+                              pp >= -5 ? 'text-violet-400' :
+                              'text-amber-400'
+                            }`}>
+                              {pp >= 0 ? '+' : ''}{pp.toFixed(1)}pp
+                            </span>
+                          );
+                        }
+                        if (tip.marketOdds != null) {
+                          return <span className="font-mono text-sm font-bold text-teal-400">{tip.marketOdds.toFixed(2)}</span>;
+                        }
+                        return null;
+                      })()}
                       {tip.confidence && (
                         <span className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${
                           tip.confidence === 'high' ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
@@ -465,11 +477,14 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
     : 'border-white/8';
   const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
 
-  const edgePp = tip.edge != null ? tip.edge * 100 : null;
   const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
   const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
   const impliedProb = tip.impliedProbability ?? impliedFromOdds;
   const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
+  // True percentage-point edge: AI probability minus market-implied probability
+  const edgePp = tip.aiProbability != null && impliedProb != null
+    ? (tip.aiProbability - impliedProb) * 100
+    : null;
 
   const confStyles: Record<string, string> = {
     high: 'text-teal-300 bg-teal-400/10 border-teal-400/30',

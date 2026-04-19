@@ -16,8 +16,10 @@ router.get("/me", async (req, res) => {
       return res.json({ authenticated: false, role: null, accessDenied: true });
     }
 
+    const billingEnabled = process.env["BILLING_ENABLED"] === "true";
+
     if (ADMIN_EMAIL && user.email === ADMIN_EMAIL) {
-      return res.json({ authenticated: true, role: "admin", accessDenied: false, email: user.email });
+      return res.json({ authenticated: true, role: "admin", plan: "pro", accessDenied: false, email: user.email });
     }
 
     const allowedUser = await db.query.allowedUsers.findFirst({
@@ -25,10 +27,11 @@ router.get("/me", async (req, res) => {
     });
 
     if (!allowedUser) {
-      return res.json({ authenticated: true, role: null, accessDenied: true, email: user.email });
+      return res.json({ authenticated: true, role: null, plan: "free", accessDenied: true, email: user.email });
     }
 
-    return res.json({ authenticated: true, role: allowedUser.role, accessDenied: false, email: user.email });
+    const plan = billingEnabled ? (allowedUser.plan ?? "free") : "pro";
+    return res.json({ authenticated: true, role: allowedUser.role, plan, accessDenied: false, email: user.email });
   } catch (err) {
     console.error("[/me] error:", err);
     return res.status(500).json({ error: "Internal server error" });

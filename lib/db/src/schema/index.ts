@@ -381,6 +381,10 @@ export const allowedUsers = pgTable(
     stripeSubscriptionId: text("stripe_subscription_id"),
     stripePlanName: text("stripe_plan_name"),
     stripeSubscriptionStatus: text("stripe_subscription_status"), // "active" | "trialing" | "past_due" | "canceled" | null
+    // Fase 2.2 — plan tier for gating
+    plan: text("plan").notNull().default("free"), // "free" | "pro"
+    planStartedAt: timestamp("plan_started_at"),
+    planCancelAt: timestamp("plan_cancel_at"),
   },
   (t) => [unique("allowed_users_email_unique").on(t.email)]
 );

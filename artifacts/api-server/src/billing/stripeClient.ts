@@ -1,16 +1,19 @@
 import StripeImport from "stripe";
 
-// Stripe is inactive until STRIPE_ENABLED=true is set in environment secrets.
-// To enable: connect Stripe integration, add STRIPE_SECRET_KEY, set STRIPE_ENABLED=true, restart.
-export const STRIPE_ENABLED = process.env.STRIPE_ENABLED === "true";
+// Stripe is inactive until BILLING_ENABLED=true (or the legacy STRIPE_ENABLED=true)
+// is set in env. Requires STRIPE_SECRET_KEY + STRIPE_PRO_PRICE_ID + STRIPE_WEBHOOK_SECRET.
+export const BILLING_ENABLED =
+  process.env.BILLING_ENABLED === "true" || process.env.STRIPE_ENABLED === "true";
+// Deprecated alias kept for backward compat.
+export const STRIPE_ENABLED = BILLING_ENABLED;
 
 type StripeClient = InstanceType<typeof StripeImport>;
 
 let _client: StripeClient | null = null;
 
 export function getStripeClient(): StripeClient {
-  if (!STRIPE_ENABLED) {
-    throw new Error("Stripe is not enabled. Set STRIPE_ENABLED=true to activate.");
+  if (!BILLING_ENABLED) {
+    throw new Error("Billing is not enabled. Set BILLING_ENABLED=true to activate.");
   }
 
   const secretKey = process.env.STRIPE_SECRET_KEY;

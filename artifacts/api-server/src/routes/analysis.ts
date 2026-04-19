@@ -6,6 +6,7 @@ import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles, pr
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 import { generateLeagueNews, getLiveAnalysis } from "../ai/analysisLayer.js";
 import { filterPublishableTips } from "../ai/publishFilter.js";
+import { getPlanForRequest, requirePlan } from "../middlewares/requirePlan.js";
 
 const router = Router();
 
@@ -14,6 +15,24 @@ const UPCOMING_STATUSES = ["NS", "TBD"];
 
 function badRequest(res: any, message: string) {
   return res.status(400).json({ error: message });
+}
+
+// Fase 2.1 — Free plan sees only low-confidence or non-primary-market tips,
+// and only after a 24h delay. Pro sees everything.
+const PRIMARY_MARKETS = new Set(["match_result", "over_under_2_5", "btts"]);
+const FREE_DELAY_MS = 24 * 60 * 60 * 1000;
+
+function applyFreePlanGate<T extends { confidence?: string | null; betType?: string | null; createdAt?: Date | string | null }>(
+  tips: T[],
+): T[] {
+  const cutoff = Date.now() - FREE_DELAY_MS;
+  return tips.filter((t) => {
+    const created = t.createdAt ? new Date(t.createdAt).getTime() : 0;
+    if (created > cutoff) return false;
+    const isPrimary = t.betType ? PRIMARY_MARKETS.has(t.betType) : false;
+    if (!isPrimary) return true;
+    return t.confidence === "low";
+  });
 }
 
 function safeNumber(value: unknown): number | null {
@@ -173,8 +192,9 @@ router.get("/analysis/window", async (req, res) => {
 
 // ── Value odds — upcoming AI tips sorted by edge/value ───────────────────────
 
-router.get("/analysis/value-odds", async (_req, res) => {
+router.get("/analysis/value-odds", async (req, res) => {
   try {
+    const { plan } = await getPlanForRequest(req);
     const result = await getOrFetch("analysis:value-odds", TTL.MIN1, async () => {
       const now = new Date();
       const rawTips = await db
@@ -212,7 +232,8 @@ router.get("/analysis/value-odds", async (_req, res) => {
 
       return { tips: enriched };
     });
-    return res.json(result);
+    const filtered = plan === "pro" ? result.tips : applyFreePlanGate(result.tips);
+    return res.json({ ...result, tips: filtered, plan });
   } catch (error) {
     console.error("[routes:analysis.valueOdds]", error);
     return res.status(500).json({ error: "Failed to load value odds" });
@@ -392,8 +413,9 @@ router.get("/analysis/daily-summary", async (_req, res) => {
 
 // ── Prematch tips — all upcoming tips grouped by fixtureId ───────────────────
 
-router.get("/analysis/prematch-tips", async (_req, res) => {
+router.get("/analysis/prematch-tips", async (req, res) => {
   try {
+    const { plan } = await getPlanForRequest(req);
     const result = await getOrFetch("analysis:prematch-tips", TTL.MIN5, async () => {
       const now = new Date();
       const rawTips = await db
@@ -411,6 +433,7 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
           marketOdds: aiBettingTips.marketOdds,
           valueRating: aiBettingTips.valueRating,
           featureSnapshot: aiBettingTips.featureSnapshot,
+          createdAt: aiBettingTips.createdAt,
         })
         .from(aiBettingTips)
         .where(gte(aiBettingTips.kickoff, now))
@@ -429,9 +452,18 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
         grouped[tip.fixtureId].push(tip);
       }
 
-      return { tips: grouped };
+      return { tips: grouped, flat: tips };
     });
-    return res.json(result);
+    if (plan === "pro") {
+      return res.json({ tips: result.tips, plan });
+    }
+    const gated = applyFreePlanGate(result.flat);
+    const grouped: Record<number, typeof gated> = {};
+    for (const tip of gated) {
+      if (!grouped[tip.fixtureId]) grouped[tip.fixtureId] = [];
+      grouped[tip.fixtureId].push(tip);
+    }
+    return res.json({ tips: grouped, plan });
   } catch (error) {
     console.error("[routes:analysis.prematchTips]", error);
     return res.status(500).json({ error: "Failed to load prematch tips" });
@@ -789,7 +821,7 @@ async function buildEquityCurve(days = 90): Promise<Array<{ date: string; cumRoi
   });
 }
 
-router.get("/analysis/performance", async (_req, res) => {
+router.get("/analysis/performance", requirePlan("pro"), async (_req, res) => {
   try {
     const result = await getOrFetch("analysis:performance", TTL.MIN5, async () => {
       const [[global], equityCurve] = await Promise.all([
@@ -812,7 +844,7 @@ router.get("/analysis/performance", async (_req, res) => {
   }
 });
 
-router.get("/analysis/performance/by-market", async (_req, res) => {
+router.get("/analysis/performance/by-market", requirePlan("pro"), async (_req, res) => {
   try {
     const result = await getOrFetch("analysis:performance:by-market", TTL.MIN5, async () => {
       const rows = await buildPerformanceSummary("betType");
@@ -825,7 +857,7 @@ router.get("/analysis/performance/by-market", async (_req, res) => {
   }
 });
 
-router.get("/analysis/performance/by-league", async (_req, res) => {
+router.get("/analysis/performance/by-league", requirePlan("pro"), async (_req, res) => {
   try {
     const result = await getOrFetch("analysis:performance:by-league", TTL.MIN5, async () => {
       const rows = await buildPerformanceSummary("leagueName");

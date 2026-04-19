@@ -3,11 +3,21 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
+import { PaywallOverlay } from "@/components/PaywallOverlay";
+import { supabase } from "@/lib/supabase";
 import {
   Activity, TrendingUp, Zap, ChevronRight, ChevronDown,
   Target, Flame, Trophy, TrendingDown, BarChart3, CalendarCheck, Star,
   CheckCircle2, XCircle, MinusCircle, HelpCircle
 } from "lucide-react";
+
+async function authFetch(path: string, init?: RequestInit): Promise<Response> {
+  const session = await supabase.auth.getSession();
+  const token = session.data.session?.access_token;
+  const headers = new Headers(init?.headers);
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  return fetch(path, { ...init, headers });
+}
 
 interface ValueTip {
   id: number;
@@ -600,15 +610,48 @@ function EquitySparkline({ points, width = 120, height = 32 }: { points: Array<{
 }
 
 function PerformancePanel() {
-  const { data } = useQuery<PerformanceSummary>({
+  const { data, error } = useQuery<PerformanceSummary>({
     queryKey: ["analysisPerformance"],
     queryFn: async () => {
-      const res = await fetch("/api/analysis/performance");
+      const res = await authFetch("/api/analysis/performance");
+      if (res.status === 402) {
+        const err = new Error("upgrade_required") as Error & { status?: number };
+        err.status = 402;
+        throw err;
+      }
       if (!res.ok) throw new Error("Failed to fetch performance");
       return res.json();
     },
     staleTime: 5 * 60_000,
+    retry: false,
   });
+
+  const locked = (error as { status?: number } | null)?.status === 402;
+
+  if (locked) {
+    return (
+      <PaywallOverlay>
+        <div className="rounded-xl border border-white/6 bg-white/2 p-4 flex items-center gap-6 flex-wrap min-h-[92px]">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">90d Win Rate</div>
+            <div className="text-xl font-bold font-mono text-white tabular-nums">62%</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">ROI / unit</div>
+            <div className="text-xl font-bold font-mono tabular-nums text-teal-400">+8.4%</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Avg CLV</div>
+            <div className="text-xl font-bold font-mono tabular-nums text-teal-400">+3.1%</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Brier</div>
+            <div className="text-xl font-bold font-mono text-white tabular-nums">0.214</div>
+          </div>
+        </div>
+      </PaywallOverlay>
+    );
+  }
 
   if (!data) return null;
 

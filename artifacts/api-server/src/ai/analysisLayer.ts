@@ -3,6 +3,7 @@ import { db, pool } from "@workspace/db";
 import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses, predictionReviews } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
+import { calculateConfidence } from "./confidence.js";
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -1032,6 +1033,23 @@ ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRat
 
   if (!parsed?.tips?.length) return null;
 
+  // Fase 1.1/1.3/1.4 — build featureSnapshot once per fixture (shared across tips)
+  const featureSnapshot = {
+    form: {
+      homeRecentStats: ctx.homeRecentStats ?? null,
+      awayRecentStats: ctx.awayRecentStats ?? null,
+      homeRecentXg: ctx.homeRecentXg ?? null,
+      awayRecentXg: ctx.awayRecentXg ?? null,
+    },
+    injuries: {
+      home: ctx.homeSidelined ?? [],
+      away: ctx.awaySidelined ?? [],
+    },
+    weather: ctx.weather ?? null,
+    h2h: ctx.h2hAiNotes ?? [],
+  };
+  const MODEL_VERSION = "v1.0-claude-haiku";
+
   const storedTips = [];
   for (const tip of parsed.tips) {
     if (tip.bet_type === "no_bet") continue;
@@ -1040,6 +1058,22 @@ ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRat
     const aiProb = tip.estimated_probability ?? (tip.trust_score / 10);
     const edge = calcEdge(aiProb, marketOdds);
     const valueRating = calcValueRating(aiProb, marketOdds);
+
+    const impliedProbability = marketOdds && marketOdds > 1 ? 1 / marketOdds : null;
+    let confidence: "high" | "medium" | "low" | null = null;
+    try {
+      const conf = await calculateConfidence({
+        modelProbability: aiProb,
+        impliedProbability: impliedProbability ?? aiProb,
+        featureSnapshot,
+        fixtureId,
+        betType: tip.bet_type,
+        leagueName: ctx.leagueName ?? null,
+      });
+      confidence = conf.confidence;
+    } catch (e) {
+      console.error("[ai] confidence calc failed:", e);
+    }
 
     const [stored] = await db.insert(aiBettingTips).values({
       fixtureId,
@@ -1056,6 +1090,10 @@ ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRat
       reasoning: tip.reasoning,
       marketOdds,
       valueRating,
+      modelVersion: MODEL_VERSION,
+      impliedProbability,
+      featureSnapshot,
+      confidence,
     }).onConflictDoUpdate({
       target: [aiBettingTips.fixtureId, aiBettingTips.betType],
       set: {
@@ -1067,6 +1105,10 @@ ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRat
         reasoning: tip.reasoning,
         marketOdds,
         valueRating,
+        modelVersion: MODEL_VERSION,
+        impliedProbability,
+        featureSnapshot,
+        confidence,
       },
     }).returning();
     if (stored) {

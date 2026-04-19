@@ -364,7 +364,9 @@ function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLab
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
   const edgePp = tip.edge != null ? tip.edge * 100 : null;
   const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
-  const implPct = tip.impliedProbability != null ? Math.round(tip.impliedProbability * 100) : null;
+  const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
+  const impliedProb = tip.impliedProbability ?? impliedFromOdds;
+  const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
 
   return (
     <div className={`glass-card p-5 rounded-xl border ${borderColor} space-y-4`}>

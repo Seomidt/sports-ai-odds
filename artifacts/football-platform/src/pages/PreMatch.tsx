@@ -125,7 +125,9 @@ function TipPreview({ fixtureId, allTips }: { fixtureId: number; allTips: Record
   if (!matchTip) return null;
 
   const aiPct = matchTip.aiProbability != null ? Math.round(matchTip.aiProbability * 100) : null;
-  const implPct = matchTip.impliedProbability != null ? Math.round(matchTip.impliedProbability * 100) : null;
+  const impliedFromOdds = matchTip.marketOdds != null && matchTip.marketOdds > 1 ? 1 / matchTip.marketOdds : null;
+  const impliedProb = matchTip.impliedProbability ?? impliedFromOdds;
+  const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
   const edgePp = matchTip.edge != null ? matchTip.edge * 100 : null;
 
   return (

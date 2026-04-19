@@ -274,6 +274,8 @@ interface BettingTip {
   betSide: string | null;
   trustScore: number;
   aiProbability: number | null;
+  impliedProbability: number | null;
+  confidence: "high" | "medium" | "low" | null;
   edge: number | null;
   reasoning: string;
   marketOdds: number | null;
@@ -323,31 +325,6 @@ function WeatherSourceHint({ desc }: { desc: string }) {
   );
 }
 
-function TrustGauge({ score }: { score: number }) {
-  const color = score >= 7 ? 'text-teal-400' : score >= 5 ? 'text-amber-400' : 'text-red-400';
-  const bgColor = score >= 7 ? 'bg-teal-400' : score >= 5 ? 'bg-amber-400' : 'bg-red-400';
-  const label = score >= 8 ? 'STRONG' : score >= 6 ? 'MODERATE' : score >= 4 ? 'WEAK' : 'VERY WEAK';
-  return (
-    <div className="space-y-1.5">
-      <div className="flex justify-between items-center">
-        <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">Trust Score</span>
-        <span className={`text-xs font-mono font-bold ${color} uppercase`}>{label}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className="flex-1 flex gap-0.5">
-          {Array.from({ length: 10 }, (_, i) => (
-            <div
-              key={i}
-              className={`flex-1 h-2 rounded-sm transition-all ${i < score ? bgColor : 'bg-white/10'}`}
-            />
-          ))}
-        </div>
-        <span className={`text-lg font-mono font-bold tabular-nums ${color}`}>{score}<span className="text-xs text-muted-foreground">/10</span></span>
-      </div>
-    </div>
-  );
-}
-
 function ValueBadge({ rating }: { rating: string | null }) {
   if (!rating) return null;
   const config: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -364,19 +341,41 @@ function ValueBadge({ rating }: { rating: string | null }) {
   );
 }
 
+function ConfidenceBadgeLarge({ confidence }: { confidence: "high" | "medium" | "low" | null }) {
+  if (!confidence) return null;
+  const styles: Record<string, string> = {
+    high: 'text-teal-300 bg-teal-400/10 border-teal-400/30',
+    medium: 'text-violet-300 bg-violet-400/10 border-violet-400/25',
+    low: 'text-amber-400 bg-amber-400/10 border-amber-400/25',
+  };
+  const labels: Record<string, string> = { high: 'HIGH', medium: 'MEDIUM', low: 'LOW' };
+  return (
+    <span
+      className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${styles[confidence]}`}
+      title="Data-derived confidence (edge realism, data completeness, odds stability, league accuracy)"
+    >
+      {labels[confidence]}
+    </span>
+  );
+}
+
 function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null }) {
   const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
+  const edgePp = tip.edge != null ? tip.edge * 100 : null;
+  const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
+  const implPct = tip.impliedProbability != null ? Math.round(tip.impliedProbability * 100) : null;
 
   return (
     <div className={`glass-card p-5 rounded-xl border ${borderColor} space-y-4`}>
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1 flex-1">
-          <div className="flex items-center gap-2">
+        <div className="space-y-1 flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
               {betTypeLabel}
             </span>
             <ValueBadge rating={tip.valueRating} />
+            <ConfidenceBadgeLarge confidence={tip.confidence} />
           </div>
           <div className="text-xl font-bold text-white leading-tight">
             {tip.recommendation}
@@ -392,54 +391,43 @@ function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLab
               )}
             </div>
           )}
-        </div>
-        <div className="shrink-0 flex flex-col items-end gap-1">
-          {tip.edge != null && (
-            <div className={`px-2 py-0.5 rounded text-xs font-mono font-bold tabular-nums border ${
-              tip.edge >= 0.15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
-              tip.edge >= 0.05 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
-              tip.edge >= -0.05 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
-              'text-amber-400 bg-amber-400/10 border-amber-400/20'
-            }`}>
-              {tip.edge >= 0 ? '+' : ''}{(tip.edge * 100).toFixed(1)}% edge
-            </div>
-          )}
-          <div className="flex items-center gap-1.5">
-            <span className={`text-2xl font-mono font-bold tabular-nums ${tip.trustScore >= 7 ? 'text-teal-400' : tip.trustScore >= 5 ? 'text-amber-400' : 'text-white'}`}>
-              {tip.trustScore}
-            </span>
-            <div className="flex flex-col items-start gap-0.5">
-              <span className="text-xs text-muted-foreground font-mono">/10</span>
-              <HelpTooltip side="left" iconClassName="w-3 h-3">
-                <p className="font-bold text-white mb-1">AI Edge Analysis</p>
-                <p className="text-muted-foreground/80 mb-1">edge = (AI probability × odds) − 1</p>
-                {tip.aiProbability != null && tip.marketOdds != null && (
-                  <p className="text-teal-400 font-mono text-xs mb-1">({(tip.aiProbability * 100).toFixed(0)}% × {tip.marketOdds.toFixed(2)}) − 1 = {tip.edge != null ? (tip.edge >= 0 ? '+' : '') + (tip.edge * 100).toFixed(1) + '%' : '—'}</p>
-                )}
-                <p className="text-muted-foreground/80">≥15% = Strong Value · ≥5% = Value</p>
-                <p className="text-muted-foreground/80">0–5% = Fair Price · &lt;0% = Overpriced</p>
-              </HelpTooltip>
-            </div>
-          </div>
-          {tip.aiProbability != null && (
-            <div className="text-[10px] font-mono text-muted-foreground/50">
-              {(tip.aiProbability * 100).toFixed(0)}% prob
+          {(aiPct != null || implPct != null) && (
+            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground pt-1">
+              {aiPct != null && (
+                <span>AI <span className="text-white/85 tabular-nums font-bold">{aiPct}%</span></span>
+              )}
+              {implPct != null && (
+                <span>Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span></span>
+              )}
             </div>
           )}
         </div>
-      </div>
-
-      <div className="flex gap-0.5">
-        {Array.from({ length: 10 }, (_, i) => (
-          <div
-            key={i}
-            className={`flex-1 h-1.5 rounded-sm ${
-              i < tip.trustScore
-                ? (tip.trustScore >= 7 ? 'bg-teal-400' : tip.trustScore >= 5 ? 'bg-amber-400' : 'bg-white/30')
-                : 'bg-white/10'
-            }`}
-          />
-        ))}
+        <div className="shrink-0 flex flex-col items-end gap-1.5">
+          {edgePp != null ? (
+            <div
+              className={`px-2.5 py-1 rounded text-sm font-mono font-bold tabular-nums border ${
+                edgePp >= 15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
+                edgePp >= 5 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
+                edgePp >= -5 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
+                'text-amber-400 bg-amber-400/10 border-amber-400/20'
+              }`}
+              title="Edge in percentage points (AI probability − market implied probability)"
+            >
+              {edgePp >= 0 ? '+' : ''}{edgePp.toFixed(1)}pp
+            </div>
+          ) : (
+            <div className="text-[10px] font-mono text-muted-foreground/50 italic">no odds</div>
+          )}
+          <HelpTooltip side="left" iconClassName="w-3 h-3">
+            <p className="font-bold text-white mb-1">Edge (percentage points)</p>
+            <p className="text-muted-foreground/80 mb-1">edge = AI prob − market implied prob</p>
+            {aiPct != null && implPct != null && (
+              <p className="text-teal-400 font-mono text-xs mb-1">{aiPct}% − {implPct}% = {edgePp != null ? (edgePp >= 0 ? '+' : '') + edgePp.toFixed(1) + 'pp' : '—'}</p>
+            )}
+            <p className="text-muted-foreground/80">≥5pp = value · ≥15pp = strong value</p>
+            <p className="text-muted-foreground/80 mt-1">Confidence score uses data completeness, odds stability, and league track record.</p>
+          </HelpTooltip>
+        </div>
       </div>
 
       <p className="text-sm text-white/70 leading-relaxed">{tip.reasoning}</p>
@@ -1068,9 +1056,17 @@ function PostReviewTab({ fixtureId, events, stats, homeTeamId, awayTeamId, homeT
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1">
                   <div className="text-lg font-bold text-white">{review.recommendation}</div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-mono text-muted-foreground">Trust</span>
-                    <span className="text-xs font-mono font-bold text-primary">{review.trustScore}/10</span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ConfidenceBadgeLarge confidence={review.confidence} />
+                    {review.edge != null && (
+                      <span className={`text-xs font-mono font-bold tabular-nums ${
+                        review.edge >= 0.05 ? 'text-teal-400' :
+                        review.edge >= -0.05 ? 'text-violet-400' :
+                        'text-amber-400'
+                      }`}>
+                        {review.edge >= 0 ? '+' : ''}{(review.edge * 100).toFixed(1)}pp
+                      </span>
+                    )}
                     {review.marketOdds != null && (
                       <>
                         <span className="text-white/20">·</span>

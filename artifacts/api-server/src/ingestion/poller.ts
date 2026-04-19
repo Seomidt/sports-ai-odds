@@ -1363,11 +1363,15 @@ async function adaptiveLiveLoop() {
           await runSignalEngine(f.fixture.id, "live");
           // Immediately evict the route cache so the next browser poll gets fresh data
           cacheDel(`fixture:${f.fixture.id}`);
+          cacheDel(`fixtures:today:${new Date().toISOString().slice(0, 10)}`);
+          cacheDel("fixtures:top-picks");
         } else if (isFinished && !postMatchProcessed.has(f.fixture.id)) {
           postMatchProcessed.add(f.fixture.id);
           console.log(`[poller] Post-match processing for fixture ${f.fixture.id}`);
           await upsertFixtureEventsAndStats(f.fixture.id);
           cacheDel(`fixture:${f.fixture.id}`);
+          cacheDel(`fixtures:today:${new Date().toISOString().slice(0, 10)}`);
+          cacheDel("fixtures:top-picks");
           await runPostMatchFeatures(f.fixture.id);
           await runSignalEngine(f.fixture.id, "post");
         }

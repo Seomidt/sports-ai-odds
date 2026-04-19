@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, or, sql } from "d
 import { db } from "@workspace/db";
 import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles, predictionReviews } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
-import { generateLeagueNews } from "../ai/analysisLayer.js";
+import { generateLeagueNews, getLiveAnalysis } from "../ai/analysisLayer.js";
 import { filterPublishableTips } from "../ai/publishFilter.js";
 
 const router = Router();
@@ -445,14 +445,38 @@ router.get("/analysis/:id/live", async (req, res) => {
       const row = await db.query.fixtures.findFirst({ where: eq(fixtures.fixtureId, fixtureId) });
       if (!row) return null;
       const analysis = buildFixtureAnalysis(row);
-      return {
-        phase: analysis.summary.phase,
-        headline: analysis.summary.title,
-        narrative: analysis.summary.note,
-        key_factors: [],
-        momentum_verdict: null,
-        alert_worthy: false,
-      };
+      // Only run the LLM when the fixture is actually live — otherwise return the stub
+      if (!analysis.flags.isLive) {
+        return {
+          phase: analysis.summary.phase,
+          headline: analysis.summary.title,
+          narrative: analysis.summary.note,
+          key_factors: [],
+          momentum_verdict: null,
+          alert_worthy: false,
+        };
+      }
+      try {
+        const ai = await getLiveAnalysis(fixtureId);
+        return {
+          phase: "live",
+          headline: ai.headline,
+          narrative: ai.narrative,
+          key_factors: ai.key_factors ?? [],
+          momentum_verdict: ai.momentum_verdict ?? null,
+          alert_worthy: ai.alert_worthy ?? false,
+        };
+      } catch (err) {
+        console.error("[routes:analysis.liveById] AI failed, returning stub:", err);
+        return {
+          phase: "live",
+          headline: analysis.summary.title,
+          narrative: analysis.summary.note,
+          key_factors: [],
+          momentum_verdict: null,
+          alert_worthy: false,
+        };
+      }
     });
 
     if (!result) return res.status(404).json({ error: "Fixture not found" });

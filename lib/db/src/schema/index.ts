@@ -586,11 +586,59 @@ export const aiBettingTips = pgTable(
     accuracyNote: text("accuracy_note"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     reviewedAt: timestamp("reviewed_at"),
+    // ─── Production-grade auditability (Fase 1.1) ──────────────────────────
+    modelVersion: text("model_version"),
+    impliedProbability: real("implied_probability"),
+    featureSnapshot: jsonb("feature_snapshot"),
+    confidence: text("confidence"), // "high" | "medium" | "low"
+    closingOdds: real("closing_odds"),
+    kellyUnitFraction: real("kelly_unit_fraction"),
+    canonicalPath: text("canonical_path"), // reserved for SEO (Fase 3)
   },
   (t) => [
     index("ai_betting_tips_fixture_idx").on(t.fixtureId),
     uniqueIndex("ai_betting_tips_fixture_bet_uniq").on(t.fixtureId, t.betType),
+    index("ai_betting_tips_confidence_idx").on(t.confidence),
+    index("ai_betting_tips_model_version_idx").on(t.modelVersion),
   ]
+);
+
+// ─── Prediction Reviews (Fase 1.1) ────────────────────────────────────────────
+// Auditable post-match metrics per prediction: Brier score, ROI, CLV, error tags.
+
+export const predictionReviews = pgTable(
+  "prediction_reviews",
+  {
+    id: serial("id").primaryKey(),
+    predictionId: integer("prediction_id").notNull(),
+    brierScore: real("brier_score"),
+    roiImpact: real("roi_impact"),
+    calibrationBucket: text("calibration_bucket"), // "0-10%", "10-20%", ...
+    errorTags: jsonb("error_tags"),
+    closingLineValue: real("closing_line_value"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex("prediction_reviews_prediction_uniq").on(t.predictionId),
+    index("prediction_reviews_created_idx").on(t.createdAt),
+  ]
+);
+
+// ─── User rolling stats (Fase 1.1) ────────────────────────────────────────────
+// Pre-aggregated so frontend doesn't scan full history.
+
+export const userStats = pgTable(
+  "user_stats",
+  {
+    userId: text("user_id").primaryKey(),
+    totalTips: integer("total_tips").notNull().default(0),
+    winRate: real("win_rate"),
+    roiPct: real("roi_pct"),
+    avgClv: real("avg_clv"),
+    brierScoreAvg: real("brier_score_avg"),
+    bestMarket: text("best_market"),
+    lastUpdated: timestamp("last_updated").defaultNow().notNull(),
+  }
 );
 
 // ─── AI News Cache (persisted to DB so Claude calls survive restarts) ─────────

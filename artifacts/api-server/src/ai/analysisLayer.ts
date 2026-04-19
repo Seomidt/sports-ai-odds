@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
-import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses } from "@workspace/db/schema";
+import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses, predictionReviews } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 
@@ -1098,6 +1098,110 @@ export async function getBettingTip(fixtureId: number) {
 
 // ─── Post-match review ────────────────────────────────────────────────────────
 
+// ─── Prediction review metrics (Fase 1.5) ────────────────────────────────────
+// Computes auditable post-match metrics and writes to predictionReviews.
+// Structured rules only — NO LLM involvement.
+
+function calibrationBucketFor(probability: number | null | undefined): string | null {
+  if (probability == null || !isFinite(probability)) return null;
+  const pct = probability * 100;
+  if (pct < 0 || pct > 100) return null;
+  const floor = Math.min(90, Math.floor(pct / 10) * 10);
+  return `${floor}-${floor + 10}%`;
+}
+
+function deriveErrorTags(args: {
+  outcome: "hit" | "miss" | "partial";
+  aiProbability: number | null;
+  marketOdds: number | null;
+  closingOdds: number | null;
+  closingLineValue: number | null;
+  dataCompleteness: number | null;
+}): string[] {
+  const tags: string[] = [];
+  if (args.closingOdds == null) tags.push("no_closing_line");
+  if (args.dataCompleteness !== null && args.dataCompleteness < 0.5) tags.push("low_data");
+  if (args.closingLineValue != null && args.closingLineValue < -0.05) tags.push("odds_moved_against");
+  if (args.closingLineValue != null && args.closingLineValue > 0.05) tags.push("positive_clv");
+  if (args.outcome === "hit") tags.push("correct_edge");
+  if (args.outcome === "miss" && (args.aiProbability ?? 0) >= 0.7) tags.push("high_confidence_miss");
+  return tags;
+}
+
+function snapshotCompleteness(snap: unknown): number | null {
+  if (!snap || typeof snap !== "object") return null;
+  const keys = ["form", "injuries", "weather", "h2h"];
+  let present = 0;
+  for (const k of keys) {
+    const v = (snap as Record<string, unknown>)[k];
+    if (v === undefined || v === null) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    if (typeof v === "object" && !Array.isArray(v) && Object.keys(v as object).length === 0) continue;
+    present++;
+  }
+  return present / keys.length;
+}
+
+async function writePredictionReview(args: {
+  predictionId: number;
+  outcome: "hit" | "miss" | "partial";
+  aiProbability: number | null;
+  marketOdds: number | null;
+  closingOdds: number | null;
+  featureSnapshot: unknown;
+}): Promise<void> {
+  const outcomeNumeric = args.outcome === "hit" ? 1 : 0;
+  const brierScore =
+    args.aiProbability != null && isFinite(args.aiProbability)
+      ? (args.aiProbability - outcomeNumeric) ** 2
+      : null;
+
+  // Stake = 1 unit. Hit → (odds - 1), Miss → -1. Partial treated as break-even.
+  let roiImpact: number | null = null;
+  if (args.marketOdds != null && args.marketOdds > 1) {
+    if (args.outcome === "hit") roiImpact = args.marketOdds - 1;
+    else if (args.outcome === "miss") roiImpact = -1;
+    else roiImpact = 0;
+  }
+
+  const closingLineValue =
+    args.closingOdds != null && args.marketOdds != null && args.marketOdds > 0
+      ? (args.closingOdds - args.marketOdds) / args.marketOdds
+      : null;
+
+  const calibrationBucket = calibrationBucketFor(args.aiProbability);
+  const dataCompleteness = snapshotCompleteness(args.featureSnapshot);
+  const errorTags = deriveErrorTags({
+    outcome: args.outcome,
+    aiProbability: args.aiProbability,
+    marketOdds: args.marketOdds,
+    closingOdds: args.closingOdds,
+    closingLineValue,
+    dataCompleteness,
+  });
+
+  await db
+    .insert(predictionReviews)
+    .values({
+      predictionId: args.predictionId,
+      brierScore,
+      roiImpact,
+      calibrationBucket,
+      errorTags,
+      closingLineValue,
+    })
+    .onConflictDoUpdate({
+      target: predictionReviews.predictionId,
+      set: {
+        brierScore,
+        roiImpact,
+        calibrationBucket,
+        errorTags,
+        closingLineValue,
+      },
+    });
+}
+
 export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
   const tips = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
@@ -1214,6 +1318,21 @@ Respond with ONLY valid JSON:
         reviewedAt: new Date(),
       })
       .where(eq(aiBettingTips.id, tip.id));
+
+    if (tip.betType !== "no_bet") {
+      try {
+        await writePredictionReview({
+          predictionId: tip.id,
+          outcome: review.outcome,
+          aiProbability: tip.aiProbability ?? null,
+          marketOdds: tip.marketOdds ?? null,
+          closingOdds: tip.closingOdds ?? null,
+          featureSnapshot: tip.featureSnapshot,
+        });
+      } catch (err) {
+        console.error(`[ai] Failed to write predictionReviews for tip ${tip.id}:`, err);
+      }
+    }
 
     console.log(`[ai] Post-match review for fixture ${fixtureId} (${tip.betType}): ${review.outcome.toUpperCase()}`);
   }

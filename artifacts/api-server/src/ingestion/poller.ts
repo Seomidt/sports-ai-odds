@@ -71,6 +71,7 @@ import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../f
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
 import { fetchWeatherForCity, geocodeCity, fetchHistoricalWeather } from "../lib/weatherClient.js";
+import { captureClosingOdds } from "./closingOdds.js";
 
 const TRACKED_LEAGUE_IDS = new Set(TRACKED_LEAGUES.map((l) => l.id));
 
@@ -2485,6 +2486,10 @@ export function startPoller() {
 
   // Post-match events+stats backfill: every 2 hours (20 fixtures/run) until all caught up
   setInterval(() => backfillPostMatchData().catch(console.error), 2 * 60 * 60 * 1000);
+
+  // Closing-line capture: every 60s, snapshots last pre-kickoff odds for AI tips
+  // on fixtures kicking off within the next 3 minutes (Fase 1.2)
+  setInterval(() => captureClosingOdds().catch(console.error), 60 * 1000);
 
   // Adaptive live loop: sprints at 15s for tracked live matches, idles at 2min
   adaptiveLiveLoop().catch(console.error);

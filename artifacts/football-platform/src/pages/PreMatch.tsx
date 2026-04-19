@@ -48,10 +48,30 @@ type StoredTip = {
   recommendation: string;
   trustScore: number;
   aiProbability: number | null;
+  impliedProbability: number | null;
+  confidence: "high" | "medium" | "low" | null;
   edge: number | null;
   marketOdds: number | null;
   valueRating: string | null;
 };
+
+function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" | null }) {
+  if (!confidence) return null;
+  const styles: Record<string, string> = {
+    high: "text-teal-300 bg-teal-400/10 border-teal-400/30",
+    medium: "text-violet-300 bg-violet-400/10 border-violet-400/25",
+    low: "text-amber-400 bg-amber-400/10 border-amber-400/25",
+  };
+  const labels: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
+  return (
+    <span
+      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${styles[confidence]}`}
+      title="Data-derived confidence (edge realism, data completeness, odds stability, league accuracy)"
+    >
+      {labels[confidence]}
+    </span>
+  );
+}
 
 function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: string; wind: number | null; icon: string | null }) {
   const isAdverse = (wind ?? 0) > 10 ||
@@ -104,32 +124,44 @@ function TipPreview({ fixtureId, allTips }: { fixtureId: number; allTips: Record
   const matchTip = tips.find((t) => t.betType === "match_result") ?? tips[0];
   if (!matchTip) return null;
 
+  const aiPct = matchTip.aiProbability != null ? Math.round(matchTip.aiProbability * 100) : null;
+  const implPct = matchTip.impliedProbability != null ? Math.round(matchTip.impliedProbability * 100) : null;
+  const edgePp = matchTip.edge != null ? matchTip.edge * 100 : null;
+
   return (
-    <div className="border-t border-white/5 pt-2.5 mt-1 flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 min-w-0">
-        <Target className="w-3 h-3 text-primary shrink-0" />
-        <span className="text-[11px] font-mono font-semibold text-white/80 truncate">
-          {matchTip.recommendation}
-          {matchTip.marketOdds ? ` · ${matchTip.marketOdds.toFixed(2)}` : ""}
-        </span>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {matchTip.edge != null ? (
-          <span className={`text-[10px] font-mono font-bold tabular-nums ${
-            matchTip.edge >= 0.15 ? 'text-teal-300' :
-            matchTip.edge >= 0.05 ? 'text-teal-400' :
-            matchTip.edge >= -0.05 ? 'text-violet-400' :
-            'text-amber-400'
-          }`}>
-            {matchTip.edge >= 0 ? '+' : ''}{(matchTip.edge * 100).toFixed(0)}%
+    <div className="border-t border-white/5 pt-2.5 mt-1 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0">
+          <Target className="w-3 h-3 text-primary shrink-0" />
+          <span className="text-[11px] font-mono font-semibold text-white/80 truncate">
+            {matchTip.recommendation}
+            {matchTip.marketOdds ? ` · ${matchTip.marketOdds.toFixed(2)}` : ""}
           </span>
-        ) : (
-          <span className="text-[10px] font-mono text-muted-foreground/50">
-            {matchTip.trustScore}/10
-          </span>
-        )}
-        <ValueBadge rating={matchTip.valueRating} />
+        </div>
+        <div className="flex items-center gap-1.5 shrink-0">
+          {edgePp != null ? (
+            <span
+              className={`text-[10px] font-mono font-bold tabular-nums ${
+                edgePp >= 15 ? "text-teal-300" :
+                edgePp >= 5 ? "text-teal-400" :
+                edgePp >= -5 ? "text-violet-400" :
+                "text-amber-400"
+              }`}
+              title="Edge in percentage points (model probability − implied probability)"
+            >
+              {edgePp >= 0 ? "+" : ""}{edgePp.toFixed(1)}pp
+            </span>
+          ) : null}
+          <ConfidenceBadge confidence={matchTip.confidence} />
+          <ValueBadge rating={matchTip.valueRating} />
+        </div>
       </div>
+      {(aiPct != null || implPct != null) && (
+        <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground pl-5">
+          {aiPct != null && <span>AI <span className="text-white/80 tabular-nums">{aiPct}%</span></span>}
+          {implPct != null && <span>Market <span className="text-white/60 tabular-nums">{implPct}%</span></span>}
+        </div>
+      )}
     </div>
   );
 }

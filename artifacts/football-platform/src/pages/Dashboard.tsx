@@ -528,6 +528,94 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   );
 }
 
+// ─── Performance panel (Fase 1.7) ────────────────────────────────────────────
+
+interface PerformanceSummary {
+  totalTips: number;
+  winRate: number | null;
+  roiPct: number | null;
+  avgClv: number | null;
+  brierAvg: number | null;
+  equityCurve: Array<{ date: string; cumRoi: number }>;
+}
+
+function EquitySparkline({ points, width = 120, height = 32 }: { points: Array<{ cumRoi: number }>; width?: number; height?: number }) {
+  if (points.length < 2) {
+    return <div className="text-[10px] font-mono text-muted-foreground">—</div>;
+  }
+  const values = points.map((p) => p.cumRoi);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const range = max - min || 1;
+  const stepX = width / (points.length - 1);
+  const d = points
+    .map((p, i) => {
+      const x = i * stepX;
+      const y = height - ((p.cumRoi - min) / range) * height;
+      return `${i === 0 ? "M" : "L"}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const lastY = height - ((values[values.length - 1] - min) / range) * height;
+  const zeroY = height - ((0 - min) / range) * height;
+  const positive = values[values.length - 1] >= 0;
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <line x1={0} y1={zeroY} x2={width} y2={zeroY} stroke="currentColor" strokeOpacity="0.1" strokeDasharray="2,2" />
+      <path d={d} fill="none" stroke={positive ? "#2dd4bf" : "#f87171"} strokeWidth="1.5" />
+      <circle cx={width} cy={lastY} r="2" fill={positive ? "#2dd4bf" : "#f87171"} />
+    </svg>
+  );
+}
+
+function PerformancePanel() {
+  const { data } = useQuery<PerformanceSummary>({
+    queryKey: ["analysisPerformance"],
+    queryFn: async () => {
+      const res = await fetch("/api/analysis/performance");
+      if (!res.ok) throw new Error("Failed to fetch performance");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+
+  if (!data || !data.totalTips) return null;
+
+  const fmtPct = (v: number | null, digits = 1) => (v == null ? "—" : `${(v * 100).toFixed(digits)}%`);
+  const fmtRoi = (v: number | null) => (v == null ? "—" : `${v > 0 ? "+" : ""}${v.toFixed(1)}%`);
+  const fmtBrier = (v: number | null) => (v == null ? "—" : v.toFixed(3));
+
+  return (
+    <div className="rounded-xl border border-white/6 bg-white/2 p-4 flex items-center gap-6 flex-wrap">
+      <div>
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">90d Win Rate</div>
+        <div className="text-xl font-bold font-mono text-white tabular-nums">{fmtPct(data.winRate)}</div>
+      </div>
+      <div>
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">ROI / unit</div>
+        <div className={`text-xl font-bold font-mono tabular-nums ${(data.roiPct ?? 0) >= 0 ? "text-teal-400" : "text-red-400"}`}>
+          {fmtRoi(data.roiPct)}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Avg CLV</div>
+        <div className={`text-xl font-bold font-mono tabular-nums ${(data.avgClv ?? 0) >= 0 ? "text-teal-400" : "text-amber-400"}`}>
+          {fmtPct(data.avgClv, 1)}
+        </div>
+      </div>
+      <div>
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5">Brier</div>
+        <div className="text-xl font-bold font-mono text-white tabular-nums">{fmtBrier(data.brierAvg)}</div>
+      </div>
+      <div className="ml-auto flex items-center gap-3">
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-0.5 text-right">Equity (90d)</div>
+          <EquitySparkline points={data.equityCurve} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard ───────────────────────────────────────────────────────────────
 
 export function Dashboard() {
@@ -602,6 +690,9 @@ export function Dashboard() {
             )}
           </div>
         </header>
+
+        {/* 90-day performance (Fase 1.7) */}
+        <PerformancePanel />
 
         {/* Daily Loop — Today / Yesterday / Streak & ROI */}
         {summary && <DailyLoopBar summary={summary} />}

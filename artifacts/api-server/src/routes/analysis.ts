@@ -2,9 +2,10 @@ import { Router } from "express";
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles, predictionReviews } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 import { generateLeagueNews } from "../ai/analysisLayer.js";
+import { filterPublishableTips } from "../ai/publishFilter.js";
 
 const router = Router();
 
@@ -176,7 +177,7 @@ router.get("/analysis/value-odds", async (_req, res) => {
   try {
     const result = await getOrFetch("analysis:value-odds", TTL.MIN1, async () => {
       const now = new Date();
-      const tips = await db
+      const rawTips = await db
         .select()
         .from(aiBettingTips)
         .where(
@@ -189,7 +190,14 @@ router.get("/analysis/value-odds", async (_req, res) => {
           desc(aiBettingTips.edge),
           desc(aiBettingTips.trustScore),
         )
-        .limit(100);
+        .limit(200);
+
+      const tips = filterPublishableTips(
+        rawTips.map((t) => ({
+          ...t,
+          featureSnapshot: (t.featureSnapshot ?? null) as Record<string, unknown> | null,
+        }))
+      ).slice(0, 100);
 
       // Add computed fields for frontend sorting/display
       const enriched = tips.map((t) => {
@@ -382,7 +390,7 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
   try {
     const result = await getOrFetch("analysis:prematch-tips", TTL.MIN5, async () => {
       const now = new Date();
-      const tips = await db
+      const rawTips = await db
         .select({
           id: aiBettingTips.id,
           fixtureId: aiBettingTips.fixtureId,
@@ -391,13 +399,23 @@ router.get("/analysis/prematch-tips", async (_req, res) => {
           recommendation: aiBettingTips.recommendation,
           trustScore: aiBettingTips.trustScore,
           aiProbability: aiBettingTips.aiProbability,
+          impliedProbability: aiBettingTips.impliedProbability,
+          confidence: aiBettingTips.confidence,
           edge: aiBettingTips.edge,
           marketOdds: aiBettingTips.marketOdds,
           valueRating: aiBettingTips.valueRating,
+          featureSnapshot: aiBettingTips.featureSnapshot,
         })
         .from(aiBettingTips)
         .where(gte(aiBettingTips.kickoff, now))
         .orderBy(desc(aiBettingTips.trustScore));
+
+      const tips = filterPublishableTips(
+        rawTips.map((t) => ({
+          ...t,
+          featureSnapshot: (t.featureSnapshot ?? null) as Record<string, unknown> | null,
+        }))
+      );
 
       const grouped: Record<number, typeof tips> = {};
       for (const tip of tips) {
@@ -679,6 +697,114 @@ router.get("/news", async (req, res) => {
   } catch (err) {
     console.error("[routes:news]", err);
     return res.status(500).json({ error: "Failed to load news" });
+  }
+});
+
+// ── Performance endpoints (Fase 1.6) ─────────────────────────────────────────
+// Auditable global + per-market + per-league stats sourced from predictionReviews.
+// Equity curve = cumulative ROI impact per day over the last 90 days.
+
+async function buildPerformanceSummary(groupBy: null | "betType" | "leagueName") {
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+
+  const groupCol =
+    groupBy === "betType" ? aiBettingTips.betType
+    : groupBy === "leagueName" ? aiBettingTips.leagueName
+    : sql<string>`'global'`;
+
+  const rows = await db
+    .select({
+      groupKey: sql<string>`${groupCol}`,
+      totalTips: sql<number>`count(*)::int`,
+      hits: sql<number>`count(*) filter (where ${aiBettingTips.outcome} = 'hit')::int`,
+      finalized: sql<number>`count(*) filter (where ${aiBettingTips.outcome} in ('hit','miss'))::int`,
+      roiSum: sql<number>`coalesce(sum(${predictionReviews.roiImpact}), 0)::float`,
+      roiCount: sql<number>`count(*) filter (where ${predictionReviews.roiImpact} is not null)::int`,
+      clvSum: sql<number>`coalesce(sum(${predictionReviews.closingLineValue}), 0)::float`,
+      clvCount: sql<number>`count(*) filter (where ${predictionReviews.closingLineValue} is not null)::int`,
+      brierSum: sql<number>`coalesce(sum(${predictionReviews.brierScore}), 0)::float`,
+      brierCount: sql<number>`count(*) filter (where ${predictionReviews.brierScore} is not null)::int`,
+    })
+    .from(predictionReviews)
+    .innerJoin(aiBettingTips, eq(aiBettingTips.id, predictionReviews.predictionId))
+    .where(gte(predictionReviews.createdAt, ninetyDaysAgo))
+    .groupBy(groupBy ? groupCol : sql`1`);
+
+  return rows.map((r) => ({
+    group: r.groupKey,
+    totalTips: Number(r.totalTips) || 0,
+    winRate: r.finalized > 0 ? r.hits / r.finalized : null,
+    roiPct: r.roiCount > 0 ? (r.roiSum / r.roiCount) * 100 : null,
+    avgClv: r.clvCount > 0 ? r.clvSum / r.clvCount : null,
+    brierAvg: r.brierCount > 0 ? r.brierSum / r.brierCount : null,
+  }));
+}
+
+async function buildEquityCurve(days = 90): Promise<Array<{ date: string; cumRoi: number }>> {
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+  const rows = await db
+    .select({
+      day: sql<string>`to_char(${predictionReviews.createdAt}::date, 'YYYY-MM-DD')`,
+      dailyRoi: sql<number>`coalesce(sum(${predictionReviews.roiImpact}), 0)::float`,
+    })
+    .from(predictionReviews)
+    .where(gte(predictionReviews.createdAt, since))
+    .groupBy(sql`${predictionReviews.createdAt}::date`)
+    .orderBy(sql`${predictionReviews.createdAt}::date`);
+
+  let cum = 0;
+  return rows.map((r) => {
+    cum += Number(r.dailyRoi) || 0;
+    return { date: r.day, cumRoi: cum };
+  });
+}
+
+router.get("/analysis/performance", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:performance", TTL.MIN5, async () => {
+      const [[global], equityCurve] = await Promise.all([
+        buildPerformanceSummary(null),
+        buildEquityCurve(90),
+      ]);
+      return {
+        totalTips: global?.totalTips ?? 0,
+        winRate: global?.winRate ?? null,
+        roiPct: global?.roiPct ?? null,
+        avgClv: global?.avgClv ?? null,
+        brierAvg: global?.brierAvg ?? null,
+        equityCurve,
+      };
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error("[routes:analysis.performance]", err);
+    return res.status(500).json({ error: "Failed to load performance" });
+  }
+});
+
+router.get("/analysis/performance/by-market", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:performance:by-market", TTL.MIN5, async () => {
+      const rows = await buildPerformanceSummary("betType");
+      return { byMarket: rows };
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error("[routes:analysis.performance.byMarket]", err);
+    return res.status(500).json({ error: "Failed to load performance by market" });
+  }
+});
+
+router.get("/analysis/performance/by-league", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:performance:by-league", TTL.MIN5, async () => {
+      const rows = await buildPerformanceSummary("leagueName");
+      return { byLeague: rows };
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error("[routes:analysis.performance.byLeague]", err);
+    return res.status(500).json({ error: "Failed to load performance by league" });
   }
 });
 

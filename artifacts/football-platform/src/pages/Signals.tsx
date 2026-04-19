@@ -2,7 +2,6 @@ import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Zap, Activity, Clock, ArrowRight, TrendingDown, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
-import { useSession } from "@/lib/session";
 import { Layout } from "@/components/Layout";
 
 interface SignalAlert {
@@ -182,18 +181,14 @@ function FixtureCard({ group }: { group: FixtureGroup }) {
 }
 
 export function Signals() {
-  const { sessionId } = useSession();
   const [hours, setHours] = useState(1);
 
   const { data, isLoading } = useQuery<{ alerts: SignalAlert[]; hours: number }>({
-    queryKey: ["signals-recent", hours, sessionId],
-    enabled: !!sessionId,
+    queryKey: ["signals-recent", hours],
     refetchInterval: 30_000,
     staleTime: 25_000,
     queryFn: async () => {
-      const res = await fetch(`/api/alerts/recent?hours=${hours}`, {
-        headers: { "x-session-id": sessionId },
-      });
+      const res = await fetch(`/api/alerts/recent?hours=${hours}`);
       if (!res.ok) return { alerts: [], hours };
       return res.json();
     },

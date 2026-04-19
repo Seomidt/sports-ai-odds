@@ -4,6 +4,7 @@ import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatur
 import { z } from "zod";
 import { eq, and, isNotNull, desc, sql } from "drizzle-orm";
 import { calculateConfidence } from "./confidence.js";
+import { emitSuperValueAlert } from "../alerts/alertEngine.js";
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -1113,18 +1114,18 @@ ${accuracy.totalReviewed > 0 ? `Calibrate trust scores to your ${accuracy.hitRat
     }).returning();
     if (stored) {
       storedTips.push(stored);
-      // Fire broadcast alert for high-value tips (visible to all users within 6h)
-      if (stored.trustScore >= 8 && (stored.valueRating === "strong_value" || stored.valueRating === "value")) {
-        const oddsStr = stored.marketOdds ? ` @ ${stored.marketOdds.toFixed(2)}` : "";
-        const alertText = `High-value tip: ${stored.homeTeam} vs ${stored.awayTeam} — ${stored.recommendation}${oddsStr} (trust ${stored.trustScore}/10, ${stored.valueRating?.replace("_", " ")})`;
-        db.insert(alertLog).values({
+      // Fire a critical-tier alert only for super-value tips (edge ≥15pp + high conf + primary market).
+      // Lower-value tips are not broadcast — they show up in the normal tips UI.
+      if (stored.marketOdds && stored.edge != null && stored.confidence) {
+        emitSuperValueAlert({
           fixtureId,
-          sessionId: null,
-          signalKey: "high_value_tip",
-          alertText,
-          isRead: false,
-          createdAt: new Date(),
-        }).catch((e: unknown) => console.error("[ai] alert insert error:", e));
+          betType: stored.betType,
+          betSide: stored.betSide ?? "",
+          marketOdds: stored.marketOdds,
+          edge: stored.edge,
+          confidence: stored.confidence,
+          matchName: `${stored.homeTeam} vs ${stored.awayTeam}`,
+        }).catch((e: unknown) => console.error("[ai] super-value alert error:", e));
       }
     }
   }

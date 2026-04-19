@@ -18,6 +18,7 @@ router.get("/alerts/recent", async (req: Request, res: Response) => {
         sessionId: alertLog.sessionId,
         signalKey: alertLog.signalKey,
         alertText: alertLog.alertText,
+        tier: alertLog.tier,
         isRead: alertLog.isRead,
         createdAt: alertLog.createdAt,
         homeTeamName: fixtures.homeTeamName,
@@ -38,9 +39,10 @@ router.get("/alerts/recent", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/alerts/unread", async (req: Request, res: Response) => {
-  const sessionId = req.headers["x-session-id"] as string | undefined;
-  if (!sessionId) return res.json({ alerts: [] });
+// Returns only "critical" tier broadcast alerts from the last 2h so the toast poller
+// only surfaces super-value opportunities. Browser-side dedup via sessionStorage.
+router.get("/alerts/unread", async (_req: Request, res: Response) => {
+  const since = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
   try {
     const rows = await db
@@ -50,6 +52,7 @@ router.get("/alerts/unread", async (req: Request, res: Response) => {
         sessionId: alertLog.sessionId,
         signalKey: alertLog.signalKey,
         alertText: alertLog.alertText,
+        tier: alertLog.tier,
         isRead: alertLog.isRead,
         createdAt: alertLog.createdAt,
         homeTeamName: fixtures.homeTeamName,
@@ -57,9 +60,9 @@ router.get("/alerts/unread", async (req: Request, res: Response) => {
       })
       .from(alertLog)
       .leftJoin(fixtures, eq(alertLog.fixtureId, fixtures.fixtureId))
-      .where(and(eq(alertLog.sessionId, sessionId), eq(alertLog.isRead, false)))
+      .where(and(eq(alertLog.tier, "critical"), gte(alertLog.createdAt, since)))
       .orderBy(desc(alertLog.createdAt))
-      .limit(50);
+      .limit(20);
 
     return res.json({ alerts: rows });
   } catch (err) {

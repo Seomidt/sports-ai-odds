@@ -359,6 +359,7 @@ export const alertLog = pgTable(
     sessionId: text("session_id"),
     signalKey: text("signal_key").notNull(),
     alertText: text("alert_text").notNull(),
+    tier: text("tier").default("info"),
     isRead: boolean("is_read").default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { Alert } from "@workspace/api-client-react";
+import type { Alert as BaseAlert } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Zap, X, ArrowRight, Activity } from "lucide-react";
-import { useSession } from "@/lib/session";
 import { useQuery } from "@tanstack/react-query";
+
+type Alert = BaseAlert & { tier?: string | null };
 
 const STORAGE_KEY = "signal_terminal_seen_alerts";
 const AUTO_DISMISS_MS = 10_000;
@@ -167,24 +168,20 @@ export function AlertPoller() {
   const [activeByFixture, setActiveByFixture] = useState<
     Map<number, { alert: Alert; count: number }>
   >(new Map());
-  const { sessionId } = useSession();
-
   const { data } = useQuery<{ alerts: Alert[] }>({
-    queryKey: ["globalUnreadAlerts", sessionId],
-    enabled: !!sessionId,
+    queryKey: ["criticalBroadcastAlerts"],
     refetchInterval: 30_000,
     staleTime: 25_000,
     queryFn: async () => {
-      const res = await fetch("/api/alerts/unread", {
-        headers: { "x-session-id": sessionId },
-      });
+      const res = await fetch("/api/alerts/unread");
       if (!res.ok) return { alerts: [] };
       return res.json();
     },
   });
 
   useEffect(() => {
-    const alerts: Alert[] = data?.alerts ?? [];
+    // Defensive: backend already filters to tier='critical', but filter again client-side
+    const alerts: Alert[] = (data?.alerts ?? []).filter((a) => a.tier === "critical");
     let changed = false;
 
     setActiveByFixture(prev => {

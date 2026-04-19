@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { followedFixtures, alertLog, fixtureSignals } from "@workspace/db/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { alertLog, fixtures } from "@workspace/db/schema";
+import { inArray } from "drizzle-orm";
 import { generateAlertText } from "../ai/analysisLayer.js";
 
 const ALERT_TRIGGER_KEYS = new Set([
@@ -11,74 +11,112 @@ const ALERT_TRIGGER_KEYS = new Set([
   "away_over_expected_tempo",
 ]);
 
-// Track which (fixtureId, signalKey, sessionId) combos already alerted this session
+const LIVE_STATUSES = ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"];
+
+// Track (fixtureId, signalKey) combos already alerted this process run
 const alreadyAlerted = new Set<string>();
 
 export async function runAlertEngine() {
-  // Get all currently followed fixtures
-  const followed = await db.query.followedFixtures.findMany();
-  if (followed.length === 0) return;
+  // Broadcast mode: scan all live fixtures, emit one global alert per signal.
+  // sessionId=null → visible to everyone on the Signals page.
+  const live = await db
+    .select({
+      fixtureId: fixtures.fixtureId,
+      homeTeamName: fixtures.homeTeamName,
+      awayTeamName: fixtures.awayTeamName,
+    })
+    .from(fixtures)
+    .where(inArray(fixtures.statusShort, LIVE_STATUSES));
 
-  const fixtureIds = [...new Set(followed.map((f) => f.fixtureId))];
+  if (live.length === 0) return;
 
-  for (const fixtureId of fixtureIds) {
-    // Get live signals for this fixture
+  for (const fix of live) {
     const signals = await db.query.fixtureSignals.findMany({
       where: (s, { and: andFn, eq: eqFn }) =>
-        andFn(eqFn(s.fixtureId, fixtureId), eqFn(s.phase, "live")),
+        andFn(eqFn(s.fixtureId, fix.fixtureId), eqFn(s.phase, "live")),
     });
 
-    const fixture = await db.query.fixtures.findFirst({
-      where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
-    });
-
-    if (!fixture) continue;
-
-    const matchName = `${fixture.homeTeamName} vs ${fixture.awayTeamName}`;
+    const matchName = `${fix.homeTeamName} vs ${fix.awayTeamName}`;
 
     for (const signal of signals) {
       if (!ALERT_TRIGGER_KEYS.has(signal.signalKey)) continue;
       if (!(signal.signalBool === true || (signal.signalValue !== null && signal.signalValue > 0.65))) continue;
 
-      // Find all sessions following this fixture
-      const sessions = followed.filter((f) => f.fixtureId === fixtureId);
+      const alertKey = `${fix.fixtureId}:${signal.signalKey}`;
+      if (alreadyAlerted.has(alertKey)) continue;
 
-      for (const session of sessions) {
-        const alertKey = `${fixtureId}:${signal.signalKey}:${session.sessionId}`;
-        if (alreadyAlerted.has(alertKey)) continue;
-
-        // DB-level dedup: skip if an alert for this (fixture, signal, session) already exists
-        const existing = await db.query.alertLog.findFirst({
-          where: (a, { and: andFn, eq: eqFn }) =>
-            andFn(
-              eqFn(a.fixtureId, fixtureId),
-              eqFn(a.signalKey, signal.signalKey),
-              eqFn(a.sessionId, session.sessionId),
-            ),
-        });
-        if (existing) {
-          alreadyAlerted.add(alertKey);
-          continue;
-        }
-
-        // Generate AI text
-        const alertText = await generateAlertText(signal.signalKey, signal.signalLabel, matchName);
-
-        // Store in DB
-        await db.insert(alertLog).values({
-          fixtureId,
-          sessionId: session.sessionId,
-          signalKey: signal.signalKey,
-          alertText,
-          isRead: false,
-          createdAt: new Date(),
-        });
-
+      const existing = await db.query.alertLog.findFirst({
+        where: (a, { and: andFn, eq: eqFn, isNull: isNullFn }) =>
+          andFn(
+            eqFn(a.fixtureId, fix.fixtureId),
+            eqFn(a.signalKey, signal.signalKey),
+            isNullFn(a.sessionId),
+          ),
+      });
+      if (existing) {
         alreadyAlerted.add(alertKey);
-        console.log(`[alerts] Alert created: ${matchName} — ${signal.signalLabel}`);
+        continue;
       }
+
+      const alertText = await generateAlertText(signal.signalKey, signal.signalLabel, matchName);
+
+      await db.insert(alertLog).values({
+        fixtureId: fix.fixtureId,
+        sessionId: null,
+        signalKey: signal.signalKey,
+        alertText,
+        tier: "info",
+        isRead: false,
+        createdAt: new Date(),
+      });
+
+      alreadyAlerted.add(alertKey);
+      console.log(`[alerts] Broadcast signal: ${matchName} — ${signal.signalLabel}`);
     }
   }
+}
+
+/**
+ * Emit a "critical" tier alert when a super-value tip is generated.
+ * Criteria: edge ≥ 0.15 (15pp) AND confidence='high' AND primary market.
+ * Called from analysisLayer after tip passes the publish filter.
+ */
+export async function emitSuperValueAlert(params: {
+  fixtureId: number;
+  betType: string;
+  betSide: string;
+  marketOdds: number;
+  edge: number;
+  confidence: string;
+  matchName: string;
+}) {
+  const PRIMARY_MARKETS = new Set(["match_result", "over_under_2_5", "btts"]);
+  if (!PRIMARY_MARKETS.has(params.betType)) return;
+  if (params.confidence !== "high") return;
+  if (params.edge < 0.15) return;
+
+  const signalKey = `super_value:${params.betType}:${params.betSide}`;
+
+  const existing = await db.query.alertLog.findFirst({
+    where: (a, { and: andFn, eq: eqFn }) =>
+      andFn(eqFn(a.fixtureId, params.fixtureId), eqFn(a.signalKey, signalKey)),
+  });
+  if (existing) return;
+
+  const edgePp = (params.edge * 100).toFixed(1);
+  const alertText = `Super-value tip: ${params.betType.replace(/_/g, " ")} ${params.betSide} @ ${params.marketOdds.toFixed(2)} — edge +${edgePp}pp, high confidence.`;
+
+  await db.insert(alertLog).values({
+    fixtureId: params.fixtureId,
+    sessionId: null,
+    signalKey,
+    alertText,
+    tier: "critical",
+    isRead: false,
+    createdAt: new Date(),
+  });
+
+  console.log(`[alerts] SUPER-VALUE: ${params.matchName} — ${params.betType} ${params.betSide} edge +${edgePp}pp`);
 }
 
 let alertEngineStarted = false;
@@ -86,7 +124,6 @@ let alertEngineStarted = false;
 export function startAlertEngine() {
   if (alertEngineStarted) return;
   alertEngineStarted = true;
-  console.log("[alerts] Alert engine started");
-  // Check every 30 seconds
+  console.log("[alerts] Alert engine started (broadcast mode)");
   setInterval(() => runAlertEngine().catch(console.error), 30 * 1000);
 }

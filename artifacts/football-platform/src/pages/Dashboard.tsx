@@ -174,7 +174,9 @@ function StreakRoiCard({ streak, roi, badge }: { streak: StreakState; roi: RoiSt
                 {streak.current}
               </span>
               <span className={`text-xs font-mono ml-1 ${streak.type === 'win' ? 'text-teal-400/70' : 'text-amber-400/70'}`}>
-                {streak.type === 'win' ? 'win' : 'loss'}{streak.current !== 1 ? 's' : ''}
+                {streak.type === 'win'
+                  ? (streak.current === 1 ? 'win' : 'wins')
+                  : (streak.current === 1 ? 'loss' : 'losses')}
               </span>
             </div>
           ) : (

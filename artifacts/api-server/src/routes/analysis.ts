@@ -276,7 +276,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
       const yesterdayStart = new Date(todayStart.getTime() - 86400_000);
       const yesterdayEnd = new Date(todayStart.getTime() - 1);
 
-      const [todayPicks, yesterdayTips, yesterdayFixtures, allReviewed] = await Promise.all([
+      const [todayPicksRaw, yesterdayTipsRaw, yesterdayFixtures, allReviewedRaw] = await Promise.all([
         // Today's tips
         db.select({
           id: aiBettingTips.id,
@@ -294,6 +294,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           aiProbability: aiBettingTips.aiProbability,
           impliedProbability: aiBettingTips.impliedProbability,
           confidence: aiBettingTips.confidence,
+          featureSnapshot: aiBettingTips.featureSnapshot,
         })
           .from(aiBettingTips)
           .where(and(gte(aiBettingTips.kickoff, todayStart), lte(aiBettingTips.kickoff, todayEnd)))
@@ -316,6 +317,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           aiProbability: aiBettingTips.aiProbability,
           impliedProbability: aiBettingTips.impliedProbability,
           confidence: aiBettingTips.confidence,
+          featureSnapshot: aiBettingTips.featureSnapshot,
           outcome: aiBettingTips.outcome,
           reviewHeadline: aiBettingTips.reviewHeadline,
         })
@@ -341,12 +343,28 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           outcome: aiBettingTips.outcome,
           marketOdds: aiBettingTips.marketOdds,
           reviewedAt: aiBettingTips.reviewedAt,
+          betType: aiBettingTips.betType,
+          edge: aiBettingTips.edge,
+          confidence: aiBettingTips.confidence,
+          featureSnapshot: aiBettingTips.featureSnapshot,
         })
           .from(aiBettingTips)
           .where(isNotNull(aiBettingTips.outcome))
           .orderBy(desc(aiBettingTips.reviewedAt))
-          .limit(200),
+          .limit(500),
       ]);
+
+      // Only reflect tips that were actually published to users (passed publishFilter).
+      const toPublishable = <T extends { betType: string; edge: number | null; confidence: string | null; featureSnapshot: unknown }>(rows: T[]) =>
+        filterPublishableTips(
+          rows.map((r) => ({
+            ...r,
+            featureSnapshot: (r.featureSnapshot ?? null) as Record<string, unknown> | null,
+          })),
+        );
+      const todayPicks = toPublishable(todayPicksRaw);
+      const yesterdayTips = toPublishable(yesterdayTipsRaw);
+      const allReviewed = toPublishable(allReviewedRaw).slice(0, 200);
 
       // Uncovered = fixtures yesterday with no tip
       const coveredIds = new Set(yesterdayTips.map((t) => t.fixtureId));
@@ -386,14 +404,21 @@ router.get("/analysis/daily-summary", async (_req, res) => {
         : streakType === "win" && streakCount >= 3 ? "warming"
         : null;
 
-      // ROI (all reviewed)
+      // ROI (all reviewed) — total = percentage ROI on 1-unit stake per tip
       let netReturn = 0;
+      let stakedBets = 0;
       for (const t of allReviewed) {
-        if (t.outcome === "hit") netReturn += (t.marketOdds ?? 2) - 1;
-        else if (t.outcome === "miss") netReturn -= 1;
+        if (t.outcome === "hit") {
+          netReturn += (t.marketOdds ?? 2) - 1;
+          stakedBets++;
+        } else if (t.outcome === "miss") {
+          netReturn -= 1;
+          stakedBets++;
+        }
       }
       const totalBets = allReviewed.length;
-      const roi = { total: totalBets, totalBets, netReturn: Math.round(netReturn * 100) / 100 };
+      const roiPct = stakedBets > 0 ? Math.round((netReturn / stakedBets) * 100) : 0;
+      const roi = { total: roiPct, totalBets, netReturn: Math.round(netReturn * 100) / 100 };
 
       return {
         todayPicks,

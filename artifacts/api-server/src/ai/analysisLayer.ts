@@ -171,6 +171,7 @@ INSTRUCTIONS:
 - Trust score: 1-4 = weak, 5-7 = moderate, 8-10 = strong conviction
 - Reasoning: max 35 words per tip, cite the data
 - No emojis. State facts only.
+- Reasoning MUST NOT mention data sources, APIs, algorithms, providers, or internal section headings. Never write "API", "API-Football", "algorithm", "forecast from API", "baseline model says", "our model", or similar. Phrase insights as direct football analysis (team form, injuries, xG, odds value, H2H) — as if you are a human analyst watching the match.
 
 Respond ONLY valid JSON:
 {"tips":[{"recommendation":"Home Win","bet_type":"match_result","bet_side":"home","trust_score":7,"estimated_probability":0.60,"reasoning":"..."},{"recommendation":"Over 2.5 Goals","bet_type":"over_under","bet_side":"over25","trust_score":6,"estimated_probability":0.55,"reasoning":"..."},{"recommendation":"BTTS Yes","bet_type":"btts","bet_side":"yes","trust_score":5,"estimated_probability":0.52,"reasoning":"..."},{"recommendation":"1-1","bet_type":"correct_score","bet_side":"1:1","trust_score":5,"estimated_probability":0.12,"reasoning":"..."},{"recommendation":"Home Team Scores First","bet_type":"first_team_score","bet_side":"home","trust_score":6,"estimated_probability":0.55,"reasoning":"..."}]}
@@ -995,13 +996,13 @@ export async function getBettingTips(fixtureId: number) {
 
   // Build rich context sections
   const predSection = ctx.prediction
-    ? `API-Football algorithm forecast:
+    ? `Baseline statistical forecast:
 - ${ctx.homeTeam} win: ${ctx.prediction.homeWinPct?.toFixed(0) ?? "?"}%
 - Draw: ${ctx.prediction.drawPct?.toFixed(0) ?? "?"}%
 - ${ctx.awayTeam} win: ${ctx.prediction.awayWinPct?.toFixed(0) ?? "?"}%
 - Predicted score: ${ctx.prediction.goalsHome?.toFixed(1) ?? "?"} - ${ctx.prediction.goalsAway?.toFixed(1) ?? "?"}
-- Advice: ${ctx.prediction.advice ?? "None"}`
-    : "No algorithmic forecast available.";
+- Baseline lean: ${ctx.prediction.advice ?? "None"}`
+    : "No baseline forecast available.";
 
   const homeStatsSection = ctx.homeSeasonStats
     ? `${ctx.homeTeam} season (${ctx.homeSeasonStats.played ?? "?"} games): Form ${ctx.homeSeasonStats.form?.slice(-5) ?? "?"} | Overall goals/game: ${ctx.homeSeasonStats.goalsForAvg?.toFixed(2) ?? "?"} scored, ${ctx.homeSeasonStats.goalsAgainstAvg?.toFixed(2) ?? "?"} conceded | Clean sheets: ${ctx.homeSeasonStats.cleanSheets ?? "?"} | Win streak record: ${ctx.homeSeasonStats.winStreak ?? "?"}\n  AT HOME: W${ctx.homeSeasonStats.winsHome ?? "?"}/${ctx.homeSeasonStats.lossesHome ?? "?"}L | Avg scored: ${ctx.homeSeasonStats.goalsForAvgHome?.toFixed(2) ?? "?"} | Avg conceded: ${ctx.homeSeasonStats.goalsAgainstAvgHome?.toFixed(2) ?? "?"} | Clean sheets home: ${ctx.homeSeasonStats.cleanSheetsHome ?? "?"} | Failed to score home: ${ctx.homeSeasonStats.failedToScoreHome ?? "?"}${ctx.homeRecentXg != null ? ` | Recent avg xG: ${ctx.homeRecentXg}` : ""}`

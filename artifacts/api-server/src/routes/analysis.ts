@@ -7,6 +7,9 @@ import { getOrFetch, TTL } from "../lib/routeCache.js";
 import { generateLeagueNews, getLiveAnalysis } from "../ai/analysisLayer.js";
 import { filterPublishableTips } from "../ai/publishFilter.js";
 import { getPlanForRequest, requirePlan } from "../middlewares/requirePlan.js";
+import { TRACKED_LEAGUES } from "../ingestion/apiFootballClient.js";
+
+const TRACKED_LEAGUE_IDS = TRACKED_LEAGUES.map((l) => l.id);
 
 const router = Router();
 
@@ -338,7 +341,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           .where(and(
             gte(fixtures.kickoff, yesterdayStart),
             lte(fixtures.kickoff, yesterdayEnd),
-            inArray(fixtures.leagueId, [39,140,135,78,61,2,3,848,40,79,88,94,107,119,120,113,179,203,218,235,244,271,98,188,253,262,292]),
+            inArray(fixtures.leagueId, TRACKED_LEAGUE_IDS),
           ))
           .limit(50),
 
@@ -890,7 +893,4 @@ router.get("/analysis/performance/by-league", requirePlan("pro"), async (_req, r
   try {
     const result = await getOrFetch("analysis:performance:by-league", TTL.MIN5, async () => {
       const rows = await buildPerformanceSummary("leagueName");
-      return { byLeague: rows };
-    });
-    return res.json(result);
-  
+      return { byLea

@@ -284,4 +284,46 @@ export function Fixtures() {
                     {label}
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded font-mono ${
-                        isA
+                        isActive ? "bg-white/10 text-white" : "bg-white/5 text-muted-foreground"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {activeTab === "live" && liveLeagues.length > 1 && (
+              <div className="flex items-center gap-3">
+                <Select value={liveLeagueFilter} onValueChange={(v) => setLiveLeagueFilter(v)}>
+                  <SelectTrigger className="w-56 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50">
+                    <SelectValue placeholder="All leagues" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
+                      All leagues ({allLive.length})
+                    </SelectItem>
+                    {liveLeagues.map((l) => (
+                      <SelectItem key={l.id} value={String(l.id)} className="text-white focus:bg-white/10 focus:text-white">
+                        {l.name ?? `League ${l.id}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div>
+              {byPhase[activeTab].length === 0 ? (
+                <EmptyState phase={activeTab} />
+              ) : (
+                <FixtureGrid fixtures={byPhase[activeTab]} />
+              )}
+            </div>
+          </>
+        )}
+      </div>
+    </Layout>
+  );
+}

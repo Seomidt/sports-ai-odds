@@ -257,17 +257,13 @@ router.get("/standings/leagues", async (_req: Request, res: Response) => {
       const rows = await db
         .select({
           leagueId: fixtures.leagueId,
-          leagueName: fixtures.leagueName,
-          leagueLogo: fixtures.leagueLogo,
+          leagueName: sql<string>`max(${fixtures.leagueName})`,
+          leagueLogo: sql<string>`max(${fixtures.leagueLogo})`,
           fixtureCount: sql<number>`count(*)`,
         })
         .from(fixtures)
-        .groupBy(
-          fixtures.leagueId,
-          fixtures.leagueName,
-          fixtures.leagueLogo,
-        )
-        .orderBy(desc(sql`count(*)`), asc(fixtures.leagueName))
+        .groupBy(fixtures.leagueId)
+        .orderBy(desc(sql`count(*)`))
         .limit(100);
       return { leagues: rows };
     });
@@ -526,4 +522,4 @@ router.get("/teams/:id/injuries", async (req: Request, res: Response) => {
 });
 
 export default router;
-                                                                            
+                                                                                                                                                   

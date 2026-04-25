@@ -259,7 +259,6 @@ router.get("/standings/leagues", async (_req: Request, res: Response) => {
           leagueId: fixtures.leagueId,
           leagueName: fixtures.leagueName,
           leagueLogo: fixtures.leagueLogo,
-          seasonYear: fixtures.seasonYear,
           fixtureCount: sql<number>`count(*)`,
         })
         .from(fixtures)
@@ -267,7 +266,6 @@ router.get("/standings/leagues", async (_req: Request, res: Response) => {
           fixtures.leagueId,
           fixtures.leagueName,
           fixtures.leagueLogo,
-          fixtures.seasonYear,
         )
         .orderBy(desc(sql`count(*)`), asc(fixtures.leagueName))
         .limit(100);
@@ -528,3 +526,4 @@ router.get("/teams/:id/injuries", async (req: Request, res: Response) => {
 });
 
 export default router;
+                                                                            

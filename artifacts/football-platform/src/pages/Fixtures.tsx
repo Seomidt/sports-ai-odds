@@ -5,6 +5,7 @@ import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Activity, Clock, CheckCircle2, Zap } from "lucide-react";
 import { useState } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 // PST (Postponed) and SUSP (Suspended) treated as finished — never show in prematch
@@ -209,6 +210,7 @@ export function Fixtures() {
     refetchIntervalInBackground: true,
   });
   const [activeTab, setActiveTab] = useState<Tab>("live");
+  const [liveLeagueFilter, setLiveLeagueFilter] = useState<string>("all");
 
   const allFixtures: Fixture[] = (data?.leagues ?? []).flatMap((league) => league.fixtures);
 
@@ -218,8 +220,20 @@ export function Fixtures() {
     return ta - tb;
   });
 
+  const allLive = sorted.filter((f) => getPhase(f.statusShort) === "live");
+
+  // Unique leagues present in live fixtures — for the dropdown
+  const liveLeagues = Array.from(
+    new Map(allLive.map((f) => [f.leagueId, { id: f.leagueId, name: f.leagueName }])).values()
+  );
+
+  const filteredLive =
+    liveLeagueFilter === "all"
+      ? allLive
+      : allLive.filter((f) => String(f.leagueId) === liveLeagueFilter);
+
   const byPhase: Record<Tab, Fixture[]> = {
-    live: sorted.filter((f) => getPhase(f.statusShort) === "live"),
+    live: filteredLive,
     prematch: sorted.filter((f) => getPhase(f.statusShort) === "prematch"),
     postmatch: sorted.filter((f) => getPhase(f.statusShort) === "postmatch"),
   };
@@ -270,26 +284,4 @@ export function Fixtures() {
                     {label}
                     <span
                       className={`text-xs px-1.5 py-0.5 rounded font-mono ${
-                        isActive ? "bg-white/10 text-white" : "bg-white/5 text-muted-foreground"
-                      }`}
-                    >
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div>
-              {byPhase[activeTab].length === 0 ? (
-                <EmptyState phase={activeTab} />
-              ) : (
-                <FixtureGrid fixtures={byPhase[activeTab]} />
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </Layout>
-  );
-}
+                        isA

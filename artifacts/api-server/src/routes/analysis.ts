@@ -325,7 +325,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           .where(and(gte(aiBettingTips.kickoff, yesterdayStart), lte(aiBettingTips.kickoff, yesterdayEnd)))
           .orderBy(desc(aiBettingTips.trustScore)),
 
-        // Yesterday's fixtures without tips (uncovered)
+        // Yesterday's fixtures without tips (uncovered) — only tracked leagues
         db.select({
           fixtureId: fixtures.fixtureId,
           homeTeam: fixtures.homeTeamName,
@@ -335,7 +335,11 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           statusShort: fixtures.statusShort,
         })
           .from(fixtures)
-          .where(and(gte(fixtures.kickoff, yesterdayStart), lte(fixtures.kickoff, yesterdayEnd)))
+          .where(and(
+            gte(fixtures.kickoff, yesterdayStart),
+            lte(fixtures.kickoff, yesterdayEnd),
+            inArray(fixtures.leagueId, [39,140,135,78,61,2,3,848,40,79,88,94,107,119,120,113,179,203,218,235,244,271,98,188,253,262,292]),
+          ))
           .limit(50),
 
         // All reviewed tips for streak/ROI
@@ -889,10 +893,4 @@ router.get("/analysis/performance/by-league", requirePlan("pro"), async (_req, r
       return { byLeague: rows };
     });
     return res.json(result);
-  } catch (err) {
-    console.error("[routes:analysis.performance.byLeague]", err);
-    return res.status(500).json({ error: "Failed to load performance by league" });
-  }
-});
-
-export default router;
+  

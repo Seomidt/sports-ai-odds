@@ -1689,7 +1689,7 @@ async function upsertFixtureEventsAndStats(fixtureId: number): Promise<void> {
  * Safe to run repeatedly — triggerPostMatchReview is idempotent (skips if
  * all tips for a fixture already have outcomes).
  */
-async function sweepMissedPostMatchReviews(): Promise<void> {
+export async function sweepMissedPostMatchReviews(): Promise<void> {
   try {
     // Find fixtures that have pending tips but the match is already finished
     const rows = await db
@@ -1701,7 +1701,7 @@ async function sweepMissedPostMatchReviews(): Promise<void> {
           isNull(aiBettingTips.outcome),
           ne(aiBettingTips.betType, "no_bet"),
           inArray(fixtures.statusShort, ["FT", "AET", "PEN"]),
-          gte(aiBettingTips.kickoff, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000))
+          gte(aiBettingTips.kickoff, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
         )
       )
       .orderBy(aiBettingTips.fixtureId);
@@ -2687,4 +2687,4 @@ export async function seedHistoricalData(seasons = 2): Promise<void> {
 
     seedState.running = false;
     seedState.lastRun = new Date();
-    console.log(`[seeder] Complete — ${tota
+    console.log(`[seeder] Complete �

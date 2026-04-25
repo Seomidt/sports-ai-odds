@@ -893,4 +893,13 @@ router.get("/analysis/performance/by-league", requirePlan("pro"), async (_req, r
   try {
     const result = await getOrFetch("analysis:performance:by-league", TTL.MIN5, async () => {
       const rows = await buildPerformanceSummary("leagueName");
-      return { byLea
+      return { byLeague: rows };
+    });
+    return res.json(result);
+  } catch (err) {
+    console.error("[routes:analysis.performance.byLeague]", err);
+    return res.status(500).json({ error: "Failed to load performance by league" });
+  }
+});
+
+export default router;

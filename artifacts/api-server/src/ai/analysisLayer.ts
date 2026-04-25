@@ -1455,7 +1455,6 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
       else if (side === "under25") outcome = totalGoals <= 2 ? "hit" : "miss";
       else if (side === "over35")  outcome = totalGoals >  3 ? "hit" : "miss";
       else if (side === "under35") outcome = totalGoals <= 3 ? "hit" : "miss";
-      // legacy fallback
       else if (side === "over")    outcome = over25Result ? "hit" : "miss";
       else if (side === "under")   outcome = !over25Result ? "hit" : "miss";
 
@@ -1473,21 +1472,20 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
     } else if (tip.betType === "draw_no_bet") {
       if      (side === "home" && actualResult === "home_win") outcome = "hit";
       else if (side === "away" && actualResult === "away_win") outcome = "hit";
-      else if (actualResult === "draw")                        outcome = "partial"; // stake returned
+      else if (actualResult === "draw")                        outcome = "partial";
 
     } else if (tip.betType === "win_to_nil") {
       if      (side === "home") outcome = (actualResult === "home_win" && ag === 0) ? "hit" : "miss";
       else if (side === "away") outcome = (actualResult === "away_win" && hg === 0) ? "hit" : "miss";
 
     } else if (tip.betType === "correct_score") {
-      // bet_side stored as "H:A" e.g. "2:1" or "1-1"
       const normalized = side.replace("-", ":");
       const actual = `${hg}:${ag}`;
       outcome = normalized === actual ? "hit" : "miss";
 
     } else if (tip.betType === "first_team_score") {
       if (firstGoalTeamId === null) {
-        outcome = "miss"; // 0-0, no goals
+        outcome = "miss";
       } else if (side === "home") {
         outcome = firstGoalTeamId === fixture.homeTeamId ? "hit" : "miss";
       } else if (side === "away") {
@@ -1496,27 +1494,19 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
 
     } else if (tip.betType === "corners") {
       if (totalCorners > 0) {
-        // bet_side "over" = over ~9.5 corners (common line), "under" = under
-        // We use a simple 10-corner threshold as default
         if      (side === "over")  outcome = totalCorners > 9  ? "hit" : "miss";
         else if (side === "under") outcome = totalCorners <= 9 ? "hit" : "miss";
       }
-      // if no corner data, stays "miss"
 
     } else if (tip.betType === "total_cards") {
-      if (totalCards > 0 || statsRows.length > 0) {
+      if (totalCards > 0) {
         if      (side === "over")  outcome = totalCards > 3  ? "hit" : "miss";
         else if (side === "under") outcome = totalCards <= 3 ? "hit" : "miss";
       }
 
     } else if (tip.betType === "asian_handicap") {
-      // Handicap line not stored — evaluate direction only
       if      (side === "home") outcome = actualResult === "home_win" ? "hit" : actualResult === "draw" ? "partial" : "miss";
       else if (side === "away") outcome = actualResult === "away_win" ? "hit" : actualResult === "draw" ? "partial" : "miss";
-
-    } else if (tip.betType === "first_half_goals") {
-      // No halftime score stored — mark partial (cannot evaluate)
-      outcome = "partial";
     }
 
     const prompt = `You are reviewing your own football betting prediction.
@@ -1775,4 +1765,198 @@ export async function generateLeagueNews(
         fixtureLine: existing.fixtureLine ?? fixtureLine,
         homeGoals: existing.homeGoals,
         awayGoals: existing.awayGoals,
-        opponent: existing.oppone
+        opponent: existing.opponent ?? lastMatch.opponentName,
+        result: (existing.result as NewsArticle["result"]) ?? result,
+        kickoff: existing.kickoff?.toISOString() ?? lastMatch.kickoff,
+      });
+      continue;
+    }
+
+    // ── Generate new article with Claude ──────────────────────────────────────
+    const matchContext = teamMatches.map((m) => {
+      const g = m.isHome ? m.homeGoals : m.awayGoals;
+      const og = m.isHome ? m.awayGoals : m.homeGoals;
+      const res = g != null && og != null ? `${g}-${og}` : "?-?";
+      const side = m.isHome ? "H" : "A";
+      return `${m.opponentName} (${side}) ${res}`;
+    }).join(", ");
+
+    const prompt = `You are a football journalist writing short news snippets. Write a 2-sentence news blurb about ${team.teamName} (currently ranked #${team.rank} in the league table). Their recent matches: ${matchContext}. Focus on their form and what it means for the title race. Be direct, punchy. No emoji. Max 60 words total.`;
+
+    const raw = await callClaude(prompt);
+    const body = raw?.trim() ?? `${team.teamName} continue their campaign.`;
+
+    // ── Save to DB (upsert) ───────────────────────────────────────────────────
+    await db.insert(newsArticles).values({
+      leagueId,
+      teamId: team.teamId,
+      teamName: team.teamName,
+      teamLogo: team.teamLogo,
+      rank: team.rank,
+      headline,
+      body,
+      fixtureLine,
+      homeGoals: lastMatch.homeGoals,
+      awayGoals: lastMatch.awayGoals,
+      opponent: lastMatch.opponentName,
+      result,
+      kickoff: lastMatch.kickoff ? new Date(lastMatch.kickoff) : null,
+      generatedAt: new Date(),
+    }).onConflictDoUpdate({
+      target: [newsArticles.leagueId, newsArticles.teamId],
+      set: { headline, body, fixtureLine, homeGoals: lastMatch.homeGoals, awayGoals: lastMatch.awayGoals, opponent: lastMatch.opponentName, result, kickoff: lastMatch.kickoff ? new Date(lastMatch.kickoff) : null, generatedAt: new Date() },
+    });
+
+    articles.push({
+      id: `${leagueId}-${team.teamId}`,
+      teamId: team.teamId,
+      teamName: team.teamName,
+      teamLogo: team.teamLogo,
+      rank: team.rank,
+      headline,
+      body,
+      fixtureLine,
+      homeGoals: lastMatch.homeGoals,
+      awayGoals: lastMatch.awayGoals,
+      opponent: lastMatch.opponentName,
+      result,
+      kickoff: lastMatch.kickoff,
+    });
+  }
+
+  return articles;
+}
+
+// ─── Pre-match AI Synthesis ───────────────────────────────────────────────────
+
+export interface PrematchSynthesis {
+  headline: string;
+  summary: string;
+  keyFactors: string[];
+  bestBet: string | null;
+  bestBetOdds: number | null;
+  generatedAt: string;
+}
+
+/**
+ * Generates a short pre-match AI synthesis (headline + summary + key factors).
+ * Cache hierarchy: 1) in-memory 2h, 2) DB 12h, 3) Claude (only on miss/stale).
+ * Survives server restarts — no redundant Claude calls.
+ */
+// Synthesis TTL: regenerate after 12h so it stays fresh pre-match
+const SYNTHESIS_TTL_MS = 12 * 60 * 60 * 1000;
+
+export async function generatePrematchSynthesis(fixtureId: number): Promise<PrematchSynthesis | null> {
+  const cacheKey = `prematch-synthesis:${fixtureId}`;
+
+  // 1. Fast path — in-memory cache (2h)
+  const cached = getCached<PrematchSynthesis>(cacheKey);
+  if (cached) return cached;
+
+  // 2. DB path — survives server restarts (12h TTL)
+  const existing = await db.query.prematchSyntheses.findFirst({
+    where: (s, { eq: eqFn }) => eqFn(s.fixtureId, fixtureId),
+  });
+  if (existing && (Date.now() - existing.generatedAt.getTime()) < SYNTHESIS_TTL_MS) {
+    const fromDb: PrematchSynthesis = {
+      headline: existing.headline,
+      summary: existing.summary,
+      keyFactors: (existing.keyFactors as string[]) ?? [],
+      bestBet: existing.bestBet,
+      bestBetOdds: existing.bestBetOdds,
+      generatedAt: existing.generatedAt.toISOString(),
+    };
+    setCached(cacheKey, fromDb, 2 * 60 * 60 * 1000);
+    return fromDb;
+  }
+
+  // 3. Check how many tips exist — don't regenerate if DB row is still fresh-enough
+  //    and tip count hasn't changed (avoid redundant Claude calls)
+  const tips = await db.query.aiBettingTips.findMany({
+    where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
+    orderBy: (t, { desc: d }) => [d(t.trustScore)],
+    limit: 8,
+  });
+
+  if (!tips.length) return null;
+
+  const fixture = await db.query.fixtures.findFirst({
+    where: (f, { eq: eqFn }) => eqFn(f.fixtureId, fixtureId),
+    columns: { homeTeamName: true, awayTeamName: true, leagueName: true, kickoff: true, homeTeamId: true, awayTeamId: true },
+  });
+
+  const pred = await db.query.predictions.findFirst({ where: (p, { eq: eqFn }) => eqFn(p.fixtureId, fixtureId) });
+  const homeTeam = fixture?.homeTeamName ?? "Home";
+  const awayTeam = fixture?.awayTeamName ?? "Away";
+  const matchLabel = `${homeTeam} vs ${awayTeam}`;
+  const leagueName = fixture?.leagueName ?? "";
+
+  const tipLines = tips.map(t => {
+    const edge = t.edge != null ? ` (edge: ${(Number(t.edge) * 100).toFixed(1)}%)` : "";
+    return `- ${t.betType}: ${t.recommendation} @ ${t.marketOdds ?? "?"} | trust ${t.trustScore}/10${edge} | ${t.valueRating ?? "fair"} | ${t.reasoning?.slice(0, 120) ?? ""}`;
+  }).join("\n");
+
+  const predLine = pred
+    ? `Algorithm prediction: ${homeTeam} ${pred.homeWinPct ?? "?"}% win / Draw ${pred.drawPct ?? "?"}% / ${awayTeam} ${pred.awayWinPct ?? "?"}% win. Predicted score: ${pred.goalsHome ?? "?"}–${pred.goalsAway ?? "?"}. Advice: ${pred.advice ?? "—"}`
+    : "";
+
+  const bestTip = tips[0];
+
+  const prompt = `You are an expert football betting analyst. Write a concise pre-match briefing for ${matchLabel} (${leagueName}).
+
+${predLine ? predLine + "\n\n" : ""}AI Betting Tips generated:
+${tipLines}
+
+Return ONLY valid JSON (no markdown) with this exact structure:
+{
+  "headline": "One punchy sentence (max 15 words) capturing the key angle",
+  "summary": "2-3 sentences synthesising the overall match picture and where the value lies",
+  "keyFactors": ["factor 1", "factor 2", "factor 3"]
+}
+
+Rules: No emoji. Be direct and analytical. Focus on the bet with the most edge.`;
+
+  const raw = await callClaude(prompt);
+  if (!raw) return null;
+
+  const schema = z.object({
+    headline: z.string(),
+    summary: z.string(),
+    keyFactors: z.array(z.string()),
+  });
+
+  const parsed = parseJson(raw, schema, { headline: matchLabel, summary: "", keyFactors: [] });
+
+  const result: PrematchSynthesis = {
+    headline: parsed.headline,
+    summary: parsed.summary,
+    keyFactors: parsed.keyFactors,
+    bestBet: bestTip ? `${bestTip.recommendation}` : null,
+    bestBetOdds: bestTip?.marketOdds ? Number(bestTip.marketOdds) : null,
+    generatedAt: new Date().toISOString(),
+  };
+
+  // 4. Save to DB — survives server restarts
+  await db.insert(prematchSyntheses).values({
+    fixtureId,
+    headline: result.headline,
+    summary: result.summary,
+    keyFactors: result.keyFactors,
+    bestBet: result.bestBet,
+    bestBetOdds: result.bestBetOdds,
+    generatedAt: new Date(),
+  }).onConflictDoUpdate({
+    target: prematchSyntheses.fixtureId,
+    set: {
+      headline: result.headline,
+      summary: result.summary,
+      keyFactors: result.keyFactors,
+      bestBet: result.bestBet,
+      bestBetOdds: result.bestBetOdds,
+      generatedAt: new Date(),
+    },
+  });
+
+  setCached(cacheKey, result, 2 * 60 * 60 * 1000); // 2h in-memory
+  return result;
+}

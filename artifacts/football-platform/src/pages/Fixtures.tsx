@@ -204,7 +204,7 @@ export function Fixtures() {
     refetchInterval: (query) => {
       const fixtures = (query.state.data?.leagues ?? []).flatMap((l) => l.fixtures);
       const hasLive = fixtures.some((f) => LIVE_STATUSES.has(f.statusShort ?? ""));
-      return hasLive ? 20_000 : 3 * 60_000;
+      return hasLive ? 15_000 : 3 * 60_000;
     },
     refetchIntervalInBackground: true,
   });

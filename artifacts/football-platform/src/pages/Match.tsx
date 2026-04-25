@@ -1267,7 +1267,7 @@ function OddsMarketRow({ name, entries }: { name: string; entries: { bookmaker: 
 
 function OddsTab({ fixtureId, isLive, homeTeam, awayTeam }: { fixtureId: number; isLive: boolean; homeTeam: string; awayTeam: string }) {
   const { data: preData } = useGetFixtureOdds(fixtureId, { query: { queryKey: getGetFixtureOddsQueryKey(fixtureId), staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
-  const { data: liveData } = useGetFixtureLiveOdds(fixtureId, { query: { queryKey: getGetFixtureLiveOddsQueryKey(fixtureId), staleTime: 30_000, gcTime: 5 * 60_000, refetchInterval: 30_000 } });
+  const { data: liveData } = useGetFixtureLiveOdds(fixtureId, { query: { queryKey: getGetFixtureLiveOddsQueryKey(fixtureId), staleTime: 15_000, gcTime: 5 * 60_000, refetchInterval: 15_000 } });
   const { data: marketsData } = useGetFixtureOddsMarkets(fixtureId, { query: { queryKey: getGetFixtureOddsMarketsQueryKey(fixtureId), staleTime: 2 * 60_000, gcTime: 10 * 60_000 } });
 
   const allOdds: OddsSnap[] = (preData as any)?.allOdds ?? (preData?.odds ? [preData.odds] : []);

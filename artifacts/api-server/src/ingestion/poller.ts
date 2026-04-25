@@ -1700,8 +1700,7 @@ export async function sweepMissedPostMatchReviews(): Promise<void> {
         and(
           isNull(aiBettingTips.outcome),
           ne(aiBettingTips.betType, "no_bet"),
-          inArray(fixtures.statusShort, ["FT", "AET", "PEN"]),
-          gte(aiBettingTips.kickoff, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+          inArray(fixtures.statusShort, ["FT", "AET", "PEN"])
         )
       )
       .orderBy(aiBettingTips.fixtureId);
@@ -2687,4 +2686,6 @@ export async function seedHistoricalData(seasons = 2): Promise<void> {
 
     seedState.running = false;
     seedState.lastRun = new Date();
-    console.log(`[seeder] Complete â€
+    console.log(`[seeder] Complete â€” ${totalSeeded} total fixtures seeded`);
+  } catch (err) {
+    seedState.running = fal

@@ -1330,7 +1330,7 @@ async function adaptiveLiveLoop() {
         lastTrackedCount = trackedCount;
       }
 
-      for (const f of tracked) {
+      await Promise.all(tracked.map(async (f) => {
         await upsertFixture(f);
 
         const statusShort = f.fixture.status.short;
@@ -1338,8 +1338,12 @@ async function adaptiveLiveLoop() {
         const isFinished = ["FT", "AET", "PEN"].includes(statusShort);
 
         if (isInPlay) {
-          // Events + stats (always)
-          const events = await fetchFixtureEvents(f.fixture.id);
+          // Events + stats fetched in parallel
+          const [events, stats] = await Promise.all([
+            fetchFixtureEvents(f.fixture.id),
+            fetchFixtureStats(f.fixture.id),
+          ]);
+
           if (events) {
             await db.delete(fixtureEvents).where(eq(fixtureEvents.fixtureId, f.fixture.id));
             for (const ev of events) {
@@ -1359,7 +1363,6 @@ async function adaptiveLiveLoop() {
             }
           }
 
-          const stats = await fetchFixtureStats(f.fixture.id);
           if (stats) {
             for (const teamStat of stats) {
               const getValue = (type: string): number | null => {
@@ -1408,8 +1411,7 @@ async function adaptiveLiveLoop() {
             }
           }
 
-          // Pro: player-level stats + live odds for tracked fixtures
-          await syncPlayerStatsForFixture(f.fixture.id);
+          // Live odds for tracked fixtures
           await syncLiveOddsForFixture(f.fixture.id);
 
           await runLiveFeatures(f.fixture.id, f.teams.home.id, f.teams.away.id);
@@ -1428,7 +1430,7 @@ async function adaptiveLiveLoop() {
           await runPostMatchFeatures(f.fixture.id);
           await runSignalEngine(f.fixture.id, "post");
         }
-      }
+      }));
 
       // ── Stale-live cleanup ─────────────────────────────────────────────────
       // Fixtures can get stuck in a live status if the poller restarts mid-match

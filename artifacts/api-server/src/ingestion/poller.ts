@@ -354,12 +354,43 @@ async function insertOddsSnapshot(
 async function syncOdds() {
   const now = new Date();
   const in48Hours = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+  const in1Hour   = new Date(now.getTime() + 60 * 60 * 1000);
 
   const upcoming = await db.query.fixtures.findMany({
     where: (f, { and, gte, lte, eq }) => and(gte(f.kickoff, now), lte(f.kickoff, in48Hours), eq(f.statusShort, "NS")),
   });
 
+  if (upcoming.length === 0) return;
+
+  // Find most recent snapshot per fixture
+  const { rows: snapRows } = await pool.query<{ fixture_id: number; last_snap: string }>(`
+    SELECT fixture_id, MAX(snapped_at) AS last_snap
+    FROM odds_snapshots
+    WHERE fixture_id = ANY($1)
+    GROUP BY fixture_id
+  `, [upcoming.map(f => f.fixtureId)]);
+
+  const lastSnapped = new Map(snapRows.map(r => [r.fixture_id, new Date(r.last_snap)]));
+
+  // Track fixtures with zero odds before this run — used to trigger tip generation
+  const hadNoOddsBefore = new Set(
+    upcoming.filter(f => !lastSnapped.has(f.fixtureId)).map(f => f.fixtureId)
+  );
+
+  let fetched = 0;
+  let skipped = 0;
+
   for (const fix of upcoming) {
+    const lastFetch = lastSnapped.get(fix.fixtureId);
+    const kickoffSoon = fix.kickoff != null && fix.kickoff < in1Hour;
+
+    // < 1h to kickoff → refresh every 5 min. Otherwise skip if < 30 min old.
+    const freshMs = kickoffSoon ? 5 * 60 * 1000 : 30 * 60 * 1000;
+    if (lastFetch && Date.now() - lastFetch.getTime() < freshMs) {
+      skipped++;
+      continue;
+    }
+
     const seen = new Set<string>();
 
     // Fetch default — gets whatever bookmakers API returns (usually 10Bet, Marathonbet, William Hill)
@@ -384,6 +415,28 @@ async function syncOdds() {
       seen.add(bmName);
       await insertOddsSnapshot(fix.fixtureId, bmOdds.bookmakers[0]!.name, bmOdds.bookmakers);
       await new Promise((r) => setTimeout(r, 150));
+    }
+
+    fetched++;
+  }
+
+  if (skipped > 0) {
+    console.log(`[syncOdds] ${fetched} fetched, ${skipped} skipped (odds still fresh)`);
+  }
+
+  // Fixtures that just got odds for the first time → generate tips immediately (hidden queue → visible)
+  if (hadNoOddsBefore.size > 0) {
+    const { rows: nowHaveOdds } = await pool.query<{ fixture_id: number }>(
+      `SELECT DISTINCT fixture_id FROM odds_snapshots WHERE fixture_id = ANY($1)`,
+      [[...hadNoOddsBefore]]
+    );
+    for (const { fixture_id } of nowHaveOdds) {
+      getBettingTips(fixture_id).catch(e =>
+        console.error(`[syncOdds] tip gen failed for fixture ${fixture_id}:`, e)
+      );
+    }
+    if (nowHaveOdds.length > 0) {
+      console.log(`[syncOdds] ${nowHaveOdds.length} fixtures got odds for first time — tips queued`);
     }
   }
 }
@@ -1937,15 +1990,28 @@ export async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
   for (const t of existingTips) {
     tipCount.set(t.fixtureId, (tipCount.get(t.fixtureId) ?? 0) + 1);
   }
-  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 10);
+  const missing = upcoming.filter((f) => (tipCount.get(f.fixtureId) ?? 0) < 5);
 
   if (missing.length === 0) {
-    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have 10 tips`);
+    console.log(`[ai-tips] All ${upcoming.length} upcoming fixtures already have 5+ tips`);
     return;
   }
 
-  const batch = missing.slice(0, batchSize);
-  console.log(`[ai-tips] Generating tips for ${batch.length} of ${missing.length} fixtures missing picks`);
+  // Only attempt fixtures that have odds — the rest stay in the implicit hidden queue
+  const { rows: withOdds } = await pool.query<{ fixture_id: number }>(
+    `SELECT DISTINCT fixture_id FROM odds_snapshots WHERE fixture_id = ANY($1)`,
+    [missing.map(f => f.fixtureId)]
+  );
+  const oddsReady = new Set(withOdds.map(r => r.fixture_id));
+  const readyToProcess = missing.filter(f => oddsReady.has(f.fixtureId));
+
+  if (readyToProcess.length === 0) {
+    console.log(`[ai-tips] No fixtures ready — ${missing.length} queued waiting for odds`);
+    return;
+  }
+
+  const batch = readyToProcess.slice(0, batchSize);
+  console.log(`[ai-tips] ${batch.length} ready to generate, ${missing.length - readyToProcess.length} queued (no odds yet)`);
   let ok = 0;
   let skipped = 0;
 
@@ -2397,7 +2463,6 @@ export function startPoller() {
   // Immediate AI tips pass: runs 10s after boot using whatever is already in DB
   setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 10 * 1000);
   // Second early pass: after odds sync has refreshed
-  setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 3 * 60 * 1000);
   setTimeout(() => syncVenuesAndInfoForKnownTeams().catch(console.error), 3.5 * 60 * 1000);
   setTimeout(() => syncTeamSeasonStats().catch(console.error), 4 * 60 * 1000);
   setTimeout(() => syncTopScorersAndAssists().catch(console.error), 5 * 60 * 1000);

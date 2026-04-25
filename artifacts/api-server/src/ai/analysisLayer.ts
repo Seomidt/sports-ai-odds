@@ -980,7 +980,7 @@ export async function getBettingTips(fixtureId: number) {
   const existing = await db.query.aiBettingTips.findMany({
     where: (t, { eq: eqFn }) => eqFn(t.fixtureId, fixtureId),
   });
-  if (existing.length >= 10) return existing;
+  if (existing.length >= 5) return existing;
 
   const ctx = await buildBettingContext(fixtureId);
 

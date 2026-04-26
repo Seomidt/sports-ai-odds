@@ -918,6 +918,96 @@ function ForceSyncSection() {
   );
 }
 
+// ── Daily AI Admin Insight ────────────────────────────────────────────────────
+
+interface AdminInsight {
+  generatedAt: string;
+  summary: string;
+  insights: Array<{ market: string; winRate: number; totalTips: number; observation: string }>;
+  suggestions: string[];
+  message?: string;
+}
+
+function AdminInsightSection() {
+  const { getToken } = useAuth();
+  const { data, isLoading, refetch, isFetching } = useQuery<AdminInsight>({
+    queryKey: ["adminInsight"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/admin/insight", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to fetch insight");
+      return res.json();
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+
+  return (
+    <div className="border-t border-white/10 pt-8">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl font-bold text-white uppercase tracking-wider border-b border-white/10 pb-2 flex items-center">
+          <Brain className="w-5 h-5 mr-2 text-violet-400" />
+          DAILY AI INSIGHT
+        </h2>
+        <button
+          onClick={() => refetch()}
+          disabled={isFetching}
+          className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground hover:text-white transition-colors px-3 py-1.5 rounded border border-white/10 hover:border-white/20"
+        >
+          <RefreshCw className={`w-3 h-3 ${isFetching ? "animate-spin" : ""}`} />
+          Refresh
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Activity className="w-6 h-6 text-primary animate-pulse" /></div>
+      ) : data?.message ? (
+        <div className="glass-card p-6 rounded-xl text-muted-foreground font-mono text-sm">
+          {data.message}
+        </div>
+      ) : data ? (
+        <div className="space-y-4">
+          {data.generatedAt && (
+            <p className="text-xs font-mono text-muted-foreground">
+              Generated: {new Date(data.generatedAt).toLocaleString()}
+            </p>
+          )}
+          <div className="glass-card p-5 rounded-xl">
+            <p className="text-sm text-white/80 font-mono leading-relaxed">{data.summary}</p>
+          </div>
+          {data.insights && data.insights.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {data.insights.map((ins, i) => (
+                <div key={i} className="glass-card p-4 rounded-xl space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold text-violet-300 uppercase">{ins.market}</span>
+                    <span className={`text-xs font-mono font-bold ${ins.winRate >= 0.55 ? "text-teal-400" : ins.winRate >= 0.45 ? "text-amber-400" : "text-red-400"}`}>
+                      {Math.round(ins.winRate * 100)}% ({ins.totalTips} tips)
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">{ins.observation}</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {data.suggestions && data.suggestions.length > 0 && (
+            <div className="glass-card p-5 rounded-xl space-y-2">
+              <p className="text-xs font-mono font-bold text-amber-400 uppercase mb-3">Algorithm Suggestions</p>
+              {data.suggestions.map((s, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="text-amber-400 mt-0.5 shrink-0">→</span>
+                  <p className="text-xs font-mono text-white/70">{s}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function Admin() {
   return (
     <AdminErrorBoundary>
@@ -1246,6 +1336,9 @@ function AdminContent() {
 
         {/* AI Stats Section */}
         <AiStatsSection />
+
+        {/* Daily AI Insight Section */}
+        <AdminInsightSection />
 
         {/* Historical Data Seed Section */}
         <HistoricalDataSection />

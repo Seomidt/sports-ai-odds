@@ -361,7 +361,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           .limit(500),
       ]);
 
-      // Only reflect tips that were actually published to users (passed publishFilter).
+      // Today's picks: apply publish filter so only quality tips are shown.
       const toPublishable = <T extends { betType: string; edge: number | null; confidence: string | null; featureSnapshot: unknown }>(rows: T[]) =>
         filterPublishableTips(
           rows.map((r) => ({
@@ -370,8 +370,13 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           })),
         );
       const todayPicks = toPublishable(todayPicksRaw);
-      const yesterdayTips = toPublishable(yesterdayTipsRaw);
-      const allReviewed = toPublishable(allReviewedRaw).slice(0, 200);
+
+      // Yesterday + allReviewed: NO publish filter — we want ALL outcomes for accurate
+      // results display and streak/ROI calculation, not just currently-qualifying tips.
+      const mapSnapshot = <T extends { featureSnapshot: unknown }>(rows: T[]) =>
+        rows.map((r) => ({ ...r, featureSnapshot: (r.featureSnapshot ?? null) as Record<string, unknown> | null }));
+      const yesterdayTips = mapSnapshot(yesterdayTipsRaw);
+      const allReviewed = mapSnapshot(allReviewedRaw).slice(0, 200);
 
       // Uncovered = fixtures yesterday with no tip
       const coveredIds = new Set(yesterdayTips.map((t) => t.fixtureId));

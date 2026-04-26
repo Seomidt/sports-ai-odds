@@ -522,7 +522,10 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
     staleTime: 5 * 60_000,
   });
 
-  const tips = data?.tips ?? [];
+  const MARKET_ORDER: Record<string, number> = { match_result: 0, over_under_2_5: 1, over_under: 1, btts: 2 };
+  const tips = (data?.tips ?? []).slice().sort((a, b) =>
+    (MARKET_ORDER[a.betType] ?? 99) - (MARKET_ORDER[b.betType] ?? 99)
+  );
 
   const betTypeLabelFn = (t: string) => {
     if (t === 'match_result') return 'Match Result';

@@ -377,8 +377,14 @@ router.get("/analysis/daily-summary", async (_req, res) => {
       const ALGO_MARKETS = new Set(["match_result", "over_under_2_5", "btts"]);
       const mapSnapshot = <T extends { featureSnapshot: unknown }>(rows: T[]) =>
         rows.map((r) => ({ ...r, featureSnapshot: (r.featureSnapshot ?? null) as Record<string, unknown> | null }));
-      const yesterdayTips = mapSnapshot(yesterdayTipsRaw).filter((t) => ALGO_MARKETS.has((t as { betType: string }).betType));
-      const allReviewed = mapSnapshot(allReviewedRaw).filter((t) => ALGO_MARKETS.has((t as { betType: string }).betType)).slice(0, 200);
+      const yesterdayTips = mapSnapshot(yesterdayTipsRaw).filter((t) =>
+        ALGO_MARKETS.has((t as { betType: string }).betType) &&
+        (t as { marketOdds: number | null }).marketOdds != null
+      );
+      const allReviewed = mapSnapshot(allReviewedRaw).filter((t) =>
+        ALGO_MARKETS.has((t as { betType: string }).betType) &&
+        (t as { marketOdds: number | null }).marketOdds != null
+      ).slice(0, 200);
 
       // Uncovered = fixtures yesterday with no tip
       const coveredIds = new Set(yesterdayTips.map((t) => t.fixtureId));

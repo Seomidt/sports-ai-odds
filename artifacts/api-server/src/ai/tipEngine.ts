@@ -329,6 +329,10 @@ function truncate(text: string, maxWords = 35): string {
   return words.slice(0, maxWords).join(" ").replace(/[,.]?$/, "") + ".";
 }
 
+function rankLabel(rank: number | null | undefined): string {
+  return rank != null ? `#${rank}` : "unranked";
+}
+
 function matchResultReasoning(
   ctx: AlgoContext,
   side: "home" | "draw" | "away",
@@ -338,31 +342,42 @@ function matchResultReasoning(
   const gdDiff = ctx.homeGD != null && ctx.awayGD != null ? ctx.homeGD - ctx.awayGD : null;
   const ptsDiff = ctx.homePoints != null && ctx.awayPoints != null ? ctx.homePoints - ctx.awayPoints : null;
   const pct = Math.round(prob * 100);
+  const hLabel = `${ctx.homeTeam} ${rankLabel(ctx.homeRank)}`;
+  const aLabel = `${ctx.awayTeam} ${rankLabel(ctx.awayRank)}`;
 
   if (side === "home") {
-    if (rankDiff != null && gdDiff != null && rankDiff >= 8 && gdDiff >= 5) {
-      return truncate(`${ctx.homeTeam} ranked ${rankDiff} places higher with GD advantage of +${gdDiff} — strong home win probability at ${pct}%.`);
+    if (rankDiff != null && rankDiff >= 8 && gdDiff != null && gdDiff >= 5) {
+      return truncate(`${hLabel} vs ${aLabel} — ${rankDiff}-place ranking gap and GD advantage of +${gdDiff} strongly favors the home side. Home win backed at ${pct}%.`);
     }
     if (ptsDiff != null && ptsDiff >= 10) {
-      return truncate(`${ctx.homeTeam} leads the table by ${ptsDiff} points — superior league position and home advantage.`);
+      return truncate(`${hLabel} holds a ${ptsDiff}-point table lead over ${aLabel}. Superior league position and home advantage combine for a ${pct}% win probability.`);
     }
-    return truncate(`${ctx.homeTeam} rank and form edge over ${ctx.awayTeam} — home win at ${pct}% probability.`);
+    if (rankDiff != null && rankDiff >= 4) {
+      return truncate(`${hLabel} ranked ${rankDiff} places above ${aLabel} — table quality and home advantage back a ${pct}% win probability.`);
+    }
+    return truncate(`${hLabel} holds a marginal edge over ${aLabel} at home — algorithm rates home win at ${pct}%.`);
   }
 
   if (side === "away") {
     const absDiff = rankDiff != null ? Math.abs(rankDiff) : null;
-    if (absDiff != null && gdDiff != null && absDiff >= 8) {
-      return truncate(`${ctx.awayTeam} ranked ${absDiff} places higher with better GD — away win expected at ${pct}% despite travel.`);
-    }
     const absPts = ptsDiff != null ? Math.abs(ptsDiff) : null;
-    if (absPts != null && absPts >= 10) {
-      return truncate(`${ctx.awayTeam} significantly stronger on points — table quality backs away win at ${pct}%.`);
+    if (absDiff != null && absDiff >= 8 && gdDiff != null) {
+      return truncate(`${aLabel} ranked ${absDiff} places above ${hLabel} — significant quality gap backs an away win at ${pct}% despite travel.`);
     }
-    return truncate(`${ctx.awayTeam} table position and form favour away win over ${ctx.homeTeam}.`);
+    if (absPts != null && absPts >= 10) {
+      return truncate(`${aLabel} outranks ${hLabel} by ${absPts} points — table superiority overrides home advantage, away win at ${pct}%.`);
+    }
+    if (absDiff != null && absDiff >= 4) {
+      return truncate(`${aLabel} ranked ${absDiff} places above ${hLabel} — visitor quality favoured at ${pct}% despite playing away.`);
+    }
+    return truncate(`${aLabel} edge in form and table position over ${hLabel} — away win probability ${pct}%.`);
   }
 
   // draw
-  return truncate(`Closely matched sides — rank and points gap minimal, draw elevated to ${pct}% probability.`);
+  if (rankDiff != null && Math.abs(rankDiff) <= 3) {
+    return truncate(`${hLabel} vs ${aLabel} — sides separated by just ${Math.abs(rankDiff)} places. Minimal gap in quality elevates draw probability to ${pct}%.`);
+  }
+  return truncate(`${hLabel} vs ${aLabel} — closely matched on form and table position. Draw rated at ${pct}% probability.`);
 }
 
 function overUnderReasoning(
@@ -373,32 +388,71 @@ function overUnderReasoning(
   prob: number,
 ): string {
   const pct = Math.round(prob * 100);
+  const homeFor = ctx.homeSeasonStats?.goalsForAvgHome ?? ctx.homeSeasonStats?.goalsForAvg;
+  const awayFor = ctx.awaySeasonStats?.goalsForAvgAway ?? ctx.awaySeasonStats?.goalsForAvg;
   if (isOver) {
-    return truncate(`Combined expected goals of ${lambda.toFixed(1)} per game — both attacks productive, over ${line} goals at ${pct}%.`);
+    if (homeFor != null && awayFor != null) {
+      return truncate(`${ctx.homeTeam} averages ${homeFor.toFixed(1)} goals at home, ${ctx.awayTeam} ${awayFor.toFixed(1)} away — combined output of ${lambda.toFixed(1)} expected goals backs over ${line} at ${pct}%.`);
+    }
+    return truncate(`Expected goals model projects ${lambda.toFixed(1)} total goals — both attacks productive enough to clear the ${line} line at ${pct}%.`);
   }
-  return truncate(`Combined expected goals of ${lambda.toFixed(1)} — defensive quality on both sides, under ${line} goals at ${pct}%.`);
+  if (homeFor != null && awayFor != null) {
+    return truncate(`${ctx.homeTeam} (${homeFor.toFixed(1)} at home) and ${ctx.awayTeam} (${awayFor.toFixed(1)} away) — combined output of ${lambda.toFixed(1)} goals favours staying under ${line} at ${pct}%.`);
+  }
+  return truncate(`Defensive quality on both sides keeps expected goals at ${lambda.toFixed(1)} — under ${line} goals favoured at ${pct}%.`);
 }
 
 function bttsReasoning(ctx: AlgoContext, isYes: boolean, prob: number): string {
   const pct = Math.round(prob * 100);
   const homeFor = ctx.homeSeasonStats?.goalsForAvgHome ?? ctx.homeSeasonStats?.goalsForAvg;
   const awayFor = ctx.awaySeasonStats?.goalsForAvgAway ?? ctx.awaySeasonStats?.goalsForAvg;
+  const homeAgainst = ctx.homeSeasonStats?.goalsAgainstAvgHome ?? ctx.homeSeasonStats?.goalsAgainstAvg;
+  const awayAgainst = ctx.awaySeasonStats?.goalsAgainstAvgAway ?? ctx.awaySeasonStats?.goalsAgainstAvg;
   if (isYes && homeFor != null && awayFor != null) {
-    return truncate(`${ctx.homeTeam} scores ${homeFor.toFixed(1)} at home, ${ctx.awayTeam} ${awayFor.toFixed(1)} away — both likely to find the net at ${pct}%.`);
+    const defNote = homeAgainst != null && awayAgainst != null
+      ? ` Both defences concede (${homeAgainst.toFixed(1)} and ${awayAgainst.toFixed(1)} per game).`
+      : "";
+    return truncate(`${ctx.homeTeam} scores ${homeFor.toFixed(1)} at home, ${ctx.awayTeam} ${awayFor.toFixed(1)} away — both teams likely to score at ${pct}%.${defNote}`);
   }
   if (!isYes) {
-    return truncate(`High clean sheet rate on at least one side reduces BTTS probability — at least one team kept quiet.`);
+    return truncate(`At least one side has a strong defensive record — BTTS unlikely with probability at ${pct}%.`);
   }
   return truncate(`Scoring tendency from both teams backs BTTS Yes at ${pct}% probability.`);
 }
 
 function cornersReasoning(ctx: AlgoContext, isOver: boolean, prob: number): string {
-  const combined = ((ctx.homeRecentStats?.avgCorners ?? 5) + (ctx.awayRecentStats?.avgCorners ?? 5));
+  const homeAvg = ctx.homeRecentStats?.avgCorners ?? 5;
+  const awayAvg = ctx.awayRecentStats?.avgCorners ?? 5;
+  const combined = homeAvg + awayAvg;
   const pct = Math.round(prob * 100);
   if (isOver) {
-    return truncate(`Teams average ${combined.toFixed(1)} combined corners per game — set piece activity supports over line at ${pct}%.`);
+    return truncate(`${ctx.homeTeam} wins ${homeAvg.toFixed(1)} corners per game, ${ctx.awayTeam} ${awayAvg.toFixed(1)} — combined average of ${combined.toFixed(1)} backs the over line at ${pct}%.`);
   }
-  return truncate(`Low corner volume from both teams — under line favoured at ${pct}%.`);
+  return truncate(`Combined corner average of ${combined.toFixed(1)} per game — low set piece volume keeps the under line favoured at ${pct}%.`);
+}
+
+function doubleChanceReasoning(
+  ctx: AlgoContext,
+  side: "1X" | "X2" | "12",
+  combinedProb: number,
+): string {
+  const rankDiff = ctx.awayRank != null && ctx.homeRank != null ? ctx.awayRank - ctx.homeRank : null;
+  const pct = Math.round(combinedProb * 100);
+  const hLabel = `${ctx.homeTeam} ${rankLabel(ctx.homeRank)}`;
+  const aLabel = `${ctx.awayTeam} ${rankLabel(ctx.awayRank)}`;
+
+  if (side === "12") {
+    if (rankDiff != null && Math.abs(rankDiff) >= 6) {
+      const stronger = rankDiff > 0 ? ctx.homeTeam : ctx.awayTeam;
+      return truncate(`${hLabel} vs ${aLabel} — ${Math.abs(rankDiff)}-place ranking gap and skill differential heavily favors a decisive result. Excludes draw outcome. Combined win probability ${pct}%.`);
+    }
+    return truncate(`${hLabel} vs ${aLabel} — both teams more likely to win than draw. Double chance covers either winner at ${pct}% combined probability.`);
+  }
+  if (side === "1X") {
+    return truncate(`${hLabel} backed by home advantage — ${ctx.homeTeam} or draw covers two outcomes at ${pct}% combined probability. Reduces away win risk.`);
+  }
+  // X2
+  return truncate(`${aLabel} likely to at least avoid defeat — draw or ${ctx.awayTeam} win covers two outcomes at ${pct}% combined probability.`);
 }
 
 // ─── Main tip generator ───────────────────────────────────────────────────────
@@ -507,25 +561,32 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
       bet_type: "asian_handicap", bet_side: "home",
       recommendation: `${ctx.homeTeam} Asian Handicap`,
       prob: handicapProb, odds: ctx.odds.asianHandicapHome,
-      reasoning: truncate(`${ctx.homeTeam} ranked ${rankDiff} positions higher — strong table advantage justifies handicap line at ${Math.round(handicapProb * 100)}%.`),
+      reasoning: truncate(`${ctx.homeTeam} ${rankLabel(ctx.homeRank)} ranked ${rankDiff} places above ${ctx.awayTeam} ${rankLabel(ctx.awayRank)} with GD advantage of +${gdDiff ?? "?"} — table quality justifies handicap at ${Math.round(handicapProb * 100)}% probability.`),
     }]));
   }
 
-  // ── Double Chance (safety net for uncertain matches) ─────────────────────
+  // ── Double Chance ─────────────────────────────────────────────────────────
+  const dc1XProb = clamp(homeProb + drawProb, 0.1, 0.95);
+  const dcX2Prob = clamp(drawProb + awayProb, 0.1, 0.95);
+  const dc12Prob = clamp(homeProb + awayProb, 0.1, 0.95);
   const dcCandidates = withEdge([
     ...(ctx.odds.doubleChance1X != null ? [{
       bet_type: "double_chance", bet_side: "1X",
       recommendation: `${ctx.homeTeam} or Draw (1X)`,
-      prob: clamp(homeProb + drawProb, 0.1, 0.95),
-      odds: ctx.odds.doubleChance1X,
-      reasoning: truncate(`${ctx.homeTeam} or Draw covers two outcomes — combined probability ${Math.round((homeProb + drawProb) * 100)}%.`),
+      prob: dc1XProb, odds: ctx.odds.doubleChance1X,
+      reasoning: doubleChanceReasoning(ctx, "1X", dc1XProb),
     }] : []),
     ...(ctx.odds.doubleChanceX2 != null ? [{
       bet_type: "double_chance", bet_side: "X2",
       recommendation: `Draw or ${ctx.awayTeam} (X2)`,
-      prob: clamp(drawProb + awayProb, 0.1, 0.95),
-      odds: ctx.odds.doubleChanceX2,
-      reasoning: truncate(`Draw or ${ctx.awayTeam} covers two outcomes — combined probability ${Math.round((drawProb + awayProb) * 100)}%.`),
+      prob: dcX2Prob, odds: ctx.odds.doubleChanceX2,
+      reasoning: doubleChanceReasoning(ctx, "X2", dcX2Prob),
+    }] : []),
+    ...(ctx.odds.doubleChance12 != null ? [{
+      bet_type: "double_chance", bet_side: "12",
+      recommendation: `${ctx.homeTeam} or ${ctx.awayTeam} (12)`,
+      prob: dc12Prob, odds: ctx.odds.doubleChance12,
+      reasoning: doubleChanceReasoning(ctx, "12", dc12Prob),
     }] : []),
   ]);
 
@@ -536,7 +597,7 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
       recommendation: `${ctx.homeTeam} Win to Nil`,
       prob: clamp(homeProb * 0.45, 0.10, 0.50), // win AND clean sheet
       odds: ctx.odds.winToNilHome,
-      reasoning: truncate(`${ctx.homeTeam} strong at home with defensive record — win to nil viable at current odds.`),
+      reasoning: truncate(`${ctx.homeTeam} ${rankLabel(ctx.homeRank)} ranked ${rankDiff} places above ${ctx.awayTeam} ${rankLabel(ctx.awayRank)} — dominant home side with defensive record backs win to nil at ${Math.round(homeProb * 0.45 * 100)}%.`),
     }] : []),
   ]);
 

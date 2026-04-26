@@ -21,7 +21,10 @@ const SPECIAL_STATUS_LABEL: Record<string, string> = {
 
 function isPrematch(f: Fixture) {
   const s = f.statusShort ?? "";
-  return !LIVE_STATUSES.has(s) && !POST_STATUSES.has(s);
+  if (LIVE_STATUSES.has(s) || POST_STATUSES.has(s)) return false;
+  // Hide fixtures that are >2h past kickoff but still NS — stale status
+  if (f.kickoff && new Date(f.kickoff).getTime() < Date.now() - 2 * 60 * 60 * 1000) return false;
+  return true;
 }
 
 function kickoffLabel(kickoff: string | null | undefined): string {

@@ -158,6 +158,29 @@ async function syncNearTermFixtures() {
   await syncFixturesForDate(getTomorrow());
 }
 
+// Sweep fixtures in DB that have NS status but kickoff has already passed.
+// This catches fixtures from non-tracked leagues (e.g. Eredivisie) that were
+// added to the DB but never get updated by the tracked-leagues-only sync loop.
+async function sweepStaleNsFixtures() {
+  const cutoff = new Date(Date.now() - 90 * 60 * 1000); // kickoff >90min ago
+  const stale = await db.query.fixtures.findMany({
+    where: (f, { and: a, lte, inArray: inA }) =>
+      a(lte(f.kickoff, cutoff), inA(f.statusShort, ["NS", "TBD"])),
+    columns: { fixtureId: true },
+    limit: 30,
+  });
+  if (stale.length === 0) return;
+  console.log(`[poller] sweepStaleNs: ${stale.length} fixtures to refresh`);
+  for (const fix of stale) {
+    try {
+      const fresh = await fetchFixtureById(fix.fixtureId);
+      if (fresh) await upsertFixture(fresh);
+    } catch (err) {
+      console.error(`[poller] sweepStaleNs error for ${fix.fixtureId}:`, err);
+    }
+  }
+}
+
 async function syncRecentResults() {
   // Yesterday + 2 days ago: FT results are stable, 2h refresh is plenty
   await syncFixturesForDate(getDateOffset(-1));
@@ -2479,6 +2502,10 @@ export function startPoller() {
 
   // Today + tomorrow fixtures: every 15 min — live scores handled by adaptiveLiveLoop
   setInterval(() => syncNearTermFixtures().catch(console.error), 15 * 60 * 1000);
+
+  // Stale NS cleanup: every 10 min — catches non-tracked leagues stuck at NS after kickoff
+  sweepStaleNsFixtures().catch(console.error);
+  setInterval(() => sweepStaleNsFixtures().catch(console.error), 10 * 60 * 1000);
 
   // Yesterday + day before (FT results): every 2 hours — finished games rarely change
   setInterval(() => syncRecentResults().catch(console.error), 2 * 60 * 60 * 1000);

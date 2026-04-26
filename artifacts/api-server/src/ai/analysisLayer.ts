@@ -1982,3 +1982,182 @@ Rules: No emoji. Be direct and analytical. Focus on the bet with the most edge.`
   setCached(cacheKey, result, 2 * 60 * 60 * 1000); // 2h in-memory
   return result;
 }
+
+// ─── Daily admin insight ──────────────────────────────────────────────────────
+
+/**
+ * Runs once per day. Queries the last 30 days of reviewed tips,
+ * sends aggregated stats to Claude in a single call, and stores
+ * the insight in system_kv as "admin:daily_insight".
+ *
+ * Cost: ~1 AI call/day regardless of fixture volume.
+ */
+export async function generateDailyAdminInsight(): Promise<void> {
+  const todayKey = new Date().toISOString().slice(0, 10); // "2026-04-26"
+  const kvKey = `admin:daily_insight`;
+
+  // Skip if already generated today
+  const existing = await kvGet(kvKey);
+  if (existing) {
+    try {
+      const parsed = JSON.parse(existing);
+      if (parsed.date === todayKey) {
+        console.log("[admin-insight] Already generated today, skipping.");
+        return;
+      }
+    } catch { /* regenerate if parse fails */ }
+  }
+
+  // Pull last 30 days of reviewed tips
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  const tips = await db.query.aiBettingTips.findMany({
+    where: (t, { and: a, gte: g, isNotNull: inn }) =>
+      a(inn(t.outcome), g(t.createdAt, cutoff)),
+    orderBy: (t, { desc: d }) => [d(t.createdAt)],
+    limit: 500,
+  });
+
+  if (tips.length < 10) {
+    console.log(`[admin-insight] Not enough reviewed tips (${tips.length}) — skipping.`);
+    return;
+  }
+
+  // Aggregate stats
+  const byMarket: Record<string, { total: number; hits: number; totalEdge: number }> = {};
+  const byLeague: Record<string, { total: number; hits: number }> = {};
+  const byConfidence: Record<string, { total: number; hits: number }> = {};
+  const byModelVersion: Record<string, { total: number; hits: number }> = {};
+
+  for (const tip of tips) {
+    const market = tip.betType;
+    const league = tip.leagueName ?? "Unknown";
+    const conf = tip.confidence ?? "unknown";
+    const model = tip.modelVersion ?? "unknown";
+    const isHit = tip.outcome === "hit" ? 1 : 0;
+    const edge = tip.edge ?? 0;
+
+    if (!byMarket[market]) byMarket[market] = { total: 0, hits: 0, totalEdge: 0 };
+    byMarket[market]!.total++;
+    byMarket[market]!.hits += isHit;
+    byMarket[market]!.totalEdge += edge;
+
+    if (!byLeague[league]) byLeague[league] = { total: 0, hits: 0 };
+    byLeague[league]!.total++;
+    byLeague[league]!.hits += isHit;
+
+    if (!byConfidence[conf]) byConfidence[conf] = { total: 0, hits: 0 };
+    byConfidence[conf]!.total++;
+    byConfidence[conf]!.hits += isHit;
+
+    if (!byModelVersion[model]) byModelVersion[model] = { total: 0, hits: 0 };
+    byModelVersion[model]!.total++;
+    byModelVersion[model]!.hits += isHit;
+  }
+
+  const fmt = (obj: Record<string, { total: number; hits: number; totalEdge?: number }>) =>
+    Object.entries(obj)
+      .sort((a, b) => b[1].total - a[1].total)
+      .map(([k, v]) => {
+        const hr = Math.round((v.hits / v.total) * 100);
+        const edgePart = v.totalEdge != null ? ` | avg edge ${(v.totalEdge / v.total * 100).toFixed(1)}%` : "";
+        return `  ${k}: ${v.hits}/${v.total} (${hr}% hit rate${edgePart})`;
+      })
+      .join("\n");
+
+  const prompt = `You are a sports betting algorithm analyst. Review the following 30-day performance data for an algorithmic football betting tip generator and provide specific, actionable improvement suggestions.
+
+PERFORMANCE DATA (last 30 days, ${tips.length} reviewed tips):
+
+By market:
+${fmt(byMarket)}
+
+By league:
+${fmt(byLeague)}
+
+By confidence tier:
+${fmt(byConfidence)}
+
+By model version:
+${fmt(byModelVersion)}
+
+Return a JSON object:
+{
+  "summary": "1-2 sentence overall assessment",
+  "insights": ["specific observation 1", "specific observation 2", "specific observation 3"],
+  "suggestions": ["concrete algorithm change 1", "concrete algorithm change 2"],
+  "underperforming": ["market or league that is below expected hit rate"],
+  "overperforming": ["market or league that is above expected hit rate"]
+}
+
+Rules: Be specific and data-driven. Reference actual numbers. No generic advice. Focus on what the algorithm should change.`;
+
+  const raw = await callClaude(prompt);
+  if (!raw) {
+    console.warn("[admin-insight] Claude returned null — skipping.");
+    return;
+  }
+
+  const schema = z.object({
+    summary: z.string(),
+    insights: z.array(z.string()),
+    suggestions: z.array(z.string()),
+    underperforming: z.array(z.string()).optional(),
+    overperforming: z.array(z.string()).optional(),
+  });
+
+  const parsed = parseJson(raw, schema, {
+    summary: "Performance data collected.",
+    insights: [],
+    suggestions: [],
+  });
+
+  const value = JSON.stringify({
+    date: todayKey,
+    generatedAt: new Date().toISOString(),
+    tipsAnalysed: tips.length,
+    ...parsed,
+  });
+
+  await kvSet(kvKey, value);
+  console.log(`[admin-insight] Generated and stored daily insight for ${todayKey}.`);
+}
+
+/** Fetch the latest stored admin insight from system_kv. */
+export async function getAdminInsight(): Promise<Record<string, unknown> | null> {
+  const raw = await kvGet("admin:daily_insight");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}actors: parsed.keyFactors,
+    bestBet: bestTip ? `${bestTip.recommendation}` : null,
+    bestBetOdds: bestTip?.marketOdds ? Number(bestTip.marketOdds) : null,
+    generatedAt: new Date().toISOString(),
+  };
+
+  // 4. Save to DB — survives server restarts
+  await db.insert(prematchSyntheses).values({
+    fixtureId,
+    headline: result.headline,
+    summary: result.summary,
+    keyFactors: result.keyFactors,
+    bestBet: result.bestBet,
+    bestBetOdds: result.bestBetOdds,
+    generatedAt: new Date(),
+  }).onConflictDoUpdate({
+    target: prematchSyntheses.fixtureId,
+    set: {
+      headline: result.headline,
+      summary: result.summary,
+      keyFactors: result.keyFactors,
+      bestBet: result.bestBet,
+      bestBetOdds: result.bestBetOdds,
+      generatedAt: new Date(),
+    },
+  });
+
+  setCached(cacheKey, result, 2 * 60 * 60 * 1000); // 2h in-memory
+  return result;
+}

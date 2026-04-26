@@ -66,7 +66,7 @@ import {
   type ApiStatItem,
   type ApiLineup,
 } from "./apiFootballClient.js";
-import { initAiStats, getBettingTips, triggerPostMatchReview } from "../ai/analysisLayer.js";
+import { initAiStats, getBettingTips, triggerPostMatchReview, generateDailyAdminInsight } from "../ai/analysisLayer.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
@@ -2498,6 +2498,10 @@ export function startPoller() {
 
   // Missed post-match review sweep: DISABLED (cost reduction)
   // setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
+
+  // Daily admin insight: one AI call/day analysing algorithm performance
+  generateDailyAdminInsight().catch(console.error); // run on startup too
+  setInterval(() => generateDailyAdminInsight().catch(console.error), 24 * 60 * 60 * 1000);
 
   // Full window -3 to +7 days: every 2 hours
   setInterval(() => syncTodayFixtures().catch(console.error), 2 * 60 * 60 * 1000);

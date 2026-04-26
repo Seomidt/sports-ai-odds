@@ -5,7 +5,7 @@ import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips
 import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAuth.js";
 import { getApiStats } from "../ingestion/apiFootballClient.js";
-import { getAiStats } from "../ai/analysisLayer.js";
+import { getAiStats, getAdminInsight } from "../ai/analysisLayer.js";
 import {
   forceFullSync,
   syncOddsForFixture,
@@ -60,6 +60,21 @@ router.get("/admin/stats", requireAdmin, (_req, res) => {
 
 router.get("/admin/ai-stats", requireAdmin, (_req, res) => {
   return res.json(getAiStats());
+});
+
+// ── Daily algorithm insight ────────────────────────────────────────────────────
+// Returns the latest AI-generated insight about algorithm performance.
+// Generated once per day automatically; refreshed on next day's server run.
+
+router.get("/admin/insight", requireAdmin, async (_req, res) => {
+  try {
+    const insight = await getAdminInsight();
+    if (!insight) return res.json({ message: "No insight generated yet. Check back after the first full day of results." });
+    return res.json(insight);
+  } catch (err) {
+    console.error("[admin/insight]", err);
+    return res.status(500).json({ error: "Failed to fetch insight" });
+  }
 });
 
 // ── Manual outcome review sweep ───────────────────────────────────────────────

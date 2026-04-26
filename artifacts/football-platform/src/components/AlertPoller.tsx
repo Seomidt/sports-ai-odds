@@ -3,6 +3,7 @@ import type { Alert as BaseAlert } from "@workspace/api-client-react";
 import { useLocation } from "wouter";
 import { Zap, X, ArrowRight, Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import { getNotifPrefs } from "./NotificationBell";
 
 type Alert = BaseAlert & { tier?: string | null };
 
@@ -180,8 +181,19 @@ export function AlertPoller() {
   });
 
   useEffect(() => {
-    // Defensive: backend already filters to tier='critical', but filter again client-side
-    const alerts: Alert[] = (data?.alerts ?? []).filter((a) => a.tier === "critical");
+    const prefs = getNotifPrefs();
+
+    // Respect mute and type preferences
+    const alerts: Alert[] = (data?.alerts ?? []).filter((a) => {
+      if (a.tier !== "critical") return false;
+      if (prefs.muted) return false;
+      const key = a.signalKey ?? "";
+      if (key === "live_value" && !prefs.types.live_value) return false;
+      if (key === "high_value_tip" && !prefs.types.high_value_tip) return false;
+      if (key === "odds_drop" && !prefs.types.odds_drop) return false;
+      if ((key === "goal" || key === "red_card" || key === "match_event") && !prefs.types.match_event) return false;
+      return true;
+    });
     let changed = false;
 
     setActiveByFixture(prev => {

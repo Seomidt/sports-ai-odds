@@ -4,6 +4,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useGetMe } from "@workspace/api-client-react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { TopSignalBanner } from "./TopSignalBanner";
+import { NotificationBell } from "./NotificationBell";
 import { useState } from "react";
 
 const appLogo = "/logo.png";
@@ -70,10 +71,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary border border-secondary/30">
               <User className="w-4 h-4" />
             </div>
-            <div className="ml-3 overflow-hidden">
+            <div className="ml-3 overflow-hidden flex-1">
               <p className="text-sm font-medium text-white truncate">{user?.email}</p>
               <p className="text-xs text-muted-foreground capitalize">{me?.role || "User"}</p>
             </div>
+            <NotificationBell />
           </div>
           <button
             onClick={() => signOut()}
@@ -154,12 +156,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <span className="font-mono font-bold text-sm tracking-tight">sports-ai-odds</span>
             </div>
           </Link>
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="text-muted-foreground hover:text-white p-1"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button
+              onClick={() => setMobileMenuOpen(true)}
+              className="text-muted-foreground hover:text-white p-1"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          </div>
         </header>
 
         <TopSignalBanner />

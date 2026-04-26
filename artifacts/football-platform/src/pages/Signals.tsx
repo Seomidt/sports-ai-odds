@@ -39,6 +39,16 @@ function classifySignal(text: string, key: string | null): {
   const t = text.toLowerCase();
   const k = (key ?? "").toLowerCase();
 
+  if (k === "live_value" || t.includes("live value")) {
+    return {
+      label: "Live Value",
+      color: "text-teal-400",
+      border: "border-teal-400/30",
+      badge: "bg-teal-400/10 text-teal-400 border-teal-400/25",
+      iconColor: "text-teal-400",
+      icon: Activity,
+    };
+  }
   if (k === "high_value_tip" || t.includes("high-value tip") || t.includes("value tip")) {
     return {
       label: "Value Tip",

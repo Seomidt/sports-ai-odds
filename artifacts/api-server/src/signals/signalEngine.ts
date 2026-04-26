@@ -1,6 +1,6 @@
 import { db } from "@workspace/db";
-import { fixtureSignals, teamFeatures } from "@workspace/db/schema";
-import { eq, and } from "drizzle-orm";
+import { fixtureSignals, teamFeatures, liveOddsSnapshots, alertLog, aiBettingTips } from "@workspace/db/schema";
+import { eq, and, desc, gte } from "drizzle-orm";
 import { fetchWeatherForCity } from "../lib/weatherClient.js";
 
 type Phase = "pre" | "live" | "post";
@@ -161,6 +161,85 @@ export async function runSignalEngine(fixtureId: number, phase: Phase) {
       `Away team performing ${awayTempoPct}% over expected tempo`,
       af["pressure_shift_score"] ?? null,
       awayOverPerforming);
+
+    // ── Live edge detection ──────────────────────────────────────────────────
+    // Compare algo pre-match probability to current live odds.
+    // Bookmakers are sometimes slow to move — this catches windows of value.
+    const latestLiveOdds = await db
+      .select()
+      .from(liveOddsSnapshots)
+      .where(eq(liveOddsSnapshots.fixtureId, fixtureId))
+      .orderBy(desc(liveOddsSnapshots.snappedAt))
+      .limit(1)
+      .then((r) => r[0] ?? null);
+
+    if (latestLiveOdds) {
+      const preTip = await db
+        .select({
+          recommendation: aiBettingTips.recommendation,
+          aiProbability: aiBettingTips.aiProbability,
+          betType: aiBettingTips.betType,
+          trustScore: aiBettingTips.trustScore,
+        })
+        .from(aiBettingTips)
+        .where(and(eq(aiBettingTips.fixtureId, fixtureId), eq(aiBettingTips.betType, "match_result")))
+        .orderBy(desc(aiBettingTips.trustScore))
+        .limit(1)
+        .then((r) => r[0] ?? null);
+
+      if (preTip?.aiProbability && preTip.recommendation) {
+        const rec = preTip.recommendation.toLowerCase();
+        const liveOddsForRec =
+          rec.includes("home") ? latestLiveOdds.homeWin :
+          rec.includes("draw") ? latestLiveOdds.draw :
+          rec.includes("away") ? latestLiveOdds.awayWin : null;
+
+        if (liveOddsForRec && liveOddsForRec > 1.05) {
+          // Confidence decay: pre-match conviction fades as game progresses.
+          // At 0 min = full pre-match weight. At 90 min = 40% weight.
+          const minute = (hf["current_minute"] ?? af["current_minute"] ?? 45) as number;
+          const decayFactor = Math.max(0.4, 1 - (minute / 90) * 0.6);
+
+          const impliedLive = 1 / liveOddsForRec;
+          // Blend pre-match probability with current implied — decay reduces pre-match influence late in game
+          const blendedProb = (preTip.aiProbability * decayFactor) + (impliedLive * (1 - decayFactor));
+          const liveEdge = blendedProb - impliedLive;
+
+          await upsertSignal(
+            fixtureId, "live", "live_edge",
+            `Live value: ${preTip.recommendation} @ ${liveOddsForRec.toFixed(2)} — edge ${Math.round(liveEdge * 100)}%`,
+            liveEdge,
+            liveEdge > 0.06,
+          );
+
+          // Fire critical alert at most once per 30 min per fixture to avoid spam
+          if (liveEdge > 0.06) {
+            const recentAlert = await db
+              .select({ id: alertLog.id })
+              .from(alertLog)
+              .where(and(
+                eq(alertLog.fixtureId, fixtureId),
+                eq(alertLog.signalKey, "live_value"),
+                gte(alertLog.createdAt, new Date(Date.now() - 30 * 60 * 1000)),
+              ))
+              .limit(1)
+              .then((r) => r[0] ?? null);
+
+            if (!recentAlert) {
+              await db.insert(alertLog).values({
+                fixtureId,
+                sessionId: null,
+                signalKey: "live_value",
+                alertText: `Live value: ${fixture.homeTeamName} vs ${fixture.awayTeamName} — ${preTip.recommendation} @ ${liveOddsForRec.toFixed(2)} (edge ${Math.round(liveEdge * 100)}%)`,
+                tier: "critical",
+                isRead: false,
+                createdAt: new Date(),
+              }).catch((e: unknown) => console.error("[live-edge] alert insert error:", e));
+            }
+          }
+        }
+      }
+    }
   }
 
   if (phase === "post") {

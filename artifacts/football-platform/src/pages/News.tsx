@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Newspaper, Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Activity, Newspaper, Trophy, TrendingUp, Minus, ChevronDown } from "lucide-react";
 
 const LEAGUES = [
   { id: 39,  name: "Premier League",      flag: "🏴󠁧󠁢󠁥󠁮󠁧󠁿" },
@@ -164,24 +164,26 @@ export function News() {
             <h1 className="text-3xl font-bold font-mono tracking-tight text-white">NEWS</h1>
           </div>
           <p className="text-muted-foreground text-sm">
-            AI-generated match reports for top teams · powered by recent results
+            Algorithm-generated match reports for top teams · powered by recent results
           </p>
         </header>
 
-        <div className="flex flex-wrap gap-2">
-          {LEAGUES.map((league) => (
-            <button
-              key={league.id}
-              onClick={() => setActiveLeague(league)}
-              className={`px-4 py-2 rounded-lg text-xs font-mono font-semibold tracking-wider uppercase transition-all border ${
-                activeLeague.id === league.id
-                  ? "bg-primary/20 text-primary border-primary/40"
-                  : "bg-black/20 text-muted-foreground border-white/10 hover:text-white hover:border-white/20"
-              }`}
-            >
-              {league.flag} {league.name}
-            </button>
-          ))}
+        <div className="relative w-full sm:w-72">
+          <select
+            value={activeLeague.id}
+            onChange={(e) => {
+              const found = LEAGUES.find((l) => l.id === Number(e.target.value));
+              if (found) setActiveLeague(found);
+            }}
+            className="w-full appearance-none bg-black/30 border border-white/10 text-white text-sm font-mono rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:border-primary/40 cursor-pointer"
+          >
+            {LEAGUES.map((league) => (
+              <option key={league.id} value={league.id} className="bg-[#0a0f1e]">
+                {league.flag} {league.name}
+              </option>
+            ))}
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         </div>
 
         {isLoading ? (

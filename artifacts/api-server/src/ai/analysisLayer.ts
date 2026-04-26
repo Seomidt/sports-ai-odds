@@ -1749,6 +1749,88 @@ export interface NewsArticle {
 
 const NEWS_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours before regenerating
 
+// ─── Algorithmic news body builder ───────────────────────────────────────────
+
+type TeamMatch = {
+  teamId: number; teamName: string; opponentName: string;
+  homeGoals: number | null; awayGoals: number | null;
+  isHome: boolean; kickoff: string | null; statusShort: string | null;
+};
+
+function buildNewsBody(teamName: string, rank: number, matches: TeamMatch[]): string {
+  const finished = matches.filter((m) =>
+    m.statusShort && ["FT", "AET", "PEN"].includes(m.statusShort) &&
+    m.homeGoals != null && m.awayGoals != null
+  );
+
+  if (finished.length === 0) {
+    return `${teamName} are ranked #${rank} and have upcoming fixtures to look forward to. Recent data is still being processed.`;
+  }
+
+  // Last match
+  const last = finished[0]!;
+  const scored = last.isHome ? last.homeGoals! : last.awayGoals!;
+  const conceded = last.isHome ? last.awayGoals! : last.homeGoals!;
+  const lastResult = scored > conceded ? "win" : scored < conceded ? "loss" : "draw";
+  const venue = last.isHome ? "at home" : "away";
+  const lastLine = `${scored}–${conceded} ${lastResult === "win" ? "victory" : lastResult === "loss" ? "defeat" : "draw"} against ${last.opponentName} (${venue})`;
+
+  // Form across all finished
+  const formParts = finished.map((m) => {
+    const gs = m.isHome ? m.homeGoals! : m.awayGoals!;
+    const gc = m.isHome ? m.awayGoals! : m.homeGoals!;
+    return gs > gc ? "W" : gs < gc ? "L" : "D";
+  });
+  const formStr = formParts.join("-");
+  const wins = formParts.filter((r) => r === "W").length;
+  const draws = formParts.filter((r) => r === "D").length;
+  const losses = formParts.filter((r) => r === "L").length;
+
+  // Goal stats
+  const totalScored = finished.reduce((s, m) => s + (m.isHome ? m.homeGoals! : m.awayGoals!), 0);
+  const totalConceded = finished.reduce((s, m) => s + (m.isHome ? m.awayGoals! : m.homeGoals!), 0);
+  const avgScored = (totalScored / finished.length).toFixed(1);
+  const avgConceded = (totalConceded / finished.length).toFixed(1);
+
+  // Sentence 1 — last result
+  const rankLabel = rank === 1 ? "table leaders" : rank <= 3 ? `#${rank} in the table` : `ranked #${rank}`;
+  const s1 = `${teamName}, currently ${rankLabel}, recorded a ${lastLine}.`;
+
+  // Sentence 2 — recent form
+  let s2 = "";
+  if (finished.length >= 2) {
+    const n = finished.length;
+    if (wins === n) {
+      s2 = `They are in excellent form, winning all ${n} of their last ${n} matches.`;
+    } else if (losses === n) {
+      s2 = `It has been a difficult run — they have lost all ${n} of their last ${n} matches (${formStr}).`;
+    } else if (wins > losses) {
+      s2 = `Across their last ${n} matches they show ${wins}W-${draws}D-${losses}L (${formStr}), pointing to a solid run of form.`;
+    } else if (losses > wins) {
+      s2 = `Form over their last ${n} matches reads ${wins}W-${draws}D-${losses}L (${formStr}), a run that will need to improve.`;
+    } else {
+      s2 = `Over ${n} recent matches their form stands at ${wins}W-${draws}D-${losses}L (${formStr}).`;
+    }
+  }
+
+  // Sentence 3 — goals
+  const attackNote =
+    parseFloat(avgScored) >= 2.0
+      ? `averaging ${avgScored} goals scored per game`
+      : parseFloat(avgScored) >= 1.0
+      ? `scoring ${avgScored} goals per game on average`
+      : `managing just ${avgScored} goals per game`;
+  const defenceNote =
+    parseFloat(avgConceded) <= 0.5
+      ? `while keeping a near-clean-sheet record (${avgConceded} conceded per game)`
+      : parseFloat(avgConceded) <= 1.2
+      ? `conceding ${avgConceded} goals per game`
+      : `but conceding ${avgConceded} per game, which will be a concern`;
+  const s3 = `In that stretch they are ${attackNote} ${defenceNote}.`;
+
+  return [s1, s2, s3].filter(Boolean).join(" ").trim();
+}
+
 export async function generateLeagueNews(
   leagueId: number,
   topTeams: Array<{ teamId: number; teamName: string; teamLogo: string | null; rank: number; points: number }>,
@@ -1805,19 +1887,8 @@ export async function generateLeagueNews(
       continue;
     }
 
-    // ── Generate new article with Claude ──────────────────────────────────────
-    const matchContext = teamMatches.map((m) => {
-      const g = m.isHome ? m.homeGoals : m.awayGoals;
-      const og = m.isHome ? m.awayGoals : m.homeGoals;
-      const res = g != null && og != null ? `${g}-${og}` : "?-?";
-      const side = m.isHome ? "H" : "A";
-      return `${m.opponentName} (${side}) ${res}`;
-    }).join(", ");
-
-    const prompt = `You are a football journalist writing short news snippets. Write a 2-sentence news blurb about ${team.teamName} (currently ranked #${team.rank} in the league table). Their recent matches: ${matchContext}. Focus on their form and what it means for the title race. Be direct, punchy. No emoji. Max 60 words total.`;
-
-    const raw = await callClaude(prompt);
-    const body = raw?.trim() ?? `${team.teamName} continue their campaign.`;
+    // ── Generate article algorithmically (no AI cost) ─────────────────────────
+    const body = buildNewsBody(team.teamName, team.rank, teamMatches);
 
     // ── Save to DB (upsert) ───────────────────────────────────────────────────
     await db.insert(newsArticles).values({

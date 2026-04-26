@@ -420,27 +420,6 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                     </Link>
                   ))}
 
-                  {yesterdayUncovered.length > 0 && (
-                    <>
-                      <div className="px-4 py-2 bg-white/2">
-                        <span className="text-[10px] font-mono text-white/20 uppercase tracking-wider">No AI coverage</span>
-                      </div>
-                      {yesterdayUncovered.map(f => (
-                        <Link key={f.fixtureId} href={`/match/${f.fixtureId}`}>
-                          <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer opacity-50">
-                            <div className="w-5 h-5 rounded-full border border-white/15 flex items-center justify-center shrink-0">
-                              <span className="text-[8px] text-white/30 font-mono">—</span>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs text-muted-foreground/40 font-mono truncate">{f.leagueName ?? ''}</div>
-                              <div className="text-sm text-white/60 truncate">{f.homeTeam} vs {f.awayTeam}</div>
-                            </div>
-                            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/15 shrink-0" />
-                          </div>
-                        </Link>
-                      ))}
-                    </>
-                  )}
                 </div>
               )}
             </div>

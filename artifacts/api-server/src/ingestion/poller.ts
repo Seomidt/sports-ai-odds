@@ -1998,21 +1998,9 @@ export async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
     return;
   }
 
-  // Only attempt fixtures that have odds — the rest stay in the implicit hidden queue
-  const { rows: withOdds } = await pool.query<{ fixture_id: number }>(
-    `SELECT DISTINCT fixture_id FROM odds_snapshots WHERE fixture_id = ANY($1)`,
-    [missing.map(f => f.fixtureId)]
-  );
-  const oddsReady = new Set(withOdds.map(r => r.fixture_id));
-  const readyToProcess = missing.filter(f => oddsReady.has(f.fixtureId));
-
-  if (readyToProcess.length === 0) {
-    console.log(`[ai-tips] No fixtures ready — ${missing.length} queued waiting for odds`);
-    return;
-  }
-
-  const batch = readyToProcess.slice(0, batchSize);
-  console.log(`[ai-tips] ${batch.length} ready to generate, ${missing.length - readyToProcess.length} queued (no odds yet)`);
+  // Algorithmic engine doesn't require odds — process all fixtures that have signals/stats
+  const batch = missing.slice(0, batchSize);
+  console.log(`[ai-tips] Generating for ${batch.length} fixtures (${missing.length} total pending)`);
   let ok = 0;
   let skipped = 0;
 
@@ -2448,9 +2436,8 @@ export function startPoller() {
   backfillMissingEdge().catch(console.error);
 
   // ── Sweep: trigger post-match reviews for tips still pending ──────────────
-  // DISABLED: post-match reviews are a major cost driver (~1 AI call per tip).
-  // Re-enable when daily spend is under control.
-  // sweepMissedPostMatchReviews().catch(console.error);
+  // Now free — outcome is determined algorithmically, no AI call needed.
+  setTimeout(() => sweepMissedPostMatchReviews().catch(console.error), 25 * 60 * 1000);
 
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncNearTermFixtures().catch(console.error);
@@ -2496,8 +2483,8 @@ export function startPoller() {
   // Yesterday + day before (FT results): every 2 hours — finished games rarely change
   setInterval(() => syncRecentResults().catch(console.error), 2 * 60 * 60 * 1000);
 
-  // Missed post-match review sweep: DISABLED (cost reduction)
-  // setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
+  // Post-match review sweep: every 3 hours — now free (algo-only, no AI)
+  setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
 
   // Daily admin insight: one AI call/day analysing algorithm performance
   generateDailyAdminInsight().catch(console.error); // run on startup too

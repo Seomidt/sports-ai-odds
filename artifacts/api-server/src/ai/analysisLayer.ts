@@ -799,6 +799,36 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     }
   }
 
+  // Fallback: if odds_snapshots has no data, extract basic 1X2/BTTS/Over2.5 from odds_markets
+  let finalHome = bestHome;
+  let finalDraw = bestDraw;
+  let finalAway = bestAway;
+  let finalBtts = anyRow?.btts ?? null;
+  let finalOver25 = anyRow?.overUnder25 ?? null;
+
+  if (!finalHome && !finalDraw && !finalAway && marketsRow?.markets) {
+    const mktFallback = marketsRow.markets as Record<string, Array<{ value: string; odd: string }>>;
+    for (const [name, entries] of Object.entries(mktFallback)) {
+      const n = name.toLowerCase();
+      if ((n === "match winner" || n === "1x2") && !finalHome) {
+        const h = entries.find(e => e.value === "Home");
+        const d = entries.find(e => e.value === "Draw");
+        const a = entries.find(e => e.value === "Away");
+        if (h) finalHome = parseFloat(h.odd) || null;
+        if (d) finalDraw = parseFloat(d.odd) || null;
+        if (a) finalAway = parseFloat(a.odd) || null;
+      }
+      if (n === "both teams score" && !finalBtts) {
+        const yes = entries.find(e => e.value.toLowerCase() === "yes");
+        if (yes) finalBtts = parseFloat(yes.odd) || null;
+      }
+      if (n === "goals over/under" && !finalOver25) {
+        const o25 = entries.find(e => e.value === "Over 2.5");
+        if (o25) finalOver25 = parseFloat(o25.odd) || null;
+      }
+    }
+  }
+
   return {
     matchLabel: `${fixture.homeTeamName} vs ${fixture.awayTeamName}`,
     homeTeam: fixture.homeTeamName ?? "Home",
@@ -813,13 +843,13 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     statusShort: fixture.statusShort,
     signals,
     odds: {
-      home: bestHome,
-      draw: bestDraw,
-      away: bestAway,
-      over25: anyRow?.overUnder25 ?? null,
+      home: finalHome,
+      draw: finalDraw,
+      away: finalAway,
+      over25: finalOver25,
       over15,
       over35,
-      btts: anyRow?.btts ?? null,
+      btts: finalBtts,
       cornersOver,
       totalCardsOver,
       asianHandicapHome: anyRow?.handicapHome ?? asianHandicapHome,
@@ -1531,32 +1561,13 @@ export async function triggerPostMatchReview(fixtureId: number): Promise<void> {
       else if (side === "away") outcome = actualResult === "away_win" ? "hit" : actualResult === "draw" ? "partial" : "miss";
     }
 
-    const prompt = `You are reviewing your own football betting prediction.
-
-Your original tip: "${tip.recommendation}" — ${tip.reasoning}
-Trust score you assigned: ${tip.trustScore}/10
-Outcome: ${outcome.toUpperCase()} (${resultStr})
-
-Post-match signals:
-${JSON.stringify(signalCtx, null, 2)}
-
-Write a brief honest review. Was the reasoning sound? What signals were right or wrong?
-
-Respond with ONLY valid JSON:
-{
-  "outcome": "${outcome}",
-  "review_headline": "One sentence recap (max 12 words)",
-  "review_summary": "Two sentences max 50 words.",
-  "accuracy_note": "One sentence on what signal data was right or wrong. Max 25 words."
-}`;
-
-    const raw = await callClaude(prompt);
-    const review = parseJson(raw, PostReviewSchema, {
+    // Outcome is determined algorithmically above — no AI call needed (free).
+    const review = {
       outcome,
       review_headline: resultStr,
       review_summary: `${fixture.homeTeamName} ${hg}-${ag} ${fixture.awayTeamName}. Tip was ${outcome}.`,
       accuracy_note: "Review generated from match result.",
-    });
+    };
 
     await db.update(aiBettingTips)
       .set({

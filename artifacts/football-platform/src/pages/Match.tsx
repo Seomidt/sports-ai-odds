@@ -359,11 +359,28 @@ function ConfidenceBadgeLarge({ confidence }: { confidence: "high" | "medium" | 
   );
 }
 
-function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null }) {
+function oddsFromSnap(snap: { homeWin?: number | null; draw?: number | null; awayWin?: number | null; btts?: number | null; overUnder25?: number | null; handicapHome?: number | null } | null | undefined, betType: string, betSide: string | null): number | null {
+  if (!snap) return null;
+  const side = betSide ?? "";
+  if (betType === "match_result") {
+    if (side === "home") return snap.homeWin ?? null;
+    if (side === "draw") return snap.draw ?? null;
+    if (side === "away") return snap.awayWin ?? null;
+  }
+  if (betType === "over_under" || betType === "over_under_2_5") {
+    if (side.includes("over25") || side === "over") return snap.overUnder25 ?? null;
+  }
+  if (betType === "btts" && side === "yes") return snap.btts ?? null;
+  if (betType === "asian_handicap" && side === "home") return snap.handicapHome ?? null;
+  return null;
+}
+
+function TipCard({ tip, betTypeLabel, bookmaker, snap }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null; snap?: { homeWin?: number | null; draw?: number | null; awayWin?: number | null; btts?: number | null; overUnder25?: number | null; handicapHome?: number | null } | null }) {
   const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
   const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
-  const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
+  const resolvedMarketOdds = tip.marketOdds ?? oddsFromSnap(snap, tip.betType, tip.betSide);
+  const impliedFromOdds = resolvedMarketOdds != null && resolvedMarketOdds > 1 ? 1 / resolvedMarketOdds : null;
   const impliedProb = tip.impliedProbability ?? impliedFromOdds;
   const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
   const edgePp = tip.aiProbability != null && impliedProb != null
@@ -384,10 +401,10 @@ function TipCard({ tip, betTypeLabel, bookmaker }: { tip: BettingTip; betTypeLab
           <div className="text-xl font-bold text-white leading-tight">
             {tip.recommendation}
           </div>
-          {tip.marketOdds != null && (
+          {resolvedMarketOdds != null && (
             <div className="flex items-center gap-2 mt-1">
               <span className="text-xs font-mono text-muted-foreground uppercase">Odds</span>
-              <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
+              <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{resolvedMarketOdds.toFixed(2)}</span>
               {bookmaker && (
                 <span className="text-[10px] font-mono text-muted-foreground bg-white/5 border border-white/10 px-1.5 py-0.5 rounded uppercase tracking-wide">
                   {bookmaker}
@@ -693,7 +710,7 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
 
           {/* ── Tip Cards ── */}
           {tips.map((tip) => (
-            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} />
+            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} />
           ))}
 
           {tips[0] && (

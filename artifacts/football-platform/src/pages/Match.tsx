@@ -1175,7 +1175,9 @@ function OddsAccordionRow({
   isBestFn: (bm: string | null | undefined, val: number | null | undefined) => boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const hasData = bestValue != null || rows.some(r => getVal(r) != null);
+  const fallbackValue = rows.map(r => getVal(r)).find(v => v != null) ?? null;
+  const displayValue = bestValue ?? fallbackValue;
+  const hasData = displayValue != null;
   if (!hasData) return null;
   return (
     <div className="border-b border-white/6 last:border-0">
@@ -1189,7 +1191,7 @@ function OddsAccordionRow({
         </div>
         <div className="text-right">
           <span className="font-mono text-base font-bold text-teal-400 tabular-nums">
-            {bestValue?.toFixed(2) ?? "—"}
+            {displayValue?.toFixed(2) ?? "—"}
           </span>
           {bestBookmaker && (
             <div className="text-[9px] font-mono text-teal-400/50 uppercase mt-0.5">{bestBookmaker}</div>

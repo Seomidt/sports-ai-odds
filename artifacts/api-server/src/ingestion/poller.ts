@@ -2448,7 +2448,9 @@ export function startPoller() {
   backfillMissingEdge().catch(console.error);
 
   // ── Sweep: trigger post-match reviews for tips still pending ──────────────
-  sweepMissedPostMatchReviews().catch(console.error);
+  // DISABLED: post-match reviews are a major cost driver (~1 AI call per tip).
+  // Re-enable when daily spend is under control.
+  // sweepMissedPostMatchReviews().catch(console.error);
 
   // ── Immediate startup syncs ────────────────────────────────────────────────
   syncNearTermFixtures().catch(console.error);
@@ -2494,8 +2496,8 @@ export function startPoller() {
   // Yesterday + day before (FT results): every 2 hours — finished games rarely change
   setInterval(() => syncRecentResults().catch(console.error), 2 * 60 * 60 * 1000);
 
-  // Missed post-match review sweep: every 3 hours to catch any pending tips
-  setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
+  // Missed post-match review sweep: DISABLED (cost reduction)
+  // setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
 
   // Full window -3 to +7 days: every 2 hours
   setInterval(() => syncTodayFixtures().catch(console.error), 2 * 60 * 60 * 1000);

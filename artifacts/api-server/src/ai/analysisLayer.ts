@@ -5,6 +5,7 @@ import { z } from "zod";
 import { eq, and, gte, isNotNull, desc, sql } from "drizzle-orm";
 import { calculateConfidence } from "./confidence.js";
 import { emitSuperValueAlert } from "../alerts/alertEngine.js";
+import { generateAlgorithmicTips } from "./tipEngine.js";
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -122,11 +123,30 @@ export function getAiStats() {
   };
 }
 
+const DAILY_SPEND_CAP_USD = 2.0; // Hard stop — change to raise the limit
+
+function getTodaySpendUsd(): number {
+  const todayStart = Date.UTC(
+    new Date().getUTCFullYear(),
+    new Date().getUTCMonth(),
+    new Date().getUTCDate(),
+  );
+  const entriesToday = aiUsageLog.filter((e) => e.at >= todayStart);
+  const inputTok = entriesToday.reduce((s, e) => s + e.inputTokens, 0);
+  const outputTok = entriesToday.reduce((s, e) => s + e.outputTokens, 0);
+  return (inputTok / 1_000_000) * INPUT_COST_PER_M + (outputTok / 1_000_000) * OUTPUT_COST_PER_M;
+}
+
 async function callClaude(userMessage: string, system?: string): Promise<string | null> {
+  const todaySpend = getTodaySpendUsd();
+  if (todaySpend >= DAILY_SPEND_CAP_USD) {
+    console.warn(`[ai] Daily spend cap reached ($${todaySpend.toFixed(4)} >= $${DAILY_SPEND_CAP_USD}). Skipping call.`);
+    return null;
+  }
   try {
     const msg = await getClient().messages.create({
       model: "claude-haiku-4-5-20251001",
-      max_tokens: 1200,
+      max_tokens: 700,
       ...(system ? {
         system: [{ type: "text" as const, text: system, cache_control: { type: "ephemeral" as const } }],
       } : {}),
@@ -158,8 +178,8 @@ async function callClaude(userMessage: string, system?: string): Promise<string 
 const BETTING_SYSTEM = `You are a professional football betting analyst. Your task is to analyse all available betting markets for an upcoming football match and return your best tips in JSON format.
 
 INSTRUCTIONS:
-- Give 8-10 tips covering different bet_types — do NOT repeat the same bet_type twice
-- Required: match_result, over_under, btts, correct_score, first_team_score — then pick 3-5 more from: corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil, first_half_goals
+- Give exactly 5 tips covering different bet_types — do NOT repeat the same bet_type twice
+- Required: match_result, over_under, btts — then pick 2 more from: correct_score, first_team_score, corners, asian_handicap, total_cards, double_chance, draw_no_bet, win_to_nil
 - For over_under you may pick over15, over25 or over35 as bet_side — choose the line with best edge
 - For double_chance: bet_side is "1X", "X2", or "12"
 - For draw_no_bet / win_to_nil: bet_side is "home" or "away"
@@ -1149,8 +1169,10 @@ GENERAL MODEL CALIBRATION (applies to ALL tips, not just this match):
 ${accuracy.summary}
 ${accuracy.totalReviewed > 0 ? `Use this track record to calibrate trust scores system-wide. If a market underperforms (hit rate below implied probability or negative ROI), lower trust and edge for that market. If a confidence tier is miscalibrated (e.g. "high" tips hitting below 60%), tighten your bar for calling something "high". This is feedback on your own past predictions — adjust accordingly.` : "No track record yet — cap trust scores at 7 until results accumulate."}`;
 
-  const raw = await callClaude(userMessage, BETTING_SYSTEM);
-  const parsed = parseJson(raw, MultiBettingTipSchema, null as unknown as z.infer<typeof MultiBettingTipSchema>);
+  // Algorithmic tip generation — no AI cost per fixture.
+  // AI (callClaude) is kept for daily admin insights only.
+  void userMessage; // context still built above for future admin digest use
+  const parsed = generateAlgorithmicTips(ctx);
 
   if (!parsed?.tips?.length) return null;
 
@@ -1169,7 +1191,7 @@ ${accuracy.totalReviewed > 0 ? `Use this track record to calibrate trust scores 
     weather: ctx.weather ?? null,
     h2h: ctx.h2hAiNotes ?? [],
   };
-  const MODEL_VERSION = "v1.0-claude-haiku";
+  const MODEL_VERSION = "v2.0-algo";
 
   const storedTips = [];
   for (const tip of parsed.tips) {

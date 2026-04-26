@@ -194,36 +194,18 @@ export function getApiStats() {
 }
 
 export const TRACKED_LEAGUES = [
-  // Top 5 European + UEFA
-  { id: 39,  name: "Premier League",        season: 2025 },
-  { id: 140, name: "La Liga",               season: 2025 },
-  { id: 135, name: "Serie A",               season: 2025 },
-  { id: 78,  name: "Bundesliga",            season: 2025 },
-  { id: 61,  name: "Ligue 1",              season: 2025 },
-  { id: 2,   name: "Champions League",      season: 2025 },
-  { id: 3,   name: "Europa League",         season: 2025 },
-  { id: 848, name: "Conference League",     season: 2025 },
-  // Other major European leagues
-  { id: 40,  name: "Championship",          season: 2025 },
-  { id: 79,  name: "2. Bundesliga",         season: 2025 },
-  { id: 88,  name: "Eredivisie",            season: 2025 },
-  { id: 94,  name: "Primeira Liga",         season: 2025 },
-  { id: 107, name: "Belgian Pro League",    season: 2025 },
-  { id: 119, name: "Superliga",             season: 2026 },
-  { id: 120, name: "1. Division",           season: 2026 },
-  { id: 113, name: "Allsvenskan",           season: 2026 },
-  { id: 179, name: "Scottish Premiership",  season: 2025 },
-  { id: 203, name: "Süper Lig",             season: 2025 },
-  { id: 218, name: "Bundesliga (Austria)",  season: 2025 },
-  { id: 235, name: "Eliteserien",           season: 2026 },
-  { id: 244, name: "Veikkausliiga",         season: 2026 },
-  { id: 271, name: "Ekstraklasa",           season: 2025 },
-  // World leagues
-  { id: 98,  name: "J1 League",             season: 2026 },
-  { id: 188, name: "A-League Men",          season: 2025 },
-  { id: 253, name: "MLS",                   season: 2026 },
-  { id: 262, name: "Liga MX",              season: 2025 },
-  { id: 292, name: "K League 1",            season: 2026 },
+  // Top 5 European + UEFA (AI tips generated for these only)
+  { id: 39,  name: "Premier League",    season: 2025 },
+  { id: 140, name: "La Liga",           season: 2025 },
+  { id: 135, name: "Serie A",           season: 2025 },
+  { id: 78,  name: "Bundesliga",        season: 2025 },
+  { id: 61,  name: "Ligue 1",           season: 2025 },
+  { id: 2,   name: "Champions League",  season: 2025 },
+  { id: 3,   name: "Europa League",     season: 2025 },
+  { id: 848, name: "Conference League", season: 2025 },
+  // Scandinavian leagues (Seomidt's home market)
+  { id: 119, name: "Superliga",         season: 2026 },
+  { id: 120, name: "1. Division",       season: 2026 },
 ];
 
 export interface ApiFixture {

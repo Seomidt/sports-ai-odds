@@ -825,9 +825,16 @@ export function Dashboard() {
 
             {otherTips.length > 0 && (
               <div className="space-y-4">
-                <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
-                  Other Markets — {otherTips.length}
-                </h2>
+                <div className="flex items-start gap-3">
+                  <div className="flex-1">
+                    <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
+                      Other Markets — {otherTips.length}
+                    </h2>
+                    <p className="text-[11px] text-muted-foreground/50 mt-1 font-mono">
+                      The algorithm is calibrated for <span className="text-white/50">Match Result</span>, <span className="text-white/50">Over/Under 2.5</span> and <span className="text-white/50">BTTS</span>. Tips outside these markets are generated with higher uncertainty — use with extra caution.
+                    </p>
+                  </div>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                   {otherTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
                 </div>

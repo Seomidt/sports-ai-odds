@@ -63,8 +63,7 @@ router.get("/admin/ai-stats", requireAdmin, (_req, res) => {
 });
 
 // ── Manual outcome review sweep ───────────────────────────────────────────────
-// Triggers re-evaluation of all pending tips on finished fixtures (no date limit).
-// Use after bulk outcome resets to restore accurate statistics.
+// Triggers re-evaluation of all pending tips on finished fixtures (no date limit).// Use after bulk outcome resets to restore accurate statistics.
 router.post("/admin/review-sweep", requireAdmin, async (_req, res) => {
   try {
     res.json({ ok: true, message: "Review sweep started in background" });
@@ -276,18 +275,4 @@ router.get("/admin/supabase-users", requireAdmin, async (_req, res) => {
     const { data, error } = await supabaseAdmin.auth.admin.listUsers({ perPage: 100 });
     if (error) throw error;
     const users = data.users.map((u) => ({
-      id: u.id,
-      email: u.email ?? "",
-      firstName: null,
-      lastName: null,
-      createdAt: u.created_at ? new Date(u.created_at).getTime() : null,
-      lastSignInAt: u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : null,
-    }));
-    return res.json({ users, total: users.length });
-  } catch (err) {
-    console.error("[admin] supabase-users error:", err);
-    return res.status(500).json({ error: "Failed to fetch Supabase users" });
-  }
-});
-
-export default router;
+      

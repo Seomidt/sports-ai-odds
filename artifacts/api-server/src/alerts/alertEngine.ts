@@ -65,7 +65,7 @@ export async function runAlertEngine() {
         sessionId: null,
         signalKey: signal.signalKey,
         alertText,
-        tier: "info",
+        tier: "critical",
         isRead: false,
         createdAt: new Date(),
       });
@@ -87,13 +87,11 @@ export async function emitSuperValueAlert(params: {
   betSide: string;
   marketOdds: number;
   edge: number;
-  confidence: string;
   matchName: string;
 }) {
-  const PRIMARY_MARKETS = new Set(["match_result", "over_under_2_5", "btts"]);
+  const PRIMARY_MARKETS = new Set(["match_result", "over_under", "over_under_2_5", "btts", "double_chance"]);
   if (!PRIMARY_MARKETS.has(params.betType)) return;
-  if (params.confidence !== "high") return;
-  if (params.edge < 0.15) return;
+  if (params.edge < 0.05) return; // 5pp minimum — matches our value filter
 
   const signalKey = `super_value:${params.betType}:${params.betSide}`;
 
@@ -104,7 +102,9 @@ export async function emitSuperValueAlert(params: {
   if (existing) return;
 
   const edgePp = (params.edge * 100).toFixed(1);
-  const alertText = `Super-value tip: ${params.betType.replace(/_/g, " ")} ${params.betSide} @ ${params.marketOdds.toFixed(2)} — edge +${edgePp}pp, high confidence.`;
+  const marketLabel = params.betType.replace(/_/g, " ").replace("over under", "Over/Under");
+  const edgeLabel = params.edge >= 0.15 ? "🔥 Super value" : params.edge >= 0.08 ? "Strong value" : "Value tip";
+  const alertText = `${edgeLabel}: ${marketLabel} ${params.betSide} @ ${params.marketOdds.toFixed(2)} — edge +${edgePp}pp`;
 
   await db.insert(alertLog).values({
     fixtureId: params.fixtureId,

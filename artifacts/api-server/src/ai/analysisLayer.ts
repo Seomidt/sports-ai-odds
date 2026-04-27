@@ -1288,18 +1288,16 @@ ${accuracy.totalReviewed > 0 ? `Use this track record to calibrate trust scores 
     }).returning();
     if (stored) {
       storedTips.push(stored);
-      // Fire a critical-tier alert only for super-value tips (edge ≥15pp + high conf + primary market).
-      // Lower-value tips are not broadcast — they show up in the normal tips UI.
-      if (stored.marketOdds && stored.edge != null && stored.confidence) {
+      // Fire a critical-tier alert for value tips (edge ≥5pp + primary market).
+      if (stored.marketOdds && stored.edge != null) {
         emitSuperValueAlert({
           fixtureId,
           betType: stored.betType,
           betSide: stored.betSide ?? "",
           marketOdds: stored.marketOdds,
           edge: stored.edge,
-          confidence: stored.confidence,
           matchName: `${stored.homeTeam} vs ${stored.awayTeam}`,
-        }).catch((e: unknown) => console.error("[ai] super-value alert error:", e));
+        }).catch((e: unknown) => console.error("[ai] alert error:", e));
       }
     }
   }

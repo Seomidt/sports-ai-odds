@@ -6,6 +6,7 @@ import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getLeagueFlag } from "@/lib/leagues";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -229,7 +230,7 @@ export function Standings() {
             <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
               {leagues.map(l => (
                 <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                  {l.leagueName}
+                  {getLeagueFlag(l.leagueId)} {l.leagueName}
                 </SelectItem>
               ))}
             </SelectContent>

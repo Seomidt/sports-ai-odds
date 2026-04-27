@@ -5,7 +5,7 @@ import { getUserFromRequest } from "../middlewares/requireAuth.js";
 import { db } from "@workspace/db";
 import {
   fixtures, standings, fixtureEvents, fixtureStats, fixtureLineups,
-  oddsSnapshots, h2hFixtures, oddsMarkets, liveOddsSnapshots,
+  oddsSnapshots, h2hFixtures, h2hFixtureStats, oddsMarkets, liveOddsSnapshots,
   predictions, coaches, sidelinedPlayers, playerSeasonStats, teamSeasonStats,
   fixtureSignals, trophies, playerStats as playerStatsTable, followedFixtures,
 } from "@workspace/db/schema";
@@ -413,7 +413,7 @@ router.get("/fixtures/:id/h2h", async (req: Request, res: Response) => {
         .from(fixtures)
         .where(eq(fixtures.fixtureId, fixtureId))
         .limit(1);
-      if (!fix) return { h2h: [] };
+      if (!fix) return { h2h: [], stats: null };
 
       const rows = await db
         .select()
@@ -426,7 +426,60 @@ router.get("/fixtures/:id/h2h", async (req: Request, res: Response) => {
         )
         .orderBy(desc(h2hFixtures.kickoff))
         .limit(20);
-      return { h2h: rows };
+
+      // Compute aggregate stats from h2hFixtureStats
+      const fixtureIds = rows.map((r) => r.fixtureId);
+      let aggregateStats = null;
+      if (fixtureIds.length > 0) {
+        const statsRows = await db
+          .select()
+          .from(h2hFixtureStats)
+          .where(inArray(h2hFixtureStats.fixtureId, fixtureIds));
+
+        // Goals info keyed by fixtureId (from h2hFixtures)
+        const goalsMap = new Map<number, { goals: number; btts: boolean }>();
+        for (const row of rows) {
+          const hg = row.homeGoals ?? 0;
+          const ag = row.awayGoals ?? 0;
+          if (hg != null && ag != null) {
+            goalsMap.set(row.fixtureId, { goals: hg + ag, btts: hg > 0 && ag > 0 });
+          }
+        }
+
+        // Per-fixture totals from stats rows (sum both teams)
+        const statsMap = new Map<number, { xg: number; shots: number; corners: number }>();
+        for (const s of statsRows) {
+          const cur = statsMap.get(s.fixtureId) ?? { xg: 0, shots: 0, corners: 0 };
+          cur.xg     += s.expectedGoals ?? 0;
+          cur.shots  += s.totalShots    ?? 0;
+          cur.corners += s.cornerKicks  ?? 0;
+          statsMap.set(s.fixtureId, cur);
+        }
+
+        const n = goalsMap.size;
+        const goalsList = [...goalsMap.values()];
+        const over25Count = goalsList.filter((g) => g.goals > 2).length;
+        const bttsCount   = goalsList.filter((g) => g.btts).length;
+        const totalGoals  = goalsList.reduce((s, g) => s + g.goals, 0);
+
+        const statsList = [...statsMap.values()];
+        const withXg      = statsList.filter((s) => s.xg > 0);
+        const withShots   = statsList.filter((s) => s.shots > 0);
+        const withCorners = statsList.filter((s) => s.corners > 0);
+
+        aggregateStats = {
+          matchCount:   n,
+          xgMatchCount: withXg.length,
+          avgGoals:     n > 0 ? +(totalGoals / n).toFixed(2) : null,
+          bttsRate:     n > 0 ? +(bttsCount  / n).toFixed(2) : null,
+          over25Rate:   n > 0 ? +(over25Count / n).toFixed(2) : null,
+          avgXg:        withXg.length      > 0 ? +(withXg.reduce((s, r)      => s + r.xg,      0) / withXg.length).toFixed(2)      : null,
+          avgShots:     withShots.length   > 0 ? +(withShots.reduce((s, r)   => s + r.shots,   0) / withShots.length).toFixed(1)   : null,
+          avgCorners:   withCorners.length > 0 ? +(withCorners.reduce((s, r) => s + r.corners, 0) / withCorners.length).toFixed(1) : null,
+        };
+      }
+
+      return { h2h: rows, stats: aggregateStats };
     });
     return res.json(result);
   } catch (error) {

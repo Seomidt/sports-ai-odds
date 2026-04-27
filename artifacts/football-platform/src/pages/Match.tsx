@@ -1454,6 +1454,7 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
   const { data: awayStats } = useGetTeamStatistics(awayTeamId, { season: 2025 }, { query: { queryKey: getGetTeamStatisticsQueryKey(awayTeamId, { season: 2025 }), staleTime: 2 * 60 * 60_000, gcTime: 4 * 60 * 60_000 } });
 
   const h2hRows = h2hData?.h2h ?? [];
+  const h2hStats = (h2hData as any)?.stats ?? null;
   const homeSeasonStats = homeStats?.statistics?.[0] ?? null;
   const awaySeasonStats = awayStats?.statistics?.[0] ?? null;
 
@@ -1504,6 +1505,55 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
                 {[...((awaySeasonStats?.form ?? "").slice(-5))].map((c, i) => (
                   <span key={i} className={`text-[9px] font-mono font-bold w-4 h-4 rounded flex items-center justify-center ${c === "W" ? "bg-teal-400/20 text-teal-400" : c === "D" ? "bg-violet-400/20 text-violet-400" : "bg-amber-400/20 text-amber-400"}`}>{c}</span>
                 ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* H2H aggregate stats */}
+      {h2hStats && h2hStats.matchCount > 0 && (
+        <div className="glass-card p-5 rounded-xl">
+          <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/5">
+            <span className="text-xs font-mono font-bold text-white uppercase tracking-wider">H2H Averages</span>
+            <span className="text-[10px] font-mono text-muted-foreground">
+              {h2hStats.matchCount} matches
+              {h2hStats.xgMatchCount > 0 && h2hStats.xgMatchCount < h2hStats.matchCount && (
+                <span className="ml-1">· xG from {h2hStats.xgMatchCount}</span>
+              )}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="text-center">
+              <div className="text-lg font-mono font-bold text-white">{h2hStats.avgGoals ?? "—"}</div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">Avg Goals</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-mono font-bold text-violet-300">
+                {h2hStats.bttsRate != null ? `${Math.round(h2hStats.bttsRate * 100)}%` : "—"}
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">BTTS</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-mono font-bold text-amber-300">
+                {h2hStats.over25Rate != null ? `${Math.round(h2hStats.over25Rate * 100)}%` : "—"}
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">Over 2.5</div>
+            </div>
+          </div>
+          {(h2hStats.avgXg != null || h2hStats.avgShots != null || h2hStats.avgCorners != null) && (
+            <div className="grid grid-cols-3 gap-3 mt-3 pt-3 border-t border-white/5">
+              <div className="text-center">
+                <div className="text-sm font-mono font-bold text-teal-400">{h2hStats.avgXg ?? "—"}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">Avg xG</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-mono font-bold text-teal-400">{h2hStats.avgShots ?? "—"}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">Avg Shots</div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm font-mono font-bold text-teal-400">{h2hStats.avgCorners ?? "—"}</div>
+                <div className="text-[10px] font-mono text-muted-foreground uppercase mt-0.5">Avg Corners</div>
               </div>
             </div>
           )}

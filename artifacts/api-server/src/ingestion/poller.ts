@@ -67,6 +67,7 @@ import {
   type ApiLineup,
 } from "./apiFootballClient.js";
 import { initAiStats, getBettingTips, triggerPostMatchReview, generateDailyAdminInsight } from "../ai/analysisLayer.js";
+import { runCalibration } from "../ai/calibrationEngine.js";
 import { runPreMatchFeatures, runLiveFeatures, runPostMatchFeatures } from "../features/featureEngine.js";
 import { runSignalEngine } from "../signals/signalEngine.js";
 import { cacheDel } from "../lib/routeCache.js";
@@ -161,6 +162,16 @@ async function syncNearTermFixtures() {
 // Sweep fixtures in DB that have NS status but kickoff has already passed.
 // This catches fixtures from non-tracked leagues (e.g. Eredivisie) that were
 // added to the DB but never get updated by the tracked-leagues-only sync loop.
+async function runCalibrationCycle() {
+  console.log("[calibration] Running weekly calibration cycle...");
+  try {
+    const factors = await runCalibration();
+    console.log(`[calibration] Done — ${factors.size} market factor(s) computed`);
+  } catch (err) {
+    console.error("[calibration] Failed:", err);
+  }
+}
+
 async function sweepStaleNsFixtures() {
   const cutoff = new Date(Date.now() - 90 * 60 * 1000); // kickoff >90min ago
   const stale = await db.query.fixtures.findMany({
@@ -2516,6 +2527,12 @@ export function startPoller() {
   // Daily admin insight: one AI call/day analysing algorithm performance
   generateDailyAdminInsight().catch(console.error); // run on startup too
   setInterval(() => generateDailyAdminInsight().catch(console.error), 24 * 60 * 60 * 1000);
+
+  // Calibration engine: recomputes per-market probability adjustment factors weekly.
+  // Uses last 90 days of reviewed tips to detect systematic over/under-confidence.
+  // First run is delayed 5min so DB is ready; subsequent runs every 7 days.
+  setTimeout(() => runCalibrationCycle().catch(console.error), 5 * 60 * 1000);
+  setInterval(() => runCalibrationCycle().catch(console.error), 7 * 24 * 60 * 60 * 1000);
 
   // Full window -3 to +7 days: every 2 hours
   setInterval(() => syncTodayFixtures().catch(console.error), 2 * 60 * 60 * 1000);

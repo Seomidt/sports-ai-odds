@@ -6,6 +6,7 @@ import { eq, and, gte, isNotNull, desc, sql } from "drizzle-orm";
 import { calculateConfidence } from "./confidence.js";
 import { emitSuperValueAlert } from "../alerts/alertEngine.js";
 import { generateAlgorithmicTips } from "./tipEngine.js";
+import { getCalibrationFactors } from "./calibrationEngine.js";
 
 let _client: Anthropic | null = null;
 function getClient(): Anthropic {
@@ -1202,7 +1203,8 @@ ${accuracy.totalReviewed > 0 ? `Use this track record to calibrate trust scores 
   // Algorithmic tip generation — no AI cost per fixture.
   // AI (callClaude) is kept for daily admin insights only.
   void userMessage; // context still built above for future admin digest use
-  const parsed = generateAlgorithmicTips(ctx);
+  const calibration = await getCalibrationFactors().catch(() => null);
+  const parsed = generateAlgorithmicTips(ctx, calibration);
 
   if (!parsed?.tips?.length) return null;
 

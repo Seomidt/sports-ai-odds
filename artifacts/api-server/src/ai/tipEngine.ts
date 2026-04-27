@@ -7,6 +7,8 @@
  * Outputs the same tip format as the AI so the rest of the pipeline is unchanged.
  */
 
+import type { CalibrationFactors } from "./calibrationEngine.js";
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface AlgoOdds {
@@ -474,11 +476,42 @@ function withEdge(candidates: Omit<Candidate, "edge">[]): Candidate[] {
     .sort((a, b) => b.edge - a.edge);
 }
 
-export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
-  const { homeProb, drawProb, awayProb } = calcMatchResult(ctx);
-  const { over25prob, over15prob, over35prob } = calcOverUnder(ctx);
-  const { bttsYesProb } = calcBtts(ctx);
-  const { cornersOverProb } = calcCorners(ctx);
+// ─── Calibration helper ───────────────────────────────────────────────────────
+
+function applyCalibration(
+  rawProb: number,
+  factors: CalibrationFactors | null,
+  betType: string,
+  betSide: string,
+): number {
+  if (!factors) return rawProb;
+  const factor = factors.get(`${betType}/${betSide}`) ?? 1.0;
+  return clamp(rawProb * factor, 0.05, 0.95);
+}
+
+// ─── Main generator ───────────────────────────────────────────────────────────
+
+export function generateAlgorithmicTips(
+  ctx: AlgoContext,
+  calibration: CalibrationFactors | null = null,
+): { tips: AlgoTip[] } {
+  // Raw probabilities
+  const raw = calcMatchResult(ctx);
+  const rawOU = calcOverUnder(ctx);
+  const rawBtts = calcBtts(ctx);
+  const rawCorners = calcCorners(ctx);
+
+  // Apply calibration — shrinks over-confident probabilities toward actual historical hit rates
+  const homeProb     = applyCalibration(raw.homeProb,            calibration, "match_result", "home");
+  const drawProb     = applyCalibration(raw.drawProb,            calibration, "match_result", "draw");
+  const awayProb     = applyCalibration(raw.awayProb,            calibration, "match_result", "away");
+  const over25prob   = applyCalibration(rawOU.over25prob,        calibration, "over_under",   "over25");
+  const over15prob   = applyCalibration(rawOU.over15prob,        calibration, "over_under",   "over15");
+  const over35prob   = applyCalibration(rawOU.over35prob,        calibration, "over_under",   "over35");
+  const under25prob  = applyCalibration(1 - rawOU.over25prob,    calibration, "over_under",   "under25");
+  const bttsYesProb  = applyCalibration(rawBtts.bttsYesProb,    calibration, "btts",         "yes");
+  const bttsNoProb   = applyCalibration(1 - rawBtts.bttsYesProb, calibration, "btts",        "no");
+  const cornersOverProb = applyCalibration(rawCorners.cornersOverProb, calibration, "corners", "over");
 
   // Compute lambda for reasoning text
   const homeFor = ctx.homeSeasonStats?.goalsForAvgHome ?? ctx.homeSeasonStats?.goalsForAvg ?? 1.30;
@@ -509,7 +542,7 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
     },
   ]);
 
-  // ── Over/Under: best edge line ─────────────────────────────────────────────
+  // ── Over/Under: best edge line (includes Under 2.5) ───────────────────────
   const ouCandidates = withEdge([
     {
       bet_type: "over_under", bet_side: "over25",
@@ -529,9 +562,23 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
       prob: over35prob, odds: ctx.odds.over35,
       reasoning: overUnderReasoning(ctx, "3.5", true, lambda, over35prob),
     },
+    // Under 2.5 — when lambda is low (defensive match) this often has best edge
+    {
+      bet_type: "over_under", bet_side: "under25",
+      recommendation: "Under 2.5 Goals",
+      prob: under25prob,
+      odds: ctx.odds.over25 != null && ctx.odds.over25 > 1
+        ? (() => {
+            const overImplied = 1 / ctx.odds.over25;
+            const underImplied = 1 - overImplied;
+            return underImplied > 0.05 ? Math.round((1 / underImplied) * 100) / 100 : null;
+          })()
+        : null,
+      reasoning: overUnderReasoning(ctx, "2.5", false, lambda, under25prob),
+    },
   ]);
 
-  // ── BTTS ──────────────────────────────────────────────────────────────────
+  // ── BTTS (Yes and No) ─────────────────────────────────────────────────────
   const bttsCandidates = withEdge([
     {
       bet_type: "btts", bet_side: "yes",
@@ -539,6 +586,18 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
       prob: bttsYesProb, odds: ctx.odds.btts,
       reasoning: bttsReasoning(ctx, true, bttsYesProb),
     },
+    // BTTS No — only if we have an implied "No" odds (approximate as 1/(1-bttsImplied))
+    ...(ctx.odds.btts != null && ctx.odds.btts > 1 ? [{
+      bet_type: "btts", bet_side: "no",
+      recommendation: "BTTS No",
+      prob: bttsNoProb,
+      odds: (() => {
+        const bttsImplied = 1 / ctx.odds.btts!;
+        const noImplied = 1 - bttsImplied;
+        return noImplied > 0.05 ? Math.round((1 / noImplied) * 100) / 100 : null;
+      })(),
+      reasoning: bttsReasoning(ctx, false, bttsNoProb),
+    }] : []),
   ]);
 
   // ── Corners ───────────────────────────────────────────────────────────────
@@ -601,20 +660,24 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
     }] : []),
   ]);
 
-  // ── Select final 5 tips ───────────────────────────────────────────────────
-  // Required markets: match_result, over_under, btts
-  // Fill remaining 2 slots with highest edge from optional markets
+  // ── Select final tips — only where we have genuine edge ──────────────────
+  // MIN_EDGE: minimum positive expected value required to recommend a tip.
+  // A tip with edge = 0.04 means: for every €1 staked, algo expects +4 cents return.
+  // Tips below this threshold are noise — not worth playing.
+  const MIN_EDGE = 0.04;
 
   const finalTips: Candidate[] = [];
 
+  // Required markets: only include if edge clears the bar
   const bestMatch = matchCandidates[0];
-  const bestOU = ouCandidates[0];
-  const bestBtts = bttsCandidates[0];
+  const bestOU    = ouCandidates[0];
+  const bestBtts  = bttsCandidates[0];
 
-  if (bestMatch) finalTips.push(bestMatch);
-  if (bestOU) finalTips.push(bestOU);
-  if (bestBtts) finalTips.push(bestBtts);
+  if (bestMatch && bestMatch.edge >= MIN_EDGE) finalTips.push(bestMatch);
+  if (bestOU    && bestOU.edge    >= MIN_EDGE) finalTips.push(bestOU);
+  if (bestBtts  && bestBtts.edge  >= MIN_EDGE) finalTips.push(bestBtts);
 
+  // Optional markets: same edge gate, then fill up to 5
   const usedTypes = new Set(finalTips.map(t => t.bet_type));
   const optional = [
     ...cornerCandidates,
@@ -622,7 +685,7 @@ export function generateAlgorithmicTips(ctx: AlgoContext): { tips: AlgoTip[] } {
     ...dcCandidates,
     ...winToNilCandidates,
   ]
-    .filter(c => !usedTypes.has(c.bet_type) && c.edge > -0.5)
+    .filter(c => !usedTypes.has(c.bet_type) && c.edge >= MIN_EDGE)
     .sort((a, b) => b.edge - a.edge);
 
   for (const opt of optional) {

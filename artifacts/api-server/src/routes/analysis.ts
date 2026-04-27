@@ -371,18 +371,17 @@ router.get("/analysis/daily-summary", async (_req, res) => {
         );
       const todayPicks = toPublishable(todayPicksRaw);
 
-      // Yesterday + allReviewed: NO publish filter — we want ALL outcomes for accurate
-      // results display and streak/ROI calculation, not just currently-qualifying tips.
-      // Restrict to the 3 algo-calibrated markets so hit rate is meaningful.
-      const ALGO_MARKETS = new Set(["match_result", "over_under_2_5", "btts"]);
+      // Yesterday + allReviewed: only count tips where we had genuine edge (value+).
+      // This ensures hit rate and ROI reflect actual "played" picks, not all generated tips.
+      const VALUE_RATINGS = new Set(["value", "strong_value"]);
       const mapSnapshot = <T extends { featureSnapshot: unknown }>(rows: T[]) =>
         rows.map((r) => ({ ...r, featureSnapshot: (r.featureSnapshot ?? null) as Record<string, unknown> | null }));
       const yesterdayTips = mapSnapshot(yesterdayTipsRaw).filter((t) =>
-        ALGO_MARKETS.has((t as { betType: string }).betType) &&
+        VALUE_RATINGS.has((t as { valueRating: string }).valueRating) &&
         (t as { marketOdds: number | null }).marketOdds != null
       );
       const allReviewed = mapSnapshot(allReviewedRaw).filter((t) =>
-        ALGO_MARKETS.has((t as { betType: string }).betType) &&
+        VALUE_RATINGS.has((t as { valueRating: string }).valueRating) &&
         (t as { marketOdds: number | null }).marketOdds != null
       ).slice(0, 200);
 

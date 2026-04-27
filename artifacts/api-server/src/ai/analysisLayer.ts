@@ -1645,6 +1645,136 @@ async function buildLiveSignalContext(fixtureId: number): Promise<Record<string,
   return ctx;
 }
 
+function buildLiveAnalysis(ctx: Record<string, number | boolean | string>): LiveAnalysis {
+  const matchStr = String(ctx.match ?? "Home vs Away");
+  const [homeTeam = "Home", awayTeam = "Away"] = matchStr.split(" vs ");
+  const minute = Number(ctx.minute ?? 0);
+  const homeGoals = Number(ctx.home_goals ?? 0);
+  const awayGoals = Number(ctx.away_goals ?? 0);
+  const status = String(ctx.status ?? "1H");
+  const diff = homeGoals - awayGoals;
+
+  const isHT = status === "HT";
+  const isFT = ["FT", "AET", "PEN"].includes(status);
+  const phase = isHT ? "at half time" : isFT ? "at full time" : `(${minute}')`;
+
+  // Leading team labels
+  const leader: string | null = diff > 0 ? homeTeam : diff < 0 ? awayTeam : null;
+  const trailer: string | null = diff > 0 ? awayTeam : diff < 0 ? homeTeam : null;
+  const scoreStr = `${homeGoals}-${awayGoals}`;
+  const absDiff = Math.abs(diff);
+
+  // ── Headline ──────────────────────────────────────────────────────────────
+  let headline = "";
+  if (diff === 0) {
+    if (homeGoals === 0) {
+      headline = `Goalless so far — ${homeTeam} vs ${awayTeam} ${phase}`;
+    } else {
+      headline = `${homeTeam} and ${awayTeam} level at ${scoreStr} ${phase}`;
+    }
+  } else if (absDiff >= 3) {
+    headline = `${leader} cruising — ${scoreStr} ${phase}`;
+  } else if (absDiff === 2) {
+    headline = `${leader} in control — ${scoreStr} ${phase}`;
+  } else {
+    headline = `${leader} edge ahead — ${scoreStr} ${phase}`;
+  }
+
+  // ── Narrative ─────────────────────────────────────────────────────────────
+  let s1 = "";
+  if (diff === 0 && homeGoals === 0) {
+    s1 = `${homeTeam} and ${awayTeam} are goalless ${phase}.`;
+  } else if (diff === 0) {
+    s1 = `The score stands level at ${scoreStr} ${phase}.`;
+  } else {
+    const gapWord = absDiff === 1 ? "one goal" : absDiff === 2 ? "two goals" : `${absDiff} goals`;
+    s1 = `${leader} lead ${trailer} by ${gapWord} — ${scoreStr} ${phase}.`;
+  }
+
+  let s2 = "";
+  const minutesLeft = Math.max(0, 90 - minute);
+  const homeOdds = ctx.home_odds ? Number(ctx.home_odds) : null;
+  const awayOdds = ctx.away_odds ? Number(ctx.away_odds) : null;
+  const momentumShift = ctx.momentum_shift === true;
+  const homePressure = ctx.home_pressure_rising === true;
+  const awayTempo = ctx.away_over_expected_tempo === true;
+
+  if (isFT) {
+    s2 = diff === 0
+      ? `The match ends all square — ${homeTeam} and ${awayTeam} share the points.`
+      : `${leader} hold on for the win as the final whistle blows.`;
+  } else if (isHT) {
+    s2 = diff === 0
+      ? "The second half is yet to begin — either side can still take this."
+      : `${trailer} need a second-half response to get back into this.`;
+  } else if (minutesLeft <= 10 && diff !== 0) {
+    s2 = `With ${minutesLeft} minutes left, ${trailer} are running out of time.`;
+  } else if (momentumShift) {
+    const shiftSide = homePressure ? homeTeam : awayTempo ? awayTeam : leader ?? homeTeam;
+    s2 = `Momentum has shifted — ${shiftSide} are growing into the match.`;
+  } else if (homePressure) {
+    s2 = `${homeTeam} are pushing forward and building pressure in attack.`;
+  } else if (awayTempo) {
+    s2 = `${awayTeam} are performing above expected tempo — dangerous on the break.`;
+  } else if (homeOdds && awayOdds && diff !== 0) {
+    const comebackOdds = diff > 0 ? awayOdds : homeOdds;
+    s2 = comebackOdds > 5
+      ? `Live odds of ${comebackOdds.toFixed(2)} suggest a comeback looks unlikely.`
+      : `At ${comebackOdds.toFixed(2)}, ${trailer} still have a chance to level.`;
+  } else {
+    s2 = diff === 0
+      ? "Both sides are looking for the breakthrough goal."
+      : `${leader} are looking to extend their advantage.`;
+  }
+
+  const narrative = `${s1} ${s2}`.trim();
+
+  // ── Momentum verdict ──────────────────────────────────────────────────────
+  let momentum_verdict = "";
+  if (momentumShift && homePressure) {
+    momentum_verdict = `${homeTeam} momentum building`;
+  } else if (momentumShift && awayTempo) {
+    momentum_verdict = `${awayTeam} picking up pace`;
+  } else if (momentumShift) {
+    momentum_verdict = leader ? `${leader} in control` : "momentum shifting";
+  } else if (diff === 0 && homeGoals >= 2) {
+    momentum_verdict = "end-to-end action";
+  } else if (absDiff >= 2) {
+    momentum_verdict = `${leader} dominant`;
+  } else if (diff === 0) {
+    momentum_verdict = "evenly matched";
+  } else {
+    momentum_verdict = `${leader} ahead — ${trailer} pushing`;
+  }
+
+  // ── Key factors ───────────────────────────────────────────────────────────
+  const key_factors: string[] = [];
+
+  if (homeGoals + awayGoals >= 3) key_factors.push(`${homeGoals + awayGoals} goals scored — high-scoring affair`);
+  if (homeGoals + awayGoals === 0 && minute >= 60) key_factors.push("Goalless with under 30 mins left");
+  if (homePressure) key_factors.push(`${homeTeam} pressure rising`);
+  if (awayTempo) key_factors.push(`${awayTeam} above expected tempo`);
+  if (momentumShift) key_factors.push("Momentum shift detected");
+  if (minutesLeft <= 15 && diff !== 0) key_factors.push(`${minutesLeft} minutes left — ${trailer} need a goal`);
+  if (homeOdds && diff > 0 && homeOdds < 1.3) key_factors.push(`${homeTeam} massive favourites at ${homeOdds.toFixed(2)}`);
+  if (awayOdds && diff < 0 && awayOdds < 1.3) key_factors.push(`${awayTeam} massive favourites at ${awayOdds.toFixed(2)}`);
+
+  // ── Alert worthy ──────────────────────────────────────────────────────────
+  const alert_worthy =
+    momentumShift ||
+    (diff !== 0 && minutesLeft <= 15) ||
+    (diff === 0 && minute >= 75) ||
+    (homeGoals + awayGoals >= 4);
+
+  return {
+    headline,
+    narrative,
+    momentum_verdict,
+    key_factors: key_factors.slice(0, 3),
+    alert_worthy,
+  };
+}
+
 export async function getLiveAnalysis(fixtureId: number): Promise<LiveAnalysis> {
   const key = `live:${fixtureId}`;
   const cached = getCached<LiveAnalysis>(key);
@@ -1653,22 +1783,8 @@ export async function getLiveAnalysis(fixtureId: number): Promise<LiveAnalysis> 
   const ctx = await buildLiveSignalContext(fixtureId);
   if (!ctx) return FALLBACK_LIVE;
 
-  const prompt = `You are a football analyst. Live match data:
-
-${JSON.stringify(ctx)}
-
-Respond with ONLY valid JSON:
-{
-  "headline": "Live headline max 12 words",
-  "narrative": "Two sentences on current match state, max 50 words",
-  "momentum_verdict": "Max 8 words describing momentum",
-  "key_factors": ["factor 1", "factor 2"],
-  "alert_worthy": true
-}`;
-
-  const raw = await callClaude(prompt);
-  const result = parseJson(raw, LiveAnalysisSchema, FALLBACK_LIVE);
-  setCached(key, result, 5 * 60 * 1000);
+  const result = buildLiveAnalysis(ctx);
+  if (result.headline) setCached(key, result, 5 * 60 * 1000);
   return result;
 }
 

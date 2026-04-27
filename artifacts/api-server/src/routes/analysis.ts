@@ -543,8 +543,8 @@ router.get("/analysis/:id/live", async (req, res) => {
         const ai = await getLiveAnalysis(fixtureId);
         return {
           phase: "live",
-          headline: ai.headline,
-          narrative: ai.narrative,
+          headline: ai.headline || analysis.summary.title,
+          narrative: ai.headline ? ai.narrative : "Live AI analysis is temporarily unavailable.",
           key_factors: ai.key_factors ?? [],
           momentum_verdict: ai.momentum_verdict ?? null,
           alert_worthy: ai.alert_worthy ?? false,

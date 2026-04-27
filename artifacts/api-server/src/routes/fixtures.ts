@@ -95,13 +95,13 @@ router.get("/fixtures/today", async (_req: Request, res: Response) => {
     const dateKey = new Date().toISOString().slice(0, 13); // cache per hour
     const result = await getOrFetch(`fixtures:upcoming:${dateKey}`, TTL.MIN1, async () => {
       const from = startOfDayUtc();
-      const to = endOfDayUtc(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000));
+      const to = endOfDayUtc(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
       const rows = await db
         .select()
         .from(fixtures)
         .where(and(gte(fixtures.kickoff, from), lte(fixtures.kickoff, to)))
         .orderBy(asc(fixtures.kickoff))
-        .limit(600);
+        .limit(1000);
 
       // Group by league
       const leagueMap = new Map<number, { leagueId: number; leagueName: string | null; leagueLogo: string | null; fixtures: typeof rows }>();

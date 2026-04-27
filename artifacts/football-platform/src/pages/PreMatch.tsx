@@ -5,10 +5,21 @@ import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Activity, Clock, Zap, TrendingUp, Target, CloudRain, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLeagueLogo } from "@/lib/leagues";
+
+function dayKey(date: Date): string {
+  return format(date, "yyyy-MM-dd");
+}
+
+function dayLabel(dateStr: string): string {
+  const d = new Date(dateStr + "T12:00:00");
+  if (isToday(d)) return "Today";
+  if (isTomorrow(d)) return "Tomorrow";
+  return format(d, "EEE dd/MM");
+}
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
@@ -272,6 +283,8 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
 
 export function PreMatch() {
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const tabsRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading } = useGetTodayFixtures({
     query: { queryKey: getGetTodayFixturesQueryKey(), staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 },
@@ -297,10 +310,27 @@ export function PreMatch() {
       return ta - tb;
     });
 
+  // Compute unique days from all prematch fixtures (local timezone)
+  const days: string[] = Array.from(
+    new Set(prematch.map((f) => f.kickoff ? dayKey(new Date(f.kickoff)) : null).filter(Boolean) as string[])
+  ).sort();
+
+  // Default to first available day
+  const activeDay = selectedDay && days.includes(selectedDay) ? selectedDay : (days[0] ?? null);
+
+  // Reset league filter when day changes
+  useEffect(() => { setSelectedLeague("all"); }, [activeDay]);
+
   useScrollRestoration("pre-match", !isLoading && all.length > 0);
 
+  // Filter by selected day
+  const dayFixtures = activeDay
+    ? prematch.filter((f) => f.kickoff && dayKey(new Date(f.kickoff)) === activeDay)
+    : prematch;
+
+  // Group by league
   const byLeague = new Map<number, LeagueSection>();
-  for (const f of prematch) {
+  for (const f of dayFixtures) {
     if (!byLeague.has(f.leagueId)) {
       byLeague.set(f.leagueId, {
         leagueId: f.leagueId,
@@ -318,7 +348,7 @@ export function PreMatch() {
 
   return (
     <Layout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <header>
           <div className="flex items-center gap-3 mb-1">
             <TrendingUp className="w-5 h-5 text-amber-400" />
@@ -327,12 +357,43 @@ export function PreMatch() {
           <p className="text-muted-foreground text-sm">
             All upcoming fixtures with pre-match analysis and signals.
             {totalWithTips > 0
-              ? <span className="ml-1 text-primary/70 font-mono">AI picks ready for {totalWithTips} of {prematch.length} fixtures — rest generating.</span>
+              ? <span className="ml-1 text-primary/70 font-mono">AI picks ready for {totalWithTips} of {prematch.length} fixtures.</span>
               : <span className="ml-1 text-muted-foreground/50 font-mono">AI picks are being generated — check back shortly.</span>
             }
           </p>
         </header>
 
+        {/* Day tabs */}
+        {!isLoading && days.length > 0 && (
+          <div
+            ref={tabsRef}
+            className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4"
+            style={{ scrollbarWidth: "none" }}
+          >
+            {days.map((d) => {
+              const count = prematch.filter((f) => f.kickoff && dayKey(new Date(f.kickoff)) === d).length;
+              const isActive = d === activeDay;
+              return (
+                <button
+                  key={d}
+                  onClick={() => setSelectedDay(d)}
+                  className={`shrink-0 flex flex-col items-center gap-0.5 px-4 py-2 rounded-lg border text-xs font-mono font-bold transition-colors ${
+                    isActive
+                      ? "bg-primary/15 border-primary/40 text-primary"
+                      : "bg-white/3 border-white/8 text-white/50 hover:text-white/80 hover:bg-white/5"
+                  }`}
+                >
+                  <span>{dayLabel(d)}</span>
+                  <span className={`text-[10px] font-normal tabular-nums ${isActive ? "text-primary/70" : "text-white/30"}`}>
+                    {count} fixtures
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* League filter */}
         {leagues.length > 1 && (
           <Select
             value={String(selectedLeague)}
@@ -364,7 +425,7 @@ export function PreMatch() {
           <div className="flex items-center justify-center h-64">
             <Activity className="w-8 h-8 text-primary animate-pulse" />
           </div>
-        ) : prematch.length === 0 ? (
+        ) : dayFixtures.length === 0 ? (
           <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center gap-4">
             <Clock className="w-10 h-10 text-muted-foreground opacity-30" />
             <div>

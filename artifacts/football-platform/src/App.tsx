@@ -24,6 +24,7 @@ import { useAuth } from "./hooks/useAuth";
 import { supabase } from "./lib/supabase";
 import accessPendingImage from "@assets/IMG_3621_1775934471623.png";
 import { ShieldAlert, Activity } from "lucide-react";
+import { AlertPoller } from "./components/AlertPoller";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -150,6 +151,7 @@ function AppRoutes() {
     <QueryClientProvider client={queryClient}>
       <SupabaseTokenInjector />
       <SupabaseCacheInvalidator />
+      <AlertPoller />
       <SessionProvider>
         <Switch>
           <Route path="/" component={HomeRedirect} />

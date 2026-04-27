@@ -389,4 +389,22 @@ export function PreMatch() {
                     <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
                   )}
                   <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
-                    {league.leagueName ?? `L
+                    {league.leagueName ?? `League ${league.leagueId}`}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono ml-auto">
+                    {league.fixtures.length} {league.fixtures.length === 1 ? "fixture" : "fixtures"}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {league.fixtures.map((fixture) => (
+                    <PreMatchCard key={fixture.fixtureId} fixture={fixture} allTips={tipsData?.tips} />
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}

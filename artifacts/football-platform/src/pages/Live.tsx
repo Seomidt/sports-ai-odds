@@ -101,4 +101,43 @@ export function Live() {
                         <div className="flex justify-between items-center mb-4">
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded font-mono">
                             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                            {fixture.statusElapsed != null ? `${fixtu
+                            {fixture.statusElapsed != null ? `${fixture.statusElapsed}'` : fixture.statusShort}
+                          </span>
+                        </div>
+
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {fixture.homeTeamLogo && (
+                                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
+                              )}
+                              <span className="font-semibold text-white truncate text-sm">{fixture.homeTeamName}</span>
+                            </div>
+                            <span className="font-mono text-2xl font-bold text-white shrink-0">
+                              {fixture.homeGoals ?? 0}
+                            </span>
+                          </div>
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              {fixture.awayTeamLogo && (
+                                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
+                              )}
+                              <span className="font-medium text-white/60 truncate text-sm">{fixture.awayTeamName}</span>
+                            </div>
+                            <span className="font-mono text-2xl font-bold text-white/60 shrink-0">
+                              {fixture.awayGoals ?? 0}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}

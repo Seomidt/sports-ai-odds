@@ -1783,4 +1783,23 @@ function IntelTab({ fixtureId, homeTeamId: _homeTeamId, awayTeamId: _awayTeamId,
             Honours
           </div>
           <div className="grid grid-cols-2 gap-4">
-            {[{ trophies: dat
+            {[{ trophies: data?.homeTrophies, label: homeTeam }, { trophies: data?.awayTrophies, label: awayTeam }].map(({ trophies, label }) => (
+              <div key={label} className="space-y-2">
+                <div className="text-[10px] font-mono text-muted-foreground/60 uppercase tracking-wider">{label}</div>
+                {(trophies ?? []).slice(0, 8).map((t, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <Trophy className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <div className="text-[11px] font-mono text-white/80 leading-tight truncate">{t.leagueName ?? '—'}</div>
+                      <div className="text-[10px] font-mono text-muted-foreground/50">{t.place ?? '—'} · {t.season ?? '—'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

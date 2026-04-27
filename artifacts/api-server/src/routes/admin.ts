@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { db } from "@workspace/db";
-import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets } from "@workspace/db/schema";
+import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets, h2hFixtures, h2hFixtureStats } from "@workspace/db/schema";
 import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAuth.js";
 import { getApiStats, kvSet } from "../ingestion/apiFootballClient.js";
@@ -218,8 +218,23 @@ router.post("/admin/force-ai-tips", requireAdmin, (_req, res) => {
 
 // ── H2H stats backfill ────────────────────────────────────────────────────────
 
-router.get("/admin/h2h-backfill/status", requireAdmin, (_req, res) => {
-  return res.json(getH2HBackfillStatus());
+router.get("/admin/h2h-backfill/status", requireAdmin, async (_req, res) => {
+  const inMemory = getH2HBackfillStatus();
+  // Always return DB-based counts so status survives Railway restarts
+  const [totalRow] = await db.select({ count: sql<number>`count(distinct fixture_id)` }).from(h2hFixtures);
+  const [doneRow]  = await db.select({ count: sql<number>`count(distinct fixture_id)` }).from(h2hFixtureStats);
+  const dbTotal = Number(totalRow?.count ?? 0);
+  const dbDone  = Number(doneRow?.count ?? 0);
+  return res.json({
+    running: inMemory.running,
+    finished: inMemory.finished,
+    // In-memory progress when running, DB counts otherwise
+    done:  inMemory.running ? inMemory.done  : dbDone,
+    total: inMemory.running ? inMemory.total : dbTotal,
+    dbDone,
+    dbTotal,
+    remaining: dbTotal - dbDone,
+  });
 });
 
 router.post("/admin/h2h-backfill", requireAdmin, (_req, res) => {

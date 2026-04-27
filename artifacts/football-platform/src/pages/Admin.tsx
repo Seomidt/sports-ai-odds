@@ -658,6 +658,104 @@ function BillingSection() {
   );
 }
 
+interface H2HStatus { running: boolean; finished: boolean; done: number; total: number; dbDone: number; dbTotal: number; remaining: number; }
+
+function H2HBackfillPanel() {
+  const { getToken } = useAuth();
+  const { toast } = useToast();
+  const [starting, setStarting] = useState(false);
+
+  const authHeaders = async () => {
+    const token = await getToken();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const { data: status, refetch } = useQuery<H2HStatus>({
+    queryKey: ["h2h-backfill-status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/h2h-backfill/status", { headers: await authHeaders() });
+      return res.json();
+    },
+    refetchInterval: (query) => (query.state.data?.running ? 3000 : 15000),
+    staleTime: 2000,
+  });
+
+  const handleStart = async () => {
+    setStarting(true);
+    try {
+      const res = await fetch("/api/admin/h2h-backfill", { method: "POST", headers: await authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: data.error ?? `Fejl (${res.status})`, variant: "destructive" });
+      } else {
+        toast({ title: "H2H backfill startet", description: "Henter xG, skud, hjørner i baggrunden" });
+        setTimeout(() => refetch(), 1000);
+      }
+    } catch (err) {
+      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
+    } finally {
+      setStarting(false);
+    }
+  };
+
+  const done = status?.dbDone ?? 0;
+  const total = status?.dbTotal ?? 0;
+  const remaining = status?.remaining ?? 0;
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  const isRunning = status?.running ?? false;
+  const isFinished = done >= total && total > 0;
+
+  return (
+    <div className="rounded-xl border border-teal-400/20 bg-teal-400/5 p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Database className="w-4 h-4 text-teal-400 shrink-0" />
+          <span className="text-sm font-bold font-mono text-white">H2H Stats Backfill</span>
+          {isRunning && (
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-teal-400/15 text-teal-300 border border-teal-400/30 animate-pulse">
+              KØRER
+            </span>
+          )}
+          {isFinished && (
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-primary/15 text-primary border border-primary/30">
+              FÆRDIG
+            </span>
+          )}
+        </div>
+        <button
+          onClick={handleStart}
+          disabled={starting || isRunning || isFinished}
+          className="shrink-0 px-3 py-1.5 rounded-md bg-teal-500/20 border border-teal-500/30 text-teal-300 text-xs font-mono font-bold hover:bg-teal-500/30 disabled:opacity-40 transition-colors"
+        >
+          {starting ? "Starter…" : isRunning ? "Kører…" : isFinished ? "Færdig" : "Start"}
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-[11px] font-mono text-muted-foreground">
+          <span>xG · Skud · Hjørner hentet</span>
+          <span className="tabular-nums text-white/70">{done.toLocaleString()} / {total.toLocaleString()}</span>
+        </div>
+        <div className="h-2 w-full rounded-full bg-white/8 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-teal-400 transition-all duration-500"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60">
+          <span>{pct}% færdig</span>
+          <span>{remaining.toLocaleString()} mangler</span>
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground/60 font-mono">
+        Henter per-kamp statistik (xG, skud, hjørner) fra API-Football for historiske H2H kampe. Bruges til at forbedre AI-tips præcision. Koster ~{remaining.toLocaleString()} API-kald.
+      </p>
+    </div>
+  );
+}
+
 interface SyncResult { fixtures: number; oddsFetched: number; predictionsFetched: number; h2hFetched: number; injuriesFetched: number; tipsQueued: number; }
 
 function ForceSyncSection() {
@@ -667,7 +765,6 @@ function ForceSyncSection() {
   const [loadingFull, setLoadingFull] = useState(false);
   const [loadingFixture, setLoadingFixture] = useState(false);
   const [loadingAi, setLoadingAi] = useState(false);
-  const [loadingH2HBackfill, setLoadingH2HBackfill] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [aiTipsError, setAiTipsError] = useState<string | null>(null);
   const [aiTipsSuccess, setAiTipsSuccess] = useState(false);
@@ -786,22 +883,6 @@ function ForceSyncSection() {
     }
   };
 
-  const handleH2HBackfill = async () => {
-    setLoadingH2HBackfill(true);
-    try {
-      const res = await fetch("/api/admin/h2h-backfill", { method: "POST", headers: await authHeaders() });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ title: data.error ?? `H2H backfill fejl (${res.status})`, variant: "destructive" });
-      } else {
-        toast({ title: "H2H stats backfill startet", description: "Henter xG, skud, hjørner for alle historiske H2H kampe — kører i baggrunden" });
-      }
-    } catch (err) {
-      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
-    } finally {
-      setLoadingH2HBackfill(false);
-    }
-  };
 
   const handleForceFixtureSync = async () => {
     const id = parseInt(fixtureIdInput.trim(), 10);
@@ -853,14 +934,7 @@ function ForceSyncSection() {
           <Brain className="w-4 h-4" />
           {loadingAi ? "Starting..." : "Force AI Tips Generation"}
         </button>
-        <button
-          onClick={handleH2HBackfill}
-          disabled={loadingH2HBackfill}
-          className="w-full h-10 bg-teal-500/20 border border-teal-500/30 text-teal-300 text-sm font-mono font-bold rounded-md hover:bg-teal-500/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-        >
-          <Database className="w-4 h-4" />
-          {loadingH2HBackfill ? "Starting..." : "Backfill H2H Stats (xG · Skud · Hjørner)"}
-        </button>
+        <H2HBackfillPanel />
         <button
           onClick={handleTestPing}
           className="w-full h-8 bg-white/5 border border-white/10 text-muted-foreground text-xs font-mono rounded-md hover:bg-white/10 transition-colors"

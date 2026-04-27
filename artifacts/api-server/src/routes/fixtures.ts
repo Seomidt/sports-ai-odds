@@ -53,6 +53,43 @@ function reqLogError(scope: string, error: unknown) {
   console.error(`[routes:${scope}]`, error);
 }
 
+const POST_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
+
+router.get("/fixtures/recent", async (_req: Request, res: Response) => {
+  try {
+    const dateKey = new Date().toISOString().slice(0, 13);
+    const result = await getOrFetch(`fixtures:recent:${dateKey}`, TTL.HOUR2, async () => {
+      const from = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+      const to = new Date();
+      const rows = await db
+        .select()
+        .from(fixtures)
+        .where(
+          and(
+            gte(fixtures.kickoff, from),
+            lte(fixtures.kickoff, to),
+            inArray(fixtures.statusShort, POST_STATUSES),
+          )
+        )
+        .orderBy(desc(fixtures.kickoff))
+        .limit(600);
+
+      const leagueMap = new Map<number, { leagueId: number; leagueName: string | null; leagueLogo: string | null; fixtures: typeof rows }>();
+      for (const row of rows) {
+        if (!leagueMap.has(row.leagueId)) {
+          leagueMap.set(row.leagueId, { leagueId: row.leagueId, leagueName: row.leagueName ?? null, leagueLogo: row.leagueLogo ?? null, fixtures: [] });
+        }
+        leagueMap.get(row.leagueId)!.fixtures.push(row);
+      }
+      return { leagues: Array.from(leagueMap.values()) };
+    });
+    return res.json(result);
+  } catch (error) {
+    reqLogError("fixtures.recent", error);
+    return res.status(500).json({ error: "Failed to load recent fixtures" } satisfies ApiError);
+  }
+});
+
 router.get("/fixtures/today", async (_req: Request, res: Response) => {
   try {
     const dateKey = new Date().toISOString().slice(0, 13); // cache per hour

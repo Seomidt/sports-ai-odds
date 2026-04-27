@@ -1,4 +1,3 @@
-import { useGetTodayFixtures } from "@workspace/api-client-react";
 import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
@@ -6,8 +5,7 @@ import { Layout } from "@/components/Layout";
 import { Activity, CheckCircle2, Radio, ChevronDown, Thermometer, Wind, AlertTriangle } from "lucide-react";
 import { useState } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
-
-const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
+import { useQuery } from "@tanstack/react-query";
 
 interface LeagueSection {
   leagueId: number;
@@ -19,18 +17,18 @@ interface LeagueSection {
 export function PostMatch() {
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
 
-  const { data, isLoading } = useGetTodayFixtures();
+  const { data, isLoading } = useQuery<{ leagues: { leagueId: number; leagueName: string | null; leagueLogo: string | null; fixtures: Fixture[] }[] }>({
+    queryKey: ["fixtures", "recent"],
+    queryFn: () => fetch("/api/fixtures/recent").then((r) => r.json()),
+    staleTime: 2 * 60 * 60_000,   // 2 hours — results don't change
+    gcTime:   7 * 24 * 60 * 60_000, // keep in memory 7 days
+    refetchInterval: false,
+  });
 
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);
   const postmatch_ready = !isLoading && all.length > 0;
   useScrollRestoration("post-match", postmatch_ready);
-  const postmatch = all
-    .filter((f) => POST_STATUSES.has(f.statusShort ?? ""))
-    .sort((a, b) => {
-      const ta = a.kickoff ? new Date(a.kickoff).getTime() : 0;
-      const tb = b.kickoff ? new Date(b.kickoff).getTime() : 0;
-      return tb - ta;
-    });
+  const postmatch = all;
 
   const byLeague = new Map<number, LeagueSection>();
   for (const f of postmatch) {
@@ -48,7 +46,7 @@ export function PostMatch() {
       <div className="space-y-8">
         <header>
           <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-2">POST-MATCH</h1>
-          <p className="text-muted-foreground">Finished fixtures — post-match analysis and signals.</p>
+          <p className="text-muted-foreground">Finished fixtures from the last 7 days.</p>
         </header>
 
         {leagues.length > 1 && (
@@ -79,7 +77,7 @@ export function PostMatch() {
             <div>
               <h3 className="text-lg font-medium text-white mb-1">No finished fixtures yet</h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Results from today's matches will appear here once games are completed.
+                No finished matches in the last 7 days yet.
               </p>
               <Link href="/live">
                 <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 text-sm font-mono font-semibold hover:bg-primary/20 transition-colors">

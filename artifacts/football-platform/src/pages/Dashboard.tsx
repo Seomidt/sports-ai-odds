@@ -4,6 +4,7 @@ import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { PaywallOverlay } from "@/components/PaywallOverlay";
+import { HelpTooltip } from "@/components/HelpTooltip";
 import { supabase } from "@/lib/supabase";
 import {
   Activity, TrendingUp, Zap, ChevronRight, ChevronDown,
@@ -351,6 +352,13 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                   <div className="flex items-center gap-2">
                     <BarChart3 className="w-3.5 h-3.5 text-muted-foreground" />
                     <span className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest">Yesterday</span>
+                    <span onClick={e => e.stopPropagation()}>
+                      <HelpTooltip side="bottom">
+                        <p className="leading-relaxed">
+                          Tracker kun tips med <span className="text-teal-300">Value</span> eller <span className="text-teal-300">Strong Value</span> rating (edge ≥ 5pp) — det er de bets vi rent faktisk anbefaler at spille.
+                        </p>
+                      </HelpTooltip>
+                    </span>
                   </div>
                   {hasAny && (
                     yesterdayOpen

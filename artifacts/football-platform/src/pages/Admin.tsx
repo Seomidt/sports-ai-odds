@@ -1070,6 +1070,29 @@ function AdminContent() {
 
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState<AddUserBodyRole>("user");
+  const [loadingResetCounter, setLoadingResetCounter] = useState(false);
+
+  const handleResetApiCounter = async () => {
+    setLoadingResetCounter(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/admin/reset-api-counter", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: data.error ?? "Reset fejlede", variant: "destructive" });
+      } else {
+        toast({ title: "API counter nulstillet", description: "Genstarter Railway-serveren for at hente det korrekte tal" });
+        queryClient.invalidateQueries({ queryKey: ["adminStats"] });
+      }
+    } catch (err) {
+      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
+    } finally {
+      setLoadingResetCounter(false);
+    }
+  };
 
   if (!me) {
     return (
@@ -1198,6 +1221,14 @@ function AdminContent() {
                     </div>
                   </div>
                 )}
+
+                <button
+                  onClick={handleResetApiCounter}
+                  disabled={loadingResetCounter}
+                  className="w-full h-8 bg-white/5 border border-white/10 text-muted-foreground text-xs font-mono rounded-md hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                >
+                  {loadingResetCounter ? "Nulstiller..." : "Nulstil API-tæller (fejl-fix)"}
+                </button>
 
               </div>
             ) : null}

@@ -131,7 +131,6 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
       if (errStr.toLowerCase().includes("request limit") || errStr.toLowerCase().includes("rate limit")) {
         if (!quotaExhaustedAt) {
           quotaExhaustedAt = Date.now();
-          requestsToday = MAX_REQUESTS_PER_DAY; // prevent further calls
           console.error("[api-football] QUOTA EXHAUSTED — circuit breaker activated. All calls blocked until midnight UTC.");
         }
       } else {

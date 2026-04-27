@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets } from "@workspace/db/schema";
 import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAuth.js";
-import { getApiStats } from "../ingestion/apiFootballClient.js";
+import { getApiStats, kvSet } from "../ingestion/apiFootballClient.js";
 import { getAiStats, getAdminInsight } from "../ai/analysisLayer.js";
 import {
   forceFullSync,
@@ -225,6 +225,14 @@ router.get("/admin/h2h-backfill/status", requireAdmin, (_req, res) => {
 router.post("/admin/h2h-backfill", requireAdmin, (_req, res) => {
   backfillH2HStats().catch(console.error);
   return res.json({ ok: true, message: "H2H stats backfill started in background" });
+});
+
+// ── Reset API counter (fixes inflated counter from rate-limit bug) ────────────
+
+router.post("/admin/reset-api-counter", requireAdmin, async (_req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  await kvSet(`api:today:${today}`, "0");
+  return res.json({ ok: true, message: "API counter reset to 0 — restart server to apply" });
 });
 
 // ── AI health check ───────────────────────────────────────────────────────────

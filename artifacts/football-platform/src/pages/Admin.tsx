@@ -8,7 +8,7 @@ import {
   getGetAdminUsersQueryKey,
 } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
-import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, LogIn } from "lucide-react";
+import { Activity, ShieldAlert, Users, Server, Plus, Trash2, Shield, User as UserIcon, CreditCard, CheckCircle2, XCircle, Brain, DollarSign, Zap, Database, Play, RefreshCw, Clock, AlertTriangle, LogIn, PauseCircle, PlayCircle } from "lucide-react";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { format } from "date-fns";
 import { useState, useRef, Component, ReactNode } from "react";
@@ -1048,7 +1048,7 @@ function AdminContent() {
   const { data: statsData, isLoading: isLoadingStats } = useGetAdminStats();
   const { data: usersData, isLoading: isLoadingUsers } = useGetAdminUsers();
 
-  const { data: clerkUsersData, isLoading: isLoadingClerkUsers } = useQuery({
+  const { data: clerkUsersData, isLoading: isLoadingClerkUsers, refetch: refetchSupabaseUsers } = useQuery({
     queryKey: ["admin", "supabase-users"],
     queryFn: async () => {
       const token = await getToken();
@@ -1056,10 +1056,41 @@ function AdminContent() {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       if (!res.ok) throw new Error("Failed to fetch Clerk users");
-      return res.json() as Promise<{ users: { id: string; email: string; firstName: string | null; lastName: string | null; createdAt: number; lastSignInAt: number | null }[]; total: number }>;
+      return res.json() as Promise<{ users: { id: string; email: string; firstName: string | null; lastName: string | null; createdAt: number; lastSignInAt: number | null; banned: boolean }[]; total: number }>;
     },
-    staleTime: 60_000,
+    staleTime: 30_000,
   });
+
+  const handleBanUser = async (id: string, ban: boolean) => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/supabase-users/${id}/${ban ? "ban" : "unban"}`, {
+        method: "PATCH",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast({ title: ban ? "Bruger sat på pause" : "Bruger genaktiveret" });
+      refetchSupabaseUsers();
+    } catch {
+      toast({ title: "Fejl — kunne ikke opdatere bruger", variant: "destructive" });
+    }
+  };
+
+  const handleDeleteSupabaseUser = async (id: string, email: string) => {
+    if (!confirm(`Slet ${email} permanent? Dette kan ikke fortrydes.`)) return;
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/admin/supabase-users/${id}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed");
+      toast({ title: "Bruger slettet" });
+      refetchSupabaseUsers();
+    } catch {
+      toast({ title: "Fejl — kunne ikke slette bruger", variant: "destructive" });
+    }
+  };
 
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1355,31 +1386,48 @@ function AdminContent() {
                 <table className="w-full text-sm text-left">
                   <thead className="text-xs text-muted-foreground uppercase bg-black/20 font-mono border-b border-white/10">
                     <tr>
-                      <th className="px-4 py-3 font-normal">Account</th>
                       <th className="px-4 py-3 font-normal">Email</th>
                       <th className="px-4 py-3 font-normal">Signed Up</th>
                       <th className="px-4 py-3 font-normal">Last Login</th>
+                      <th className="px-4 py-3 font-normal text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {clerkUsersData.users.map((u) => {
-                      const name = [u.firstName, u.lastName].filter(Boolean).join(" ") || "—";
-                      return (
-                        <tr key={u.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                          <td className="px-4 py-3 font-medium text-white flex items-center gap-2">
-                            <UserIcon className="w-4 h-4 text-muted-foreground shrink-0" />
-                            {name}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-sm text-muted-foreground">{u.email}</td>
-                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                            {format(new Date(u.createdAt), 'MMM dd, yyyy')}
-                          </td>
-                          <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                            {u.lastSignInAt ? format(new Date(u.lastSignInAt), 'MMM dd, yyyy HH:mm') : <span className="text-muted-foreground/40">Never</span>}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {clerkUsersData.users.map((u) => (
+                      <tr key={u.id} className={`border-b border-white/5 hover:bg-white/5 transition-colors ${u.banned ? "opacity-50" : ""}`}>
+                        <td className="px-4 py-3 font-mono text-sm text-white flex items-center gap-2">
+                          <UserIcon className="w-4 h-4 text-muted-foreground shrink-0" />
+                          {u.email}
+                          {u.banned && <span className="text-[10px] font-mono font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-1.5 py-0.5 rounded">PAUSED</span>}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          {u.createdAt ? format(new Date(u.createdAt), 'MMM dd, yyyy') : '—'}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
+                          {u.lastSignInAt ? format(new Date(u.lastSignInAt), 'MMM dd, yyyy HH:mm') : <span className="text-muted-foreground/40">Never</span>}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost" size="sm"
+                              className={`h-8 px-2 ${u.banned ? "text-teal-400 hover:bg-teal-400/10" : "text-amber-400 hover:bg-amber-400/10"}`}
+                              onClick={() => handleBanUser(u.id, !u.banned)}
+                              title={u.banned ? "Genaktiver bruger" : "Sæt på pause"}
+                            >
+                              {u.banned ? <PlayCircle className="w-4 h-4" /> : <PauseCircle className="w-4 h-4" />}
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm"
+                              className="h-8 px-2 text-destructive hover:bg-destructive/20"
+                              onClick={() => handleDeleteSupabaseUser(u.id, u.email)}
+                              title="Slet bruger permanent"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>

@@ -318,11 +318,57 @@ router.get("/admin/supabase-users", requireAdmin, async (_req, res) => {
       lastName: null,
       createdAt: u.created_at ? new Date(u.created_at).getTime() : null,
       lastSignInAt: u.last_sign_in_at ? new Date(u.last_sign_in_at).getTime() : null,
+      banned: !!(u as any).banned_until && (u as any).banned_until !== "none",
     }));
     return res.json({ users, total: users.length });
   } catch (err) {
     console.error("[admin] supabase-users error:", err);
     return res.status(500).json({ error: "Failed to fetch Supabase users" });
+  }
+});
+
+// ── Ban / unban / delete Supabase user ───────────────────────────────────────
+
+router.patch("/admin/supabase-users/:id/ban", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "User ID required" });
+  try {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(id, {
+      ban_duration: "87600h", // ~10 years = effectively permanent
+    } as any);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[admin] ban user error:", err);
+    return res.status(500).json({ error: "Failed to ban user" });
+  }
+});
+
+router.patch("/admin/supabase-users/:id/unban", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "User ID required" });
+  try {
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(id, {
+      ban_duration: "none",
+    } as any);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[admin] unban user error:", err);
+    return res.status(500).json({ error: "Failed to unban user" });
+  }
+});
+
+router.delete("/admin/supabase-users/:id", requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: "User ID required" });
+  try {
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(id);
+    if (error) throw error;
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error("[admin] delete supabase user error:", err);
+    return res.status(500).json({ error: "Failed to delete user" });
   }
 });
 

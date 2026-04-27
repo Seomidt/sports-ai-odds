@@ -48,9 +48,19 @@ const TYPE_LABELS: Record<string, string> = {
   match_event:    "Match Events",
 };
 
+const LAST_SEEN_KEY = "notif_last_seen_ts";
+
+function getLastSeenTs(): number {
+  try { return parseInt(localStorage.getItem(LAST_SEEN_KEY) ?? "0", 10) || 0; } catch { return 0; }
+}
+function saveLastSeenTs() {
+  try { localStorage.setItem(LAST_SEEN_KEY, String(Date.now())); } catch {}
+}
+
 export function NotificationBell() {
   const [prefs, setPrefs] = useState<NotifPrefs>(getNotifPrefs);
   const [open, setOpen] = useState(false);
+  const [lastSeenTs, setLastSeenTs] = useState<number>(getLastSeenTs);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -90,6 +100,9 @@ export function NotificationBell() {
     if (key === "high_value_tip" && !prefs.types.high_value_tip) return false;
     if (key === "odds_drop" && !prefs.types.odds_drop) return false;
     if ((key === "goal" || key === "red_card" || key === "match_event") && !prefs.types.match_event) return false;
+    // Only count alerts newer than when the bell was last opened
+    const createdAt = a.createdAt ? new Date(a.createdAt as unknown as string).getTime() : 0;
+    if (createdAt <= lastSeenTs) return false;
     return true;
   }).length;
 
@@ -113,6 +126,11 @@ export function NotificationBell() {
           ? { position: "fixed", bottom: window.innerHeight - rect.top + 8, right }
           : { position: "fixed", top: rect.bottom + 8, right }
       );
+    }
+    if (!open) {
+      // Mark all current alerts as seen when opening the bell
+      saveLastSeenTs();
+      setLastSeenTs(Date.now());
     }
     setOpen((o) => !o);
   }, [open]);

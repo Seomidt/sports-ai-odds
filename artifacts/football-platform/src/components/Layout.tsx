@@ -36,7 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-[100dvh] w-full overflow-hidden text-foreground">
+    <div className="flex md:h-[100dvh] w-full md:overflow-hidden text-foreground">
 
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
         <Link href="/dashboard">
@@ -148,8 +148,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <header className="md:hidden flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
+      <div className="flex-1 flex flex-col min-w-0 md:overflow-hidden">
+        <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
           <Link href="/dashboard">
             <div className="flex items-center gap-2 cursor-pointer">
               <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
@@ -168,8 +168,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </header>
 
         <TopSignalBanner />
-        <main className="flex-1 min-h-0 overflow-y-auto">
-          <div className="p-4 md:p-8 max-w-7xl mx-auto">
+        <main className="md:flex-1 md:min-h-0 md:overflow-y-auto">
+          <div className="p-4 md:p-8 max-w-7xl mx-auto pb-16 md:pb-8">
             {children}
           </div>
         </main>

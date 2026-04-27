@@ -45,3 +45,9 @@ export function getLeagueFlag(leagueId: number | null | undefined): string {
   if (leagueId == null) return "";
   return FLAG_MAP.get(leagueId) ?? "";
 }
+
+/** Liga-logo URL fra API-Football — vises overalt og fungerer på alle platforme */
+export function getLeagueLogo(leagueId: number | null | undefined): string {
+  if (leagueId == null) return "";
+  return `https://media.api-sports.io/football/leagues/${leagueId}.png`;
+}

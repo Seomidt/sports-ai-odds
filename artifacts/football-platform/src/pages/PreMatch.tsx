@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getLeagueFlag } from "@/lib/leagues";
+import { getLeagueLogo } from "@/lib/leagues";
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
@@ -350,7 +350,10 @@ export function PreMatch() {
                 .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""))
                 .map((l) => (
                   <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                    {getLeagueFlag(l.leagueId)} {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                    <span className="inline-flex items-center gap-2">
+                      <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                    </span>
                   </SelectItem>
                 ))}
             </SelectContent>

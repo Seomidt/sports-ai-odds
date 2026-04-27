@@ -3,8 +3,9 @@ import { useGetTodayFixtures } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, ChevronDown } from "lucide-react";
-import { getLeagueFlag } from "@/lib/leagues";
+import { Activity } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getLeagueLogo } from "@/lib/leagues";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 
@@ -47,23 +48,27 @@ export function Live() {
 
         {/* League filter dropdown — only shown when there are multiple leagues */}
         {liveFixtures.length > 1 && (
-          <div className="relative w-full sm:w-72">
-            <select
-              value={selectedLeague === "all" ? "all" : String(selectedLeague)}
-              onChange={(e) => setSelectedLeague(e.target.value === "all" ? "all" : Number(e.target.value))}
-              className="w-full appearance-none bg-black/30 border border-white/10 text-white text-sm font-mono rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:border-primary/40 cursor-pointer"
-            >
-              <option value="all" className="bg-[#0a0f1e]">
+          <Select
+            value={selectedLeague === "all" ? "all" : String(selectedLeague)}
+            onValueChange={(v) => setSelectedLeague(v === "all" ? "all" : Number(v))}
+          >
+            <SelectTrigger className="w-full sm:w-72 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
+              <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
                 🌍 All Leagues ({liveFixtures.length})
-              </option>
+              </SelectItem>
               {liveFixtures.map((l) => (
-                <option key={l.leagueId} value={String(l.leagueId)} className="bg-[#0a0f1e]">
-                  {getLeagueFlag(l.leagueId)} {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
-                </option>
+                <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
+                  <span className="inline-flex items-center gap-2">
+                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
+                  </span>
+                </SelectItem>
               ))}
-            </select>
-            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          </div>
+            </SelectContent>
+          </Select>
         )}
 
         {liveFixtures.length === 0 ? (
@@ -77,10 +82,12 @@ export function Live() {
             {visibleLeagues.map((league) => (
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/10">
-                  <span className="text-lg leading-none">{getLeagueFlag(league.leagueId)}</span>
-                  {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt={league.leagueName ?? ""} className="w-5 h-5 object-contain" />
-                  )}
+                  <img
+                    src={getLeagueLogo(league.leagueId) || league.leagueLogo || ""}
+                    alt={league.leagueName ?? ""}
+                    className="w-5 h-5 object-contain shrink-0"
+                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+                  />
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{league.leagueName}</h2>
                   <span className="text-xs text-muted-foreground font-mono ml-auto">
                     {league.fixtures.length} live

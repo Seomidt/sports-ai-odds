@@ -2,8 +2,9 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Newspaper, Trophy, TrendingUp, Minus, ChevronDown } from "lucide-react";
-import { LEAGUES } from "@/lib/leagues";
+import { Activity, Newspaper, Trophy, TrendingUp, Minus } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { LEAGUES, getLeagueLogo } from "@/lib/leagues";
 
 interface NewsArticle {
   id: string;
@@ -139,23 +140,27 @@ export function News() {
           </p>
         </header>
 
-        <div className="relative w-full sm:w-72">
-          <select
-            value={activeLeague.id}
-            onChange={(e) => {
-              const found = LEAGUES.find((l) => l.id === Number(e.target.value));
-              if (found) setActiveLeague(found);
-            }}
-            className="w-full appearance-none bg-black/30 border border-white/10 text-white text-sm font-mono rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:border-primary/40 cursor-pointer"
-          >
+        <Select
+          value={String(activeLeague.id)}
+          onValueChange={(v) => {
+            const found = LEAGUES.find((l) => l.id === Number(v));
+            if (found) setActiveLeague(found);
+          }}
+        >
+          <SelectTrigger className="w-full sm:w-72 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
             {LEAGUES.map((league) => (
-              <option key={league.id} value={league.id} className="bg-[#0a0f1e]">
-                {league.flag} {league.name}
-              </option>
+              <SelectItem key={league.id} value={String(league.id)} className="text-white focus:bg-white/10 focus:text-white">
+                <span className="inline-flex items-center gap-2">
+                  <img src={getLeagueLogo(league.id)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  {league.name}
+                </span>
+              </SelectItem>
             ))}
-          </select>
-          <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        </div>
+          </SelectContent>
+        </Select>
 
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-64 gap-4">

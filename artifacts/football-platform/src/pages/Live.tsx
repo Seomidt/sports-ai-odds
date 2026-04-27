@@ -1,20 +1,28 @@
+import { useState } from "react";
 import { useGetTodayFixtures } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity } from "lucide-react";
+import { Activity, ChevronDown } from "lucide-react";
+import { getLeagueFlag } from "@/lib/leagues";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 
 export function Live() {
   const { data, isLoading } = useGetTodayFixtures();
+  const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
 
   const liveFixtures = (data?.leagues ?? [])
     .map((league) => ({
       ...league,
       fixtures: league.fixtures.filter((f) => LIVE_STATUSES.has(f.statusShort ?? "")),
     }))
-    .filter((l) => l.fixtures.length > 0);
+    .filter((l) => l.fixtures.length > 0)
+    .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""));
+
+  const visibleLeagues = selectedLeague === "all"
+    ? liveFixtures
+    : liveFixtures.filter((l) => l.leagueId === selectedLeague);
 
   if (isLoading) {
     return (
@@ -28,7 +36,7 @@ export function Live() {
 
   return (
     <Layout>
-      <div className="space-y-8">
+      <div className="space-y-6">
         <header>
           <div className="flex items-center gap-3 mb-2">
             <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
@@ -36,6 +44,27 @@ export function Live() {
           </div>
           <p className="text-muted-foreground">Matches currently in play.</p>
         </header>
+
+        {/* League filter dropdown — only shown when there are multiple leagues */}
+        {liveFixtures.length > 1 && (
+          <div className="relative w-full sm:w-72">
+            <select
+              value={selectedLeague === "all" ? "all" : String(selectedLeague)}
+              onChange={(e) => setSelectedLeague(e.target.value === "all" ? "all" : Number(e.target.value))}
+              className="w-full appearance-none bg-black/30 border border-white/10 text-white text-sm font-mono rounded-lg px-4 py-2.5 pr-10 focus:outline-none focus:border-primary/40 cursor-pointer"
+            >
+              <option value="all" className="bg-[#0a0f1e]">
+                🌍 All Leagues ({liveFixtures.length})
+              </option>
+              {liveFixtures.map((l) => (
+                <option key={l.leagueId} value={String(l.leagueId)} className="bg-[#0a0f1e]">
+                  {getLeagueFlag(l.leagueId)} {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
+                </option>
+              ))}
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          </div>
+        )}
 
         {liveFixtures.length === 0 ? (
           <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center">
@@ -45,13 +74,14 @@ export function Live() {
           </div>
         ) : (
           <div className="space-y-10">
-            {liveFixtures.map((league) => (
+            {visibleLeagues.map((league) => (
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/10">
+                  <span className="text-lg leading-none">{getLeagueFlag(league.leagueId)}</span>
                   {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt={league.leagueName ?? ""} className="w-6 h-6 object-contain" />
+                    <img src={league.leagueLogo} alt={league.leagueName ?? ""} className="w-5 h-5 object-contain" />
                   )}
-                  <h2 className="text-xl font-bold text-white uppercase tracking-wider">{league.leagueName}</h2>
+                  <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{league.leagueName}</h2>
                   <span className="text-xs text-muted-foreground font-mono ml-auto">
                     {league.fixtures.length} live
                   </span>

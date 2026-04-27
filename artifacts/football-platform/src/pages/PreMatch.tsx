@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getLeagueFlag } from "@/lib/leagues";
 
 const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
 const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
@@ -342,13 +343,16 @@ export function PreMatch() {
             </SelectTrigger>
             <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono">
               <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
-                All Leagues ({leagues.length})
+                🌍 All Leagues ({leagues.length})
               </SelectItem>
-              {leagues.map((l) => (
-                <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                  {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
-                </SelectItem>
-              ))}
+              {leagues
+                .slice()
+                .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""))
+                .map((l) => (
+                  <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
+                    {getLeagueFlag(l.leagueId)} {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
         )}

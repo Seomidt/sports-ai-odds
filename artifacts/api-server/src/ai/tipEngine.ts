@@ -642,22 +642,26 @@ export function generateAlgorithmicTips(
   // MIN_PROB per market: only tip when the estimated probability is high enough
   //   to produce a realistic hit rate. Without this, we tip 47% shots all day
   //   and wonder why we're losing. These thresholds target ~60% hit rate.
-  const MIN_EDGE = 0.04;
-  const MIN_PROB_MATCH  = 0.55; // match_result — only strong-lean picks
-  const MIN_PROB_OU     = 0.58; // over/under — higher bar (over15 dilutes quality)
-  const MIN_PROB_BTTS   = 0.58; // btts yes — requires both teams actually scoring well
-  const MIN_PROB_OTHER  = 0.55; // corners, handicap, double chance, win to nil
+  const MIN_EDGE         = 0.04;  // standard edge bar for all markets
+  const MIN_EDGE_MATCH   = 0.02;  // match result: bookmaker pricing is tight, allow near-value picks
+  const MIN_PROB_MATCH   = 0.50;  // match_result — any clear lean (not exactly 50/50)
+  const MIN_PROB_OU      = 0.54;  // over/under
+  const MIN_PROB_BTTS    = 0.55;  // btts yes
+  const MIN_PROB_OTHER   = 0.55;  // corners, handicap, double chance, win to nil
 
   const finalTips: Candidate[] = [];
 
-  // Required markets: only include if edge AND probability clear their bars
+  // Match result: best side if it clears both bars
   const bestMatch = matchCandidates[0];
-  const bestOU    = ouCandidates[0];
-  const bestBtts  = bttsCandidates[0];
+  if (bestMatch && bestMatch.edge >= MIN_EDGE_MATCH && bestMatch.prob >= MIN_PROB_MATCH) finalTips.push(bestMatch);
 
-  if (bestMatch && bestMatch.edge >= MIN_EDGE && bestMatch.prob >= MIN_PROB_MATCH) finalTips.push(bestMatch);
-  if (bestOU    && bestOU.edge    >= MIN_EDGE && bestOU.prob    >= MIN_PROB_OU)    finalTips.push(bestOU);
-  if (bestBtts  && bestBtts.edge  >= MIN_EDGE && bestBtts.prob  >= MIN_PROB_BTTS)  finalTips.push(bestBtts);
+  // Over/Under: allow up to 2 picks (e.g. both Over 1.5 and Over 2.5) when both have edge
+  const qualifiedOU = ouCandidates.filter(c => c.edge >= MIN_EDGE && c.prob >= MIN_PROB_OU);
+  for (const ou of qualifiedOU.slice(0, 2)) finalTips.push(ou);
+
+  // BTTS
+  const bestBtts = bttsCandidates[0];
+  if (bestBtts && bestBtts.edge >= MIN_EDGE && bestBtts.prob >= MIN_PROB_BTTS) finalTips.push(bestBtts);
 
   // Optional markets: same edge gate, then fill up to 5
   const usedTypes = new Set(finalTips.map(t => t.bet_type));
@@ -671,7 +675,7 @@ export function generateAlgorithmicTips(
     .sort((a, b) => b.edge - a.edge);
 
   for (const opt of optional) {
-    if (finalTips.length >= 5) break;
+    if (finalTips.length >= 6) break;
     if (!finalTips.some(t => t.bet_type === opt.bet_type)) {
       finalTips.push(opt);
     }

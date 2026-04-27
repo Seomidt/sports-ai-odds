@@ -146,13 +146,19 @@ function HomeRedirect() {
   return <Home />;
 }
 
+function AuthedAlertPoller() {
+  const { isSignedIn } = useAuth();
+  if (!isSignedIn) return null;
+  return <AlertPoller />;
+}
+
 function AppRoutes() {
   return (
     <QueryClientProvider client={queryClient}>
       <SupabaseTokenInjector />
       <SupabaseCacheInvalidator />
-      <AlertPoller />
       <SessionProvider>
+        <AuthedAlertPoller />
         <Switch>
           <Route path="/" component={HomeRedirect} />
           <Route path="/login" component={Login} />

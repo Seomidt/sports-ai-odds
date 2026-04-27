@@ -247,5 +247,17 @@ export function Standings() {
               <img
                 src={LEAGUE_LOGO(activeLeagueId)}
                 alt=""
-                className="w-6 h-6 object-contain"
-                onError={e => { (e.target as HTML
+                className="w-6 h-6 object-contain bg-white/90 rounded p-0.5"
+                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+              <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
+                {activeLeagueName || "Standings"}
+              </h2>
+            </div>
+            <StandingsTable leagueId={activeLeagueId} />
+          </div>
+        )}
+      </div>
+    </Layout>
+  );
+}

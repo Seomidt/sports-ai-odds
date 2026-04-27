@@ -215,7 +215,7 @@ export const TRACKED_LEAGUES = [
   // ── Portugal ──────────────────────────────────────────────────────────────
   { id: 94,  name: "Primeira Liga",      season: 2025 },
   // ── Belgium ───────────────────────────────────────────────────────────────
-  { id: 107, name: "Belgian Pro League", season: 2025 },
+  { id: 144, name: "Belgian Pro League", season: 2025 },
   // ── Scotland ──────────────────────────────────────────────────────────────
   { id: 179, name: "Scottish Prem.",     season: 2025 },
   // ── Austria ───────────────────────────────────────────────────────────────
@@ -223,7 +223,7 @@ export const TRACKED_LEAGUES = [
   // ── Turkey ────────────────────────────────────────────────────────────────
   { id: 203, name: "Süper Lig",          season: 2025 },
   // ── Poland ────────────────────────────────────────────────────────────────
-  { id: 271, name: "Ekstraklasa",        season: 2025 },
+  { id: 106, name: "Ekstraklasa",         season: 2025 },
   // ── Scandinavia (calendar year) ───────────────────────────────────────────
   { id: 119, name: "Superliga",          season: 2026 },
   { id: 120, name: "1. Division",        season: 2026 },

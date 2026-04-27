@@ -2531,6 +2531,52 @@ export async function syncOddsForFixture(fixtureId: number): Promise<boolean> {
   return wrote;
 }
 
+// ─── One-time H2H stats backfill ──────────────────────────────────────────────
+// Fetches /fixtures/statistics for all h2h_fixtures rows that have no stats yet.
+// Safe to call multiple times — skips fixtures already in h2h_fixture_stats.
+
+let h2hBackfillRunning = false;
+let h2hBackfillProgress = { done: 0, total: 0, finished: false };
+
+export function getH2HBackfillStatus() {
+  return { ...h2hBackfillProgress, running: h2hBackfillRunning };
+}
+
+export async function backfillH2HStats(): Promise<void> {
+  if (h2hBackfillRunning) return;
+  h2hBackfillRunning = true;
+  h2hBackfillProgress = { done: 0, total: 0, finished: false };
+
+  try {
+    // Get all h2h fixture IDs that have no stats yet
+    const allH2H = await db.selectDistinct({ fixtureId: h2hFixtures.fixtureId }).from(h2hFixtures);
+    const withStats = new Set(
+      (await db.selectDistinct({ fixtureId: h2hFixtureStats.fixtureId }).from(h2hFixtureStats))
+        .map((r) => r.fixtureId)
+    );
+
+    const missing = allH2H.filter((r) => !withStats.has(r.fixtureId));
+    h2hBackfillProgress.total = missing.length;
+    console.log(`[h2h-backfill] ${missing.length} fixtures need stats`);
+
+    for (const { fixtureId } of missing) {
+      if (isQuotaExhausted()) {
+        console.warn("[h2h-backfill] Quota exhausted — stopping");
+        break;
+      }
+      const stats = await fetchFixtureStats(fixtureId).catch(() => null);
+      if (stats) await upsertH2HFixtureStats(fixtureId, stats);
+      h2hBackfillProgress.done++;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+
+    h2hBackfillProgress.finished = true;
+    console.log(`[h2h-backfill] Done — ${h2hBackfillProgress.done}/${h2hBackfillProgress.total} fetched`);
+  } finally {
+    h2hBackfillRunning = false;
+  }
+}
+
 export function startPoller() {
   if (pollerStarted) return;
   pollerStarted = true;

@@ -667,6 +667,7 @@ function ForceSyncSection() {
   const [loadingFull, setLoadingFull] = useState(false);
   const [loadingFixture, setLoadingFixture] = useState(false);
   const [loadingAi, setLoadingAi] = useState(false);
+  const [loadingH2HBackfill, setLoadingH2HBackfill] = useState(false);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
   const [aiTipsError, setAiTipsError] = useState<string | null>(null);
   const [aiTipsSuccess, setAiTipsSuccess] = useState(false);
@@ -785,6 +786,23 @@ function ForceSyncSection() {
     }
   };
 
+  const handleH2HBackfill = async () => {
+    setLoadingH2HBackfill(true);
+    try {
+      const res = await fetch("/api/admin/h2h-backfill", { method: "POST", headers: await authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast({ title: data.error ?? `H2H backfill fejl (${res.status})`, variant: "destructive" });
+      } else {
+        toast({ title: "H2H stats backfill startet", description: "Henter xG, skud, hjørner for alle historiske H2H kampe — kører i baggrunden" });
+      }
+    } catch (err) {
+      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
+    } finally {
+      setLoadingH2HBackfill(false);
+    }
+  };
+
   const handleForceFixtureSync = async () => {
     const id = parseInt(fixtureIdInput.trim(), 10);
     if (!id) {
@@ -834,6 +852,14 @@ function ForceSyncSection() {
         >
           <Brain className="w-4 h-4" />
           {loadingAi ? "Starting..." : "Force AI Tips Generation"}
+        </button>
+        <button
+          onClick={handleH2HBackfill}
+          disabled={loadingH2HBackfill}
+          className="w-full h-10 bg-teal-500/20 border border-teal-500/30 text-teal-300 text-sm font-mono font-bold rounded-md hover:bg-teal-500/30 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+        >
+          <Database className="w-4 h-4" />
+          {loadingH2HBackfill ? "Starting..." : "Backfill H2H Stats (xG · Skud · Hjørner)"}
         </button>
         <button
           onClick={handleTestPing}

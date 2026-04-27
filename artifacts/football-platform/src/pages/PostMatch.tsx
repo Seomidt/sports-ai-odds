@@ -96,7 +96,7 @@ export function PostMatch() {
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/10">
                   {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain" />
+                    <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
                   )}
                   <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
                     {league.leagueName ?? `League ${league.leagueId}`}
@@ -134,7 +134,7 @@ export function PostMatch() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 {fixture.homeTeamLogo && (
-                                  <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
+                                  <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
                                 )}
                                 <span className={`font-medium truncate text-sm ${homeWon ? "text-white" : "text-muted-foreground"}`}>
                                   {fixture.homeTeamName}
@@ -147,7 +147,7 @@ export function PostMatch() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2.5 min-w-0">
                                 {fixture.awayTeamLogo && (
-                                  <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
+                                  <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
                                 )}
                                 <span className={`font-medium truncate text-sm ${awayWon ? "text-white" : "text-muted-foreground"}`}>
                                   {fixture.awayTeamName}
@@ -161,7 +161,7 @@ export function PostMatch() {
                           {hasWeather && (
                             <div className={`mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-xs font-mono ${isAdverseWeather ? "text-amber-400" : "text-violet-300"}`}>
                               {fixture.weatherIcon
-                                ? <img src={`https://openweathermap.org/img/wn/${fixture.weatherIcon}.png`} className="w-4 h-4 object-contain shrink-0" alt={fixture.weatherDesc ?? ""} />
+                                ? <img src={`https://openweathermap.org/img/wn/${fixture.weatherIcon}.png`} className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" alt={fixture.weatherDesc ?? ""} />
                                 : <Thermometer className="w-3.5 h-3.5 shrink-0" />
                               }
                               <span className="capitalize truncate">{fixture.weatherDesc}</span>

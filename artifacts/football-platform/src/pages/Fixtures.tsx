@@ -83,7 +83,7 @@ function FixtureCard({ fixture }: { fixture: Fixture }) {
           {fixture.leagueName && (
             <div className="flex items-center gap-1.5 overflow-hidden">
               {fixture.leagueLogo && (
-                <img src={fixture.leagueLogo} alt="" className="w-4 h-4 object-contain shrink-0" />
+                <img src={fixture.leagueLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" />
               )}
               <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[90px]">
                 {fixture.leagueName}
@@ -96,7 +96,7 @@ function FixtureCard({ fixture }: { fixture: Fixture }) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               {fixture.homeTeamLogo && (
-                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
+                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
               )}
               <span className="font-medium text-white truncate text-sm">{fixture.homeTeamName}</span>
             </div>
@@ -107,7 +107,7 @@ function FixtureCard({ fixture }: { fixture: Fixture }) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               {fixture.awayTeamLogo && (
-                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
+                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
               )}
               <span className="font-medium text-white truncate text-sm">{fixture.awayTeamName}</span>
             </div>
@@ -148,7 +148,7 @@ function FixtureGrid({ fixtures }: { fixtures: Fixture[] }) {
         <div key={league.leagueId}>
           <div className="flex items-center gap-2.5 mb-4 pb-2 border-b border-white/10">
             {league.leagueLogo && (
-              <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain" />
+              <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
             )}
             <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
               {league.leagueName ?? `League ${league.leagueId}`}

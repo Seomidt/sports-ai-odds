@@ -70,7 +70,7 @@ function NewsCard({ article, leagueName }: { article: NewsArticle; leagueName: s
               <img
                 src={article.teamLogo}
                 alt={article.teamName}
-                className="w-14 h-14 object-contain rounded-lg bg-white/5 p-1.5"
+                className="w-14 h-14 object-contain rounded-lg bg-white p-1.5"
               />
             ) : (
               <div className="w-14 h-14 rounded-lg bg-white/5 flex items-center justify-center">
@@ -154,7 +154,7 @@ export function News() {
             {LEAGUES.map((league) => (
               <SelectItem key={league.id} value={String(league.id)} className="text-white focus:bg-white/10 focus:text-white">
                 <span className="inline-flex items-center gap-2">
-                  <img src={getLeagueLogo(league.id)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  <img src={getLeagueLogo(league.id)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                   {league.name}
                 </span>
               </SelectItem>
@@ -211,3 +211,4 @@ export function News() {
     </Layout>
   );
 }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                

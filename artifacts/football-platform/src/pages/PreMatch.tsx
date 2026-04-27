@@ -233,7 +233,7 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               {fixture.homeTeamLogo && (
-                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
+                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
               )}
               <span className="font-semibold text-white truncate text-sm">{fixture.homeTeamName}</span>
             </div>
@@ -242,7 +242,7 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               {fixture.awayTeamLogo && (
-                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
+                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
               )}
               <span className="font-medium text-white/50 truncate text-sm">{fixture.awayTeamName}</span>
             </div>
@@ -351,7 +351,7 @@ export function PreMatch() {
                 .map((l) => (
                   <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
                     <span className="inline-flex items-center gap-2">
-                      <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                      <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                       {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
                     </span>
                   </SelectItem>
@@ -386,25 +386,7 @@ export function PreMatch() {
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/8">
                   {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain" />
+                    <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
                   )}
                   <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
-                    {league.leagueName ?? `League ${league.leagueId}`}
-                  </span>
-                  <span className="text-xs text-muted-foreground font-mono ml-auto">
-                    {league.fixtures.length} {league.fixtures.length === 1 ? "match" : "matches"}
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {league.fixtures.map((fixture) => (
-                    <PreMatchCard key={fixture.fixtureId} fixture={fixture} allTips={tipsData?.tips} />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </Layout>
-  );
-}
+                    {league.leagueName ?? `L

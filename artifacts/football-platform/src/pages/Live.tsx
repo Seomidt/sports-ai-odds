@@ -62,7 +62,7 @@ export function Live() {
               {liveFixtures.map((l) => (
                 <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
                   <span className="inline-flex items-center gap-2">
-                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
                   </span>
                 </SelectItem>
@@ -85,7 +85,7 @@ export function Live() {
                   <img
                     src={getLeagueLogo(league.leagueId) || league.leagueLogo || ""}
                     alt={league.leagueName ?? ""}
-                    className="w-5 h-5 object-contain shrink-0"
+                    className="w-5 h-5 object-contain shrink-0 bg-white/90 rounded p-0.5"
                     onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
                   />
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{league.leagueName}</h2>
@@ -101,46 +101,4 @@ export function Live() {
                         <div className="flex justify-between items-center mb-4">
                           <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded font-mono">
                             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                            {fixture.statusElapsed != null ? `${fixture.statusElapsed}'` : "LIVE"}
-                          </span>
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {fixture.kickoff ? format(new Date(fixture.kickoff), "HH:mm") : "--:--"}
-                          </span>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {fixture.homeTeamLogo && (
-                                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
-                              )}
-                              <span className="font-medium text-white truncate text-sm">{fixture.homeTeamName}</span>
-                            </div>
-                            <span className="font-mono text-lg font-bold text-primary shrink-0">
-                              {fixture.homeGoals ?? "-"}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {fixture.awayTeamLogo && (
-                                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0" />
-                              )}
-                              <span className="font-medium text-white truncate text-sm">{fixture.awayTeamName}</span>
-                            </div>
-                            <span className="font-mono text-lg font-bold text-primary shrink-0">
-                              {fixture.awayGoals ?? "-"}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </Layout>
-  );
-}
+                            {fixture.statusElapsed != null ? `${fixtu

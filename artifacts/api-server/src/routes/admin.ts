@@ -13,6 +13,8 @@ import {
   seedHistoricalData,
   bulkGenerateAiTips,
   sweepMissedPostMatchReviews,
+  backfillH2HStats,
+  getH2HBackfillStatus,
 } from "../ingestion/poller.js";
 
 const router = Router();
@@ -212,6 +214,17 @@ router.post("/admin/force-sync/:id", requireAdmin, async (req, res) => {
 router.post("/admin/force-ai-tips", requireAdmin, (_req, res) => {
   bulkGenerateAiTips(200).catch(console.error);
   return res.json({ ok: true, message: "AI tip generation started for up to 200 upcoming fixtures" });
+});
+
+// ── H2H stats backfill ────────────────────────────────────────────────────────
+
+router.get("/admin/h2h-backfill/status", requireAdmin, (_req, res) => {
+  return res.json(getH2HBackfillStatus());
+});
+
+router.post("/admin/h2h-backfill", requireAdmin, (_req, res) => {
+  backfillH2HStats().catch(console.error);
+  return res.json({ ok: true, message: "H2H stats backfill started in background" });
 });
 
 // ── AI health check ───────────────────────────────────────────────────────────

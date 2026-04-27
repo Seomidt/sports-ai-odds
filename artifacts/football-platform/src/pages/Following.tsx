@@ -43,14 +43,14 @@ function FixtureCard({ id }: { id: number }) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {fixture.homeTeamLogo && <img src={fixture.homeTeamLogo} className="w-6 h-6 object-contain" />}
+              {fixture.homeTeamLogo && <img src={fixture.homeTeamLogo} className="w-6 h-6 object-contain bg-white/90 rounded p-0.5" />}
               <span className="font-medium text-white truncate max-w-[120px]">{fixture.homeTeamName}</span>
             </div>
             <span className="font-mono text-lg font-bold text-white">{fixture.homeGoals ?? '-'}</span>
           </div>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              {fixture.awayTeamLogo && <img src={fixture.awayTeamLogo} className="w-6 h-6 object-contain" />}
+              {fixture.awayTeamLogo && <img src={fixture.awayTeamLogo} className="w-6 h-6 object-contain bg-white/90 rounded p-0.5" />}
               <span className="font-medium text-white truncate max-w-[120px]">{fixture.awayTeamName}</span>
             </div>
             <span className="font-mono text-lg font-bold text-white">{fixture.awayGoals ?? '-'}</span>

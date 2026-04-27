@@ -132,7 +132,7 @@ function StandingsTable({ leagueId }: { leagueId: number }) {
                 <td className="py-3 px-2">
                   <div className="flex items-center gap-2.5 min-w-0">
                     {row.teamLogo && (
-                      <img src={row.teamLogo} alt="" className="w-5 h-5 object-contain shrink-0" />
+                      <img src={row.teamLogo} alt="" className="w-5 h-5 object-contain shrink-0 bg-white/90 rounded p-0.5" />
                     )}
                     <span className="font-medium text-white truncate max-w-[130px]">{row.teamName}</span>
                     <TrendIcon diff={row.goalsDiff ?? 0} />
@@ -231,7 +231,7 @@ export function Standings() {
               {leagues.map(l => (
                 <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
                   <span className="inline-flex items-center gap-2">
-                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
                     {l.leagueName}
                   </span>
                 </SelectItem>
@@ -248,14 +248,4 @@ export function Standings() {
                 src={LEAGUE_LOGO(activeLeagueId)}
                 alt=""
                 className="w-6 h-6 object-contain"
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
-              <span className="font-mono font-bold text-sm text-white tracking-wide">{activeLeagueName}</span>
-            </div>
-            <StandingsTable key={activeLeagueId} leagueId={activeLeagueId} />
-          </div>
-        )}
-      </div>
-    </Layout>
-  );
-}
+                onError={e => { (e.target as HTML

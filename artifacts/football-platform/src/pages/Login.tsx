@@ -22,6 +22,7 @@ export default function Login() {
         <Auth
           supabaseClient={supabase}
           redirectTo={window.location.origin}
+          providers={["google"]}
           appearance={{
             theme: ThemeSupa,
             variables: {

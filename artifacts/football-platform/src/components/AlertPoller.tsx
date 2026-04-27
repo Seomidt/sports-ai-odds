@@ -4,6 +4,7 @@ import { useLocation } from "wouter";
 import { Zap, X, ArrowRight, Activity } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getNotifPrefs } from "./NotificationBell";
+import { useAuth } from "@/hooks/useAuth";
 
 type Alert = BaseAlert & { tier?: string | null };
 
@@ -164,6 +165,7 @@ function SignalAlert({ alert, count, onDismiss }: SignalAlertProps) {
 }
 
 export function AlertPoller() {
+  const { isSignedIn, isLoading: authLoading } = useAuth();
   const seenIdsRef = useRef<Set<number>>(getSeenIds());
   // Key = fixtureId, value = { alert (latest), count (how many bookmakers), id (for dismiss) }
   const [activeByFixture, setActiveByFixture] = useState<
@@ -240,6 +242,7 @@ export function AlertPoller() {
     });
   }, []);
 
+  if (authLoading || !isSignedIn) return null;
   if (activeByFixture.size === 0) return null;
 
   return (

@@ -444,6 +444,32 @@ export const h2hFixtures = pgTable(
   ]
 );
 
+export const h2hFixtureStats = pgTable(
+  "h2h_fixture_stats",
+  {
+    id: serial("id").primaryKey(),
+    fixtureId: integer("fixture_id").notNull(),
+    teamId: integer("team_id").notNull(),
+    shotsOnGoal: integer("shots_on_goal"),
+    shotsOffGoal: integer("shots_off_goal"),
+    totalShots: integer("total_shots"),
+    blockedShots: integer("blocked_shots"),
+    cornerKicks: integer("corner_kicks"),
+    fouls: integer("fouls"),
+    yellowCards: integer("yellow_cards"),
+    redCards: integer("red_cards"),
+    ballPossession: integer("ball_possession"),
+    passAccuracy: integer("pass_accuracy"),
+    totalPasses: integer("total_passes"),
+    expectedGoals: real("expected_goals"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("h2h_fixture_stats_unique").on(t.fixtureId, t.teamId),
+    index("h2h_fixture_stats_fixture_idx").on(t.fixtureId),
+  ]
+);
+
 export const teamSeasonStats = pgTable(
   "team_season_stats",
   {
@@ -674,6 +700,7 @@ export const newsArticles = pgTable(
 );
 
 export type H2HFixture = typeof h2hFixtures.$inferSelect;
+export type H2HFixtureStat = typeof h2hFixtureStats.$inferSelect;
 export type TeamSeasonStats = typeof teamSeasonStats.$inferSelect;
 export type PlayerProfile = typeof playerProfiles.$inferSelect;
 export type Venue = typeof venues.$inferSelect;

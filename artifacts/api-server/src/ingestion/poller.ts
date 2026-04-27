@@ -16,6 +16,7 @@ import {
   sidelinedPlayers,
   transfers,
   h2hFixtures,
+  h2hFixtureStats,
   teamSeasonStats,
   playerProfiles,
   venues,
@@ -64,6 +65,7 @@ import {
   kvSet,
   type ApiFixture,
   type ApiStatItem,
+  type ApiTeamStats,
   type ApiLineup,
 } from "./apiFootballClient.js";
 import { initAiStats, getBettingTips, triggerPostMatchReview, generateDailyAdminInsight } from "../ai/analysisLayer.js";
@@ -865,6 +867,18 @@ async function syncH2HForUpcomingFixtures() {
           forTeam2Id: fix.awayTeamId,
         })
         .onConflictDoNothing();
+
+      // Fetch per-match stats (shots, corners, possession, xG) if not already stored
+      const statsExist = await db.query.h2hFixtureStats.findFirst({
+        where: (s, { eq: eqFn }) => eqFn(s.fixtureId, entry.fixture.id),
+      });
+      if (!statsExist) {
+        const statsData = await fetchFixtureStats(entry.fixture.id).catch(() => null);
+        if (statsData) {
+          await upsertH2HFixtureStats(entry.fixture.id, statsData);
+        }
+        await new Promise((r) => setTimeout(r, 150));
+      }
     }
   }
   console.log(`[poller] H2H synced for ${upcoming.length} upcoming fixtures`);
@@ -1713,6 +1727,57 @@ async function upsertFixtureEventsAndStats(fixtureId: number): Promise<void> {
   }
 }
 
+// ─── H2H fixture stats upsert ─────────────────────────────────────────────────
+
+async function upsertH2HFixtureStats(fixtureId: number, stats: ApiTeamStats[]): Promise<void> {
+  for (const teamStat of stats) {
+    const getValue = (type: string): number | null => {
+      const item = teamStat.statistics.find((s: ApiStatItem) => s.type === type);
+      if (!item || item.value === null || item.value === undefined) return null;
+      const val = String(item.value).replace("%", "");
+      const num = parseFloat(val);
+      return isNaN(num) ? null : num;
+    };
+    await db
+      .insert(h2hFixtureStats)
+      .values({
+        fixtureId,
+        teamId: teamStat.team.id,
+        shotsOnGoal:    getValue("Shots on Goal"),
+        shotsOffGoal:   getValue("Shots off Goal"),
+        totalShots:     getValue("Total Shots"),
+        blockedShots:   getValue("Blocked Shots"),
+        cornerKicks:    getValue("Corner Kicks"),
+        fouls:          getValue("Fouls"),
+        yellowCards:    getValue("Yellow Cards"),
+        redCards:       getValue("Red Cards"),
+        ballPossession: getValue("Ball Possession"),
+        passAccuracy:   getValue("Passes %"),
+        totalPasses:    getValue("Total passes"),
+        expectedGoals:  getValue("expected_goals"),
+        updatedAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: [h2hFixtureStats.fixtureId, h2hFixtureStats.teamId],
+        set: {
+          shotsOnGoal:    getValue("Shots on Goal"),
+          shotsOffGoal:   getValue("Shots off Goal"),
+          totalShots:     getValue("Total Shots"),
+          blockedShots:   getValue("Blocked Shots"),
+          cornerKicks:    getValue("Corner Kicks"),
+          fouls:          getValue("Fouls"),
+          yellowCards:    getValue("Yellow Cards"),
+          redCards:       getValue("Red Cards"),
+          ballPossession: getValue("Ball Possession"),
+          passAccuracy:   getValue("Passes %"),
+          totalPasses:    getValue("Total passes"),
+          expectedGoals:  getValue("expected_goals"),
+          updatedAt: new Date(),
+        },
+      });
+  }
+}
+
 // ─── Missed post-match review sweep ───────────────────────────────────────────
 /**
  * Finds ai_betting_tips with outcome IS NULL where the fixture has already
@@ -2323,7 +2388,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   }
   log("Predictions done");
 
-  // ── 5. H2H: only fetch for team pairs that have NO h2h data ──────────────
+  // ── 5. H2H: fixtures + per-match stats (shots, corners, xG, possession) ──────
   log("Syncing H2H for pairs with no existing data...");
   for (const fix of upcoming) {
     if (!fix.homeTeamId || !fix.awayTeamId) continue;
@@ -2356,6 +2421,16 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
         forTeam1Id: fix.homeTeamId,
         forTeam2Id: fix.awayTeamId,
       }).onConflictDoNothing();
+
+      // Fetch per-match stats if not already stored
+      const statsExist = await db.query.h2hFixtureStats.findFirst({
+        where: (s, { eq: eqFn }) => eqFn(s.fixtureId, entry.fixture.id),
+      });
+      if (!statsExist) {
+        const statsData = await fetchFixtureStats(entry.fixture.id).catch(() => null);
+        if (statsData) await upsertH2HFixtureStats(entry.fixture.id, statsData);
+        await new Promise((r) => setTimeout(r, 150));
+      }
     }
     await new Promise((r) => setTimeout(r, 150));
   }

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db, pool } from "@workspace/db";
-import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses, predictionReviews } from "@workspace/db/schema";
+import { aiBettingTips, alertLog, fixtures, oddsSnapshots, standings, teamFeatures, h2hFixtures, h2hFixtureStats, newsArticles, systemKv, predictions, sidelinedPlayers, coaches, teamSeasonStats, playerSeasonStats, oddsMarkets, prematchSyntheses, predictionReviews } from "@workspace/db/schema";
 import { z } from "zod";
 import { eq, and, gte, isNotNull, desc, sql } from "drizzle-orm";
 import { calculateConfidence } from "./confidence.js";
@@ -443,10 +443,11 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
           andFn(eqFn(h.forTeam1Id, fixture.awayTeamId!), eqFn(h.forTeam2Id, fixture.homeTeamId!))
         ),
       orderBy: (h, { desc: d }) => [d(h.kickoff)],
-      limit: 5,
+      limit: 10,
     });
     if (h2hRows.length > 0) {
       let homeWins = 0, draws = 0, awayWins = 0, totalGoals = 0;
+      let bttsCount = 0, over25Count = 0, over15Count = 0;
       for (const h of h2hRows) {
         const hg = h.homeGoals ?? 0, ag = h.awayGoals ?? 0;
         totalGoals += hg + ag;
@@ -454,11 +455,45 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
         if (hg > ag) { homeIsFixtureHome ? homeWins++ : awayWins++; }
         else if (ag > hg) { homeIsFixtureHome ? awayWins++ : homeWins++; }
         else draws++;
+        if (hg > 0 && ag > 0) bttsCount++;
+        if (hg + ag > 2.5) over25Count++;
+        if (hg + ag > 1.5) over15Count++;
       }
-      signals["h2h_home_wins"] = homeWins;
-      signals["h2h_draws"] = draws;
-      signals["h2h_away_wins"] = awayWins;
-      signals["h2h_avg_goals"] = Math.round((totalGoals / h2hRows.length) * 10) / 10;
+      const n = h2hRows.length;
+      signals["h2h_home_wins"]  = homeWins;
+      signals["h2h_draws"]      = draws;
+      signals["h2h_away_wins"]  = awayWins;
+      signals["h2h_avg_goals"]  = Math.round((totalGoals / n) * 10) / 10;
+      signals["h2h_btts_rate"]  = Math.round((bttsCount  / n) * 100) / 100;
+      signals["h2h_over25_rate"] = Math.round((over25Count / n) * 100) / 100;
+      signals["h2h_over15_rate"] = Math.round((over15Count / n) * 100) / 100;
+
+      // Per-match stats: shots, corners, possession, xG from h2h_fixture_stats
+      const fixtureIds = h2hRows.map((r) => r.fixtureId);
+      if (fixtureIds.length > 0) {
+        const statsRows = await db.query.h2hFixtureStats.findMany({
+          where: (s, { inArray: inArr }) => inArr(s.fixtureId, fixtureIds),
+        });
+        if (statsRows.length > 0) {
+          // Aggregate per match (sum both teams, then average across matches)
+          const matchTotals = new Map<number, { shots: number; corners: number; xg: number; count: number }>();
+          for (const row of statsRows) {
+            const cur = matchTotals.get(row.fixtureId) ?? { shots: 0, corners: 0, xg: 0, count: 0 };
+            cur.shots   += row.totalShots    ?? 0;
+            cur.corners += row.cornerKicks   ?? 0;
+            cur.xg      += row.expectedGoals ?? 0;
+            cur.count++;
+            matchTotals.set(row.fixtureId, cur);
+          }
+          const totals = [...matchTotals.values()];
+          const avgShots   = totals.reduce((s, v) => s + v.shots,   0) / totals.length;
+          const avgCorners = totals.reduce((s, v) => s + v.corners, 0) / totals.length;
+          const avgXg      = totals.reduce((s, v) => s + v.xg,      0) / totals.length;
+          signals["h2h_avg_shots"]   = Math.round(avgShots   * 10) / 10;
+          signals["h2h_avg_corners"] = Math.round(avgCorners * 10) / 10;
+          signals["h2h_avg_xg"]      = Math.round(avgXg      * 100) / 100;
+        }
+      }
     }
   }
 

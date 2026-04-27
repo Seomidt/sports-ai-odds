@@ -232,11 +232,37 @@ function calcOverUnder(ctx: AlgoContext): {
   let over15prob = 1 - poissonCdf(lambda, 1);
   let over35prob = 1 - poissonCdf(lambda, 3);
 
-  // H2H average goals adjustment
+  // H2H average goals — base adjustment
   const h2hAvgGoals = ctx.signals["h2h_avg_goals"];
   if (typeof h2hAvgGoals === "number") {
     if (h2hAvgGoals > 3.2) { over25prob += 0.03; over35prob += 0.02; }
     else if (h2hAvgGoals < 1.8) { over25prob -= 0.03; over15prob -= 0.02; }
+  }
+
+  // H2H historical Over/Under rates — direct rate evidence
+  const h2hOver25Rate = ctx.signals["h2h_over25_rate"];
+  if (typeof h2hOver25Rate === "number") {
+    // Blend: pull over25prob 30% toward historical rate
+    over25prob = over25prob * 0.70 + h2hOver25Rate * 0.30;
+    if (h2hOver25Rate >= 0.70) over35prob += 0.03;
+    if (h2hOver25Rate <= 0.30) over35prob -= 0.03;
+  }
+
+  const h2hOver15Rate = ctx.signals["h2h_over15_rate"];
+  if (typeof h2hOver15Rate === "number") {
+    over15prob = over15prob * 0.70 + h2hOver15Rate * 0.30;
+  }
+
+  // H2H xG — strongest signal: expected goals from actual shot quality
+  const h2hAvgXg = ctx.signals["h2h_avg_xg"];
+  if (typeof h2hAvgXg === "number") {
+    const xgOver25 = 1 - poissonCdf(h2hAvgXg, 2);
+    const xgOver15 = 1 - poissonCdf(h2hAvgXg, 1);
+    const xgOver35 = 1 - poissonCdf(h2hAvgXg, 3);
+    // Blend: pull 25% toward xG-implied probabilities
+    over25prob = over25prob * 0.75 + xgOver25 * 0.25;
+    over15prob = over15prob * 0.75 + xgOver15 * 0.25;
+    over35prob = over35prob * 0.75 + xgOver35 * 0.25;
   }
 
   // Adverse weather suppresses goals
@@ -293,6 +319,12 @@ function calcBtts(ctx: AlgoContext): { bttsYesProb: number } {
     if (failRate > 0.35) bttsYesProb -= 0.06;
   }
 
+  // H2H BTTS rate — blend 30% toward historical rate between these two teams
+  const h2hBttsRate = ctx.signals["h2h_btts_rate"];
+  if (typeof h2hBttsRate === "number") {
+    bttsYesProb = bttsYesProb * 0.70 + h2hBttsRate * 0.30;
+  }
+
   return { bttsYesProb: clamp(bttsYesProb, 0.15, 0.82) };
 }
 
@@ -319,6 +351,20 @@ function calcCorners(ctx: AlgoContext): { cornersOverProb: number } {
   const homePoss = ctx.homeRecentStats?.avgPossession ?? 50;
   const awayPoss = ctx.awayRecentStats?.avgPossession ?? 50;
   if (homePoss > 57 || awayPoss > 57) prob += 0.04;
+
+  // H2H average corners — blend 25% toward historical rate between these two teams
+  const h2hAvgCorners = ctx.signals["h2h_avg_corners"];
+  if (typeof h2hAvgCorners === "number") {
+    let h2hProb: number;
+    if (h2hAvgCorners > 12.5) h2hProb = 0.68;
+    else if (h2hAvgCorners > 11.5) h2hProb = 0.62;
+    else if (h2hAvgCorners > 10.5) h2hProb = 0.57;
+    else if (h2hAvgCorners > 9.5) h2hProb = 0.52;
+    else if (h2hAvgCorners > 8.5) h2hProb = 0.47;
+    else if (h2hAvgCorners > 7.5) h2hProb = 0.42;
+    else h2hProb = 0.36;
+    prob = prob * 0.75 + h2hProb * 0.25;
+  }
 
   return { cornersOverProb: clamp(prob, 0.25, 0.78) };
 }

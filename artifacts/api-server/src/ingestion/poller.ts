@@ -542,8 +542,9 @@ async function syncPredictionForFixture(fixtureId: number) {
 
   const p = pred.predictions;
   const parsePercent = (s: string | undefined) => {
-    if (!s) return null;
-    return parseFloat(s.replace("%", "")) || null;
+    if (s == null || s === "") return null;
+    const n = parseFloat(s.replace("%", ""));
+    return isNaN(n) ? null : n;
   };
 
   await db

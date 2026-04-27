@@ -639,16 +639,27 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                       <span>Draw</span>
                       <span>{awayTeam}</span>
                     </div>
-                    <div className="flex items-center gap-1">
-                      <div className="flex-1 h-6 rounded-l flex items-center justify-center bg-teal-400/20 border border-teal-400/20">
-                        <span className="text-xs font-mono font-bold text-teal-300">{pred.homeWinPct ?? 0}%</span>
-                      </div>
-                      <div className="flex-shrink-0 px-2 h-6 flex items-center justify-center bg-white/5 border border-white/10 rounded">
-                        <span className="text-xs font-mono text-white/50">{pred.drawPct ?? 0}%</span>
-                      </div>
-                      <div className="flex-1 h-6 rounded-r flex items-center justify-center bg-violet-400/20 border border-violet-400/20">
-                        <span className="text-xs font-mono font-bold text-violet-300">{pred.awayWinPct ?? 0}%</span>
-                      </div>
+                    <div className="flex items-center h-6 rounded overflow-hidden w-full">
+                      {(pred.homeWinPct ?? 0) > 0 && (
+                        <div className="h-full flex items-center justify-center bg-teal-400/20 border-r border-teal-400/30 min-w-[2rem]" style={{ flex: pred.homeWinPct ?? 0 }}>
+                          <span className="text-xs font-mono font-bold text-teal-300 px-1">{pred.homeWinPct}%</span>
+                        </div>
+                      )}
+                      {(pred.drawPct ?? 0) > 0 && (
+                        <div className="h-full flex items-center justify-center bg-white/5 border-r border-white/10 min-w-[2rem]" style={{ flex: pred.drawPct ?? 0 }}>
+                          <span className="text-xs font-mono text-white/50 px-1">{pred.drawPct}%</span>
+                        </div>
+                      )}
+                      {(pred.awayWinPct ?? 0) > 0 && (
+                        <div className="h-full flex items-center justify-center bg-violet-400/20 min-w-[2rem]" style={{ flex: pred.awayWinPct ?? 0 }}>
+                          <span className="text-xs font-mono font-bold text-violet-300 px-1">{pred.awayWinPct}%</span>
+                        </div>
+                      )}
+                      {(pred.homeWinPct ?? 0) === 0 && (pred.drawPct ?? 0) === 0 && (pred.awayWinPct ?? 0) === 0 && (
+                        <div className="h-full flex-1 flex items-center justify-center bg-white/5">
+                          <span className="text-xs font-mono text-muted-foreground/40">No prediction data</span>
+                        </div>
+                      )}
                     </div>
                     {(pred.goalsHome != null || pred.goalsAway != null) && (
                       <div className="text-center text-xs font-mono text-muted-foreground/50">

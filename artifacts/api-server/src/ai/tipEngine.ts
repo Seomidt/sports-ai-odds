@@ -642,7 +642,7 @@ export function generateAlgorithmicTips(
   // MIN_PROB per market: only tip when the estimated probability is high enough
   //   to produce a realistic hit rate. Without this, we tip 47% shots all day
   //   and wonder why we're losing. These thresholds target ~60% hit rate.
-  const MIN_EDGE         = 0.04;  // standard edge bar for all markets
+  const MIN_EDGE         = 0.05;  // standard edge bar — matches "value" threshold so all tips show in Yesterday
   const MIN_EDGE_MATCH   = 0.02;  // match result: bookmaker pricing is tight, allow near-value picks
   const MIN_PROB_MATCH   = 0.50;  // match_result — any clear lean (not exactly 50/50)
   const MIN_PROB_OU      = 0.54;  // over/under

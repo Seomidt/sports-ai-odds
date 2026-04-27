@@ -508,9 +508,7 @@ export function generateAlgorithmicTips(
   const over25prob   = applyCalibration(rawOU.over25prob,        calibration, "over_under",   "over25");
   const over15prob   = applyCalibration(rawOU.over15prob,        calibration, "over_under",   "over15");
   const over35prob   = applyCalibration(rawOU.over35prob,        calibration, "over_under",   "over35");
-  const under25prob  = applyCalibration(1 - rawOU.over25prob,    calibration, "over_under",   "under25");
   const bttsYesProb  = applyCalibration(rawBtts.bttsYesProb,    calibration, "btts",         "yes");
-  const bttsNoProb   = applyCalibration(1 - rawBtts.bttsYesProb, calibration, "btts",        "no");
   const cornersOverProb = applyCalibration(rawCorners.cornersOverProb, calibration, "corners", "over");
 
   // Compute lambda for reasoning text
@@ -542,7 +540,10 @@ export function generateAlgorithmicTips(
     },
   ]);
 
-  // ── Over/Under: best edge line (includes Under 2.5) ───────────────────────
+  // ── Over/Under: real odds only — no synthetic derived odds ──────────────
+  // Under 2.5 and BTTS No are excluded because their odds would be approximated
+  // from the Over/BTTS Yes price, which ignores bookmaker margin and creates
+  // false positive edge. Only tip markets where we have real API odds.
   const ouCandidates = withEdge([
     {
       bet_type: "over_under", bet_side: "over25",
@@ -562,23 +563,11 @@ export function generateAlgorithmicTips(
       prob: over35prob, odds: ctx.odds.over35,
       reasoning: overUnderReasoning(ctx, "3.5", true, lambda, over35prob),
     },
-    // Under 2.5 — when lambda is low (defensive match) this often has best edge
-    {
-      bet_type: "over_under", bet_side: "under25",
-      recommendation: "Under 2.5 Goals",
-      prob: under25prob,
-      odds: ctx.odds.over25 != null && ctx.odds.over25 > 1
-        ? (() => {
-            const overImplied = 1 / ctx.odds.over25;
-            const underImplied = 1 - overImplied;
-            return underImplied > 0.05 ? Math.round((1 / underImplied) * 100) / 100 : null;
-          })()
-        : null,
-      reasoning: overUnderReasoning(ctx, "2.5", false, lambda, under25prob),
-    },
   ]);
 
-  // ── BTTS (Yes and No) ─────────────────────────────────────────────────────
+  // ── BTTS (Yes only) ───────────────────────────────────────────────────────
+  // BTTS No excluded — its odds would be derived from the Yes price, which
+  // ignores bookmaker margin and creates false positive edge (same bug as Under 2.5).
   const bttsCandidates = withEdge([
     {
       bet_type: "btts", bet_side: "yes",
@@ -586,18 +575,6 @@ export function generateAlgorithmicTips(
       prob: bttsYesProb, odds: ctx.odds.btts,
       reasoning: bttsReasoning(ctx, true, bttsYesProb),
     },
-    // BTTS No — only if we have an implied "No" odds (approximate as 1/(1-bttsImplied))
-    ...(ctx.odds.btts != null && ctx.odds.btts > 1 ? [{
-      bet_type: "btts", bet_side: "no",
-      recommendation: "BTTS No",
-      prob: bttsNoProb,
-      odds: (() => {
-        const bttsImplied = 1 / ctx.odds.btts!;
-        const noImplied = 1 - bttsImplied;
-        return noImplied > 0.05 ? Math.round((1 / noImplied) * 100) / 100 : null;
-      })(),
-      reasoning: bttsReasoning(ctx, false, bttsNoProb),
-    }] : []),
   ]);
 
   // ── Corners ───────────────────────────────────────────────────────────────
@@ -660,22 +637,27 @@ export function generateAlgorithmicTips(
     }] : []),
   ]);
 
-  // ── Select final tips — only where we have genuine edge ──────────────────
-  // MIN_EDGE: minimum positive expected value required to recommend a tip.
-  // A tip with edge = 0.04 means: for every €1 staked, algo expects +4 cents return.
-  // Tips below this threshold are noise — not worth playing.
+  // ── Select final tips — dual filter: edge AND minimum probability ────────
+  // MIN_EDGE: minimum positive expected value required (+4 cents per €1 staked).
+  // MIN_PROB per market: only tip when the estimated probability is high enough
+  //   to produce a realistic hit rate. Without this, we tip 47% shots all day
+  //   and wonder why we're losing. These thresholds target ~60% hit rate.
   const MIN_EDGE = 0.04;
+  const MIN_PROB_MATCH  = 0.55; // match_result — only strong-lean picks
+  const MIN_PROB_OU     = 0.58; // over/under — higher bar (over15 dilutes quality)
+  const MIN_PROB_BTTS   = 0.58; // btts yes — requires both teams actually scoring well
+  const MIN_PROB_OTHER  = 0.55; // corners, handicap, double chance, win to nil
 
   const finalTips: Candidate[] = [];
 
-  // Required markets: only include if edge clears the bar
+  // Required markets: only include if edge AND probability clear their bars
   const bestMatch = matchCandidates[0];
   const bestOU    = ouCandidates[0];
   const bestBtts  = bttsCandidates[0];
 
-  if (bestMatch && bestMatch.edge >= MIN_EDGE) finalTips.push(bestMatch);
-  if (bestOU    && bestOU.edge    >= MIN_EDGE) finalTips.push(bestOU);
-  if (bestBtts  && bestBtts.edge  >= MIN_EDGE) finalTips.push(bestBtts);
+  if (bestMatch && bestMatch.edge >= MIN_EDGE && bestMatch.prob >= MIN_PROB_MATCH) finalTips.push(bestMatch);
+  if (bestOU    && bestOU.edge    >= MIN_EDGE && bestOU.prob    >= MIN_PROB_OU)    finalTips.push(bestOU);
+  if (bestBtts  && bestBtts.edge  >= MIN_EDGE && bestBtts.prob  >= MIN_PROB_BTTS)  finalTips.push(bestBtts);
 
   // Optional markets: same edge gate, then fill up to 5
   const usedTypes = new Set(finalTips.map(t => t.bet_type));
@@ -685,7 +667,7 @@ export function generateAlgorithmicTips(
     ...dcCandidates,
     ...winToNilCandidates,
   ]
-    .filter(c => !usedTypes.has(c.bet_type) && c.edge >= MIN_EDGE)
+    .filter(c => !usedTypes.has(c.bet_type) && c.edge >= MIN_EDGE && c.prob >= MIN_PROB_OTHER)
     .sort((a, b) => b.edge - a.edge);
 
   for (const opt of optional) {

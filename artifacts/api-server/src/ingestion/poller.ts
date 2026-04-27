@@ -1844,6 +1844,59 @@ async function backfillMissingEdge(): Promise<void> {
   }
 }
 
+/**
+ * Populates confidence for any tips that are missing it.
+ * Uses only stored fields (ai_probability, implied_probability, feature_snapshot)
+ * so it runs fully in SQL without extra API calls.
+ * oddsStability + leagueAccuracy default to 0.5 each (contributing 0.15 to score).
+ * Safe to run repeatedly — only touches rows where confidence IS NULL.
+ */
+export async function backfillMissingConfidence(): Promise<void> {
+  try {
+    const result = await db.execute(sql`
+      UPDATE ai_betting_tips
+      SET confidence = CASE
+        WHEN (
+          0.4 * LEAST(1.0, GREATEST(0.0,
+            1.0 - ABS(
+              COALESCE(ai_probability, trust_score / 10.0) -
+              COALESCE(implied_probability, COALESCE(ai_probability, trust_score / 10.0))
+            ) / 0.5
+          )) +
+          0.3 * (
+            (CASE WHEN feature_snapshot ? 'form'     AND feature_snapshot->'form'     IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'form'     IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'form'     IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END +
+             CASE WHEN feature_snapshot ? 'injuries' AND feature_snapshot->'injuries' IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'injuries' IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'injuries' IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END +
+             CASE WHEN feature_snapshot ? 'weather'  AND feature_snapshot->'weather'  IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'weather'  IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'weather'  IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END +
+             CASE WHEN feature_snapshot ? 'h2h'      AND feature_snapshot->'h2h'      IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'h2h'      IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'h2h'      IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END
+            )::float / 4.0
+          ) + 0.15
+        ) >= 0.7 THEN 'high'
+        WHEN (
+          0.4 * LEAST(1.0, GREATEST(0.0,
+            1.0 - ABS(
+              COALESCE(ai_probability, trust_score / 10.0) -
+              COALESCE(implied_probability, COALESCE(ai_probability, trust_score / 10.0))
+            ) / 0.5
+          )) +
+          0.3 * (
+            (CASE WHEN feature_snapshot ? 'form'     AND feature_snapshot->'form'     IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'form'     IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'form'     IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END +
+             CASE WHEN feature_snapshot ? 'injuries' AND feature_snapshot->'injuries' IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'injuries' IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'injuries' IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END +
+             CASE WHEN feature_snapshot ? 'weather'  AND feature_snapshot->'weather'  IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'weather'  IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'weather'  IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END +
+             CASE WHEN feature_snapshot ? 'h2h'      AND feature_snapshot->'h2h'      IS DISTINCT FROM 'null'::jsonb AND feature_snapshot->'h2h'      IS DISTINCT FROM '[]'::jsonb AND feature_snapshot->'h2h'      IS DISTINCT FROM '{}'::jsonb THEN 1 ELSE 0 END
+            )::float / 4.0
+          ) + 0.15
+        ) >= 0.45 THEN 'medium'
+        ELSE 'low'
+      END
+      WHERE confidence IS NULL
+    `);
+    const count = (result as any).rowCount ?? 0;
+    if (count > 0) console.log(`[confidence-backfill] Populated confidence for ${count} tips`);
+  } catch (err) {
+    console.warn("[confidence-backfill] Failed:", err);
+  }
+}
+
 // ─── Post-match data backfill ─────────────────────────────────────────────────
 /**
  * Finds finished fixtures from the last 14 days that have no events in the DB
@@ -2590,6 +2643,9 @@ export function startPoller() {
 
   // ── One-shot migration: populate edge for tips missing it ─────────────────
   backfillMissingEdge().catch(console.error);
+
+  // ── One-shot migration: populate confidence for tips missing it ────────────
+  backfillMissingConfidence().catch(console.error);
 
   // ── Sweep: trigger post-match reviews for tips still pending ──────────────
   // Now free — outcome is determined algorithmically, no AI call needed.

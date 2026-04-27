@@ -15,6 +15,7 @@ import {
   sweepMissedPostMatchReviews,
   backfillH2HStats,
   getH2HBackfillStatus,
+  backfillMissingConfidence,
 } from "../ingestion/poller.js";
 
 const router = Router();
@@ -92,6 +93,15 @@ router.post("/admin/review-sweep", requireAdmin, async (_req, res) => {
     console.error("[admin] review-sweep error:", err);
     return res.status(500).json({ error: "Sweep failed to start" });
   }
+});
+
+// ── Confidence backfill ───────────────────────────────────────────────────────
+// Populates confidence for all tips that have NULL — runs in background.
+router.post("/admin/backfill-confidence", requireAdmin, (_req, res) => {
+  backfillMissingConfidence().catch((err) =>
+    console.error("[admin] confidence-backfill error:", err)
+  );
+  return res.json({ ok: true, message: "Confidence backfill started in background" });
 });
 
 // ── DB stats ──────────────────────────────────────────────────────────────────

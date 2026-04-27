@@ -233,11 +233,7 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
               <Zap className="w-3 h-3" />
               {signals.length} {signals.length === 1 ? "signal" : "signals"}
             </span>
-          ) : (
-            <span className="text-xs font-mono text-muted-foreground/25 bg-white/3 px-2 py-0.5 rounded" title="No pre-match patterns detected yet. Signals appear as the match approaches.">
-              scanning...
-            </span>
-          )}
+          ) : null}
         </div>
 
         <div className="space-y-2.5 mb-1">
@@ -344,7 +340,7 @@ export function PreMatch() {
 
   const leagues = Array.from(byLeague.values());
   const visibleLeagues = selectedLeague === "all" ? leagues : leagues.filter((l) => l.leagueId === selectedLeague);
-  const totalWithTips = prematch.filter((f) => tipsData?.tips?.[f.fixtureId]?.length).length;
+
 
   return (
     <Layout>
@@ -356,10 +352,6 @@ export function PreMatch() {
           </div>
           <p className="text-muted-foreground text-sm">
             All upcoming fixtures with pre-match analysis and signals.
-            {totalWithTips > 0
-              ? <span className="ml-1 text-primary/70 font-mono">AI picks ready for {totalWithTips} of {prematch.length} fixtures.</span>
-              : <span className="ml-1 text-muted-foreground/50 font-mono">AI picks are being generated — check back shortly.</span>
-            }
           </p>
         </header>
 

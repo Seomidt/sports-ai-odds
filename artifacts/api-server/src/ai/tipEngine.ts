@@ -586,30 +586,7 @@ export function generateAlgorithmicTips(
     },
   ]);
 
-  // ── Over/Under: real odds only — no synthetic derived odds ──────────────
-  // Under 2.5 and BTTS No are excluded because their odds would be approximated
-  // from the Over/BTTS Yes price, which ignores bookmaker margin and creates
-  // false positive edge. Only tip markets where we have real API odds.
-  const ouCandidates = withEdge([
-    {
-      bet_type: "over_under", bet_side: "over25",
-      recommendation: "Over 2.5 Goals",
-      prob: over25prob, odds: ctx.odds.over25,
-      reasoning: overUnderReasoning(ctx, "2.5", true, lambda, over25prob),
-    },
-    {
-      bet_type: "over_under", bet_side: "over15",
-      recommendation: "Over 1.5 Goals",
-      prob: over15prob, odds: ctx.odds.over15,
-      reasoning: overUnderReasoning(ctx, "1.5", true, lambda, over15prob),
-    },
-    {
-      bet_type: "over_under", bet_side: "over35",
-      recommendation: "Over 3.5 Goals",
-      prob: over35prob, odds: ctx.odds.over35,
-      reasoning: overUnderReasoning(ctx, "3.5", true, lambda, over35prob),
-    },
-  ]);
+  // Over/Under candidates are built below but gated by ouCandidates override above.
 
   // ── BTTS (Yes only) ───────────────────────────────────────────────────────
   // BTTS No excluded — its odds would be derived from the Yes price, which
@@ -622,6 +599,11 @@ export function generateAlgorithmicTips(
       reasoning: bttsReasoning(ctx, true, bttsYesProb),
     },
   ]);
+
+  // ── Over/Under: DISABLED — even high confidence over25 was -8.5 units ─────
+  // Breakeven at avg 1.85 odds is 54%. Best sub-market (over25 high) only hit 50%.
+  // No sub-market clears breakeven at meaningful sample size.
+  const ouCandidates: Candidate[] = [];
 
   // ── Corners: DISABLED — backtested 21% hit rate at 1.74 odds (-95 units) ──
   // Model cannot reliably predict corners volume above bookmaker breakeven (57%).
@@ -674,33 +656,56 @@ export function generateAlgorithmicTips(
   //
   // Thresholds derived from backtest on 4,197 resolved tips:
   //
-  // KEEP  match_result   medium: 44.1% hit @ 2.87 odds → +24 units  (breakeven 34.9%)
-  // KEEP  asian_handicap medium: 47.9% hit @ 2.25 odds → +13 units  (breakeven 44.4%)
-  // KEEP  btts           high:   61.5% hit @ 1.74 odds → +4  units  (breakeven 57.3%)
-  // KEEP  double_chance  high:   58.3% hit @ 1.83 odds → +1  units  (breakeven 54.7%)
-  // DROP  over_under     medium: 48.8% hit @ 1.64 odds → -70 units  (breakeven 61.0%)
-  // DROP  btts           medium: 57.8% hit @ 1.68 odds → -11 units  (breakeven 59.5%)
-  // DROP  corners        all:    21.8% hit → -95 units  (DISABLED above)
-  // DROP  win_to_nil     all:    16.4% hit → -45 units  (DISABLED above)
+  // KEEP  double_chance  high:   66.7% hit @ 1.83 odds → +19.5 units (breakeven 54.7%)
+  // KEEP  btts           high:   63.9% hit @ 1.74 odds → +18.7 units (breakeven 57.3%)
+  // KEEP  match_result   draw:   38.6% hit @ 3.56 odds → +25.0 units (breakeven ~28%)
+  // KEEP  match_result   home:   58.3% hit @ 1.70-2.50 → +6.8 units
+  // KEEP  asian_handicap all:    48.7% hit @ 2.25 odds → +9.9  units (breakeven 44.4%)
+  // DROP  over_under     all:    even high conf = -8.5u  (DISABLED above)
+  // DROP  btts           medium: 57.8% hit → -8.5 units  (below breakeven 59.5%)
+  // DROP  home_win       2.50+:  20% hit → -6.1 units    (capped at MAX_ODDS_HOME_WIN)
+  // DROP  corners        all:    15% hit  → -264 units   (DISABLED above)
+  // DROP  win_to_nil     all:    16.4% hit → -137 units  (DISABLED above)
   //
-  const MIN_EDGE_MATCH   = 0.02;  // match_result: tight bookmaker pricing, allow near-value
-  const MIN_PROB_MATCH   = 0.46;  // match_result: catches high-value draws and away wins
-  const MIN_EDGE_HANDICAP = 0.08; // asian_handicap: needs real edge — high avg odds market
-  const MIN_PROB_HANDICAP = 0.50; // asian_handicap: model must strongly believe it
-  const MIN_EDGE_OU      = 0.10;  // over_under: raise bar hard — medium tier was -70 units
-  const MIN_PROB_OU      = 0.63;  // over_under: only tip when model is very confident
-  const MIN_EDGE_BTTS    = 0.08;  // btts: medium tier was -11 units, high was +4
-  const MIN_PROB_BTTS    = 0.62;  // btts: only tip well above breakeven (57.3%)
-  const MIN_EDGE_DC      = 0.08;  // double_chance: medium at 1.36 avg odds was -60 units
-  const MIN_PROB_DC      = 0.58;  // double_chance: must clear breakeven comfortably
-  const MIN_ODDS_DC      = 1.55;  // double_chance: skip when bookmaker odds are too compressed
+  const MIN_EDGE_MATCH    = 0.02;  // match_result: tight bookmaker pricing, allow near-value
+  const MIN_PROB_MATCH    = 0.46;  // match_result: catches high-value draws and away wins
+  const MIN_PROB_DRAW     = 0.28;  // draw: backtested profitable at 30% hit rate (odds 3.50–5.00)
+  const MAX_ODDS_HOME_WIN = 2.50;  // home win: above 2.50 odds hit rate drops to 20% (-4.8u)
+  const MIN_EDGE_HANDICAP = 0.08;  // asian_handicap: needs real edge — high avg odds market
+  const MIN_PROB_HANDICAP = 0.50;  // asian_handicap: model must strongly believe it
+  const MIN_EDGE_BTTS     = 0.08;  // btts: medium tier was -11 units, high was +4
+  const MIN_PROB_BTTS     = 0.62;  // btts: only tip well above breakeven (57.3%)
+  const MIN_EDGE_DC       = 0.08;  // double_chance: medium at 1.36 avg odds was -60 units
+  const MIN_PROB_DC       = 0.58;  // double_chance: must clear breakeven comfortably
+  const MIN_ODDS_DC       = 1.55;  // double_chance: skip when bookmaker odds are too compressed
 
   const finalTips: Candidate[] = [];
 
-  // Match result: best side — our strongest backtested market
-  const bestMatch = matchCandidates[0];
-  if (bestMatch && bestMatch.edge >= MIN_EDGE_MATCH && bestMatch.prob >= MIN_PROB_MATCH) {
-    finalTips.push(bestMatch);
+  // Match result — backtested breakdown by side + odds range:
+  //   Draw 2.50-3.50: +13.2u | Draw 3.50-5.00: +11.8u  ← goldmine
+  //   Home 1.50-2.50: +6.8u                              ← good
+  //   Home 1.00-1.50: -0.6u  (odds too compressed)      ← skip
+  //   Home 2.50+:     -6.1u  (hit rate collapses to 20%) ← skip
+  //   Away 2.00+:    -10.8u                              ← skip
+  //
+  // Strategy: prioritise draw, cap home win at 2.50 odds.
+  const drawCandidate = matchCandidates.find(c => c.bet_side === "draw");
+  const homeCandidate = matchCandidates.find(c => c.bet_side === "home");
+  const awayCandidate = matchCandidates.find(c => c.bet_side === "away");
+
+  // Draw: lower prob bar since 30% hit at 3.79 odds still beats breakeven (26.4%)
+  if (drawCandidate && drawCandidate.edge >= MIN_EDGE_MATCH && drawCandidate.prob >= MIN_PROB_DRAW) {
+    finalTips.push(drawCandidate);
+  } else {
+    // Home win — only when odds ≤ 2.50 (above that hit rate drops to 20%)
+    const homeOk = homeCandidate &&
+      homeCandidate.edge >= MIN_EDGE_MATCH &&
+      homeCandidate.prob >= MIN_PROB_MATCH &&
+      (homeCandidate.odds ?? 99) <= MAX_ODDS_HOME_WIN;
+    if (homeOk) finalTips.push(homeCandidate!);
+    else if (awayCandidate && awayCandidate.edge >= MIN_EDGE_MATCH && awayCandidate.prob >= MIN_PROB_MATCH) {
+      finalTips.push(awayCandidate);
+    }
   }
 
   // Asian handicap — second best market, only when trigger fires
@@ -715,9 +720,7 @@ export function generateAlgorithmicTips(
     finalTips.push(bestBtts);
   }
 
-  // Over/Under — very high bar: medium confidence was -70 units
-  const bestOU = ouCandidates.filter(c => c.edge >= MIN_EDGE_OU && c.prob >= MIN_PROB_OU)[0];
-  if (bestOU) finalTips.push(bestOU);
+  // Over/Under — DISABLED (ouCandidates is empty array, nothing to push)
 
   // Double Chance — only when odds are high enough to make it worthwhile
   const bestDC = dcCandidates.filter(c =>

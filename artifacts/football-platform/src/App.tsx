@@ -17,6 +17,7 @@ import { Following } from "./pages/Following";
 import { News } from "./pages/News";
 import { Admin } from "./pages/Admin";
 import { Signals } from "./pages/Signals";
+import { Performance } from "./pages/Performance";
 import { Pricing } from "./pages/Pricing";
 import NotFound from "./pages/not-found";
 import Login from "./pages/Login";
@@ -168,6 +169,7 @@ function AppRoutes() {
           <Route path="/news"><ProtectedRoute component={News} /></Route>
           <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
           <Route path="/pricing"><ProtectedRoute component={Pricing} /></Route>
+          <Route path="/performance"><ProtectedRoute component={Performance} /></Route>
 
           <Route component={NotFound} />
         </Switch>

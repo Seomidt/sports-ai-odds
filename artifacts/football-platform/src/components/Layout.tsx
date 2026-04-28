@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper, Zap } from "lucide-react";
+import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper, Zap, BarChart3 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetMe } from "@workspace/api-client-react";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -29,6 +29,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/standings", label: "Standings", icon: ListOrdered },
     { href: "/news", label: "News", icon: Newspaper },
     { href: "/following", label: "Following", icon: Star },
+    { href: "/performance", label: "Performance", icon: BarChart3 },
   ];
 
   if (me?.role === "admin") {

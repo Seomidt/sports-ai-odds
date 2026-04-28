@@ -743,7 +743,8 @@ export function Dashboard() {
               <h1 className="text-3xl font-bold font-mono tracking-tight text-white">VALUE ODDS</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              AI-ranked betting tips sorted by value and confidence.
+              Algorithm-ranked tips — Match Result, BTTS, Double Chance & Asian Handicap only.{" "}
+              <a href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">View backtest →</a>
             </p>
           </div>
           <div className="shrink-0 flex items-center gap-4">
@@ -818,7 +819,7 @@ export function Dashboard() {
                       Other Markets — {otherTips.length}
                     </h2>
                     <p className="text-[11px] text-muted-foreground/50 mt-1 font-mono">
-                      The algorithm is calibrated for <span className="text-white/50">Match Result</span>, <span className="text-white/50">Over/Under 2.5</span> and <span className="text-white/50">BTTS</span>. Tips outside these markets are generated with higher uncertainty — use with extra caution.
+                      Active markets: <span className="text-white/50">Match Result</span>, <span className="text-white/50">BTTS</span>, <span className="text-white/50">Double Chance</span>, <span className="text-white/50">Asian Handicap</span>. Over/Under and Corners are disabled — backtested as unprofitable. Tips here are outside primary filters — use with extra caution.
                     </p>
                   </div>
                 </div>

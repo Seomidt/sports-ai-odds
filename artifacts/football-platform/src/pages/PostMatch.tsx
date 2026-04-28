@@ -2,12 +2,60 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, CheckCircle2, Radio, Thermometer, Wind, AlertTriangle } from "lucide-react";
+import { Activity, CheckCircle2, Radio, Thermometer, Wind, AlertTriangle, Target, XCircle, MinusCircle } from "lucide-react";
 import { useState } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLeagueLogo } from "@/lib/leagues";
+
+type PostMatchTip = {
+  id: number;
+  fixtureId: number;
+  betType: string;
+  recommendation: string;
+  trustScore: number;
+  marketOdds: number | null;
+  outcome: string | null;
+  reviewHeadline: string | null;
+  confidence: "high" | "medium" | "low" | null;
+};
+
+function TipOutcomeStrip({ tips }: { tips: PostMatchTip[] | undefined }) {
+  if (!tips || tips.length === 0) return null;
+  // Show top tip (highest trust) + outcome summary
+  const top = tips[0]!;
+  const resolved = tips.filter(t => t.outcome === "hit" || t.outcome === "miss");
+  const hits = resolved.filter(t => t.outcome === "hit").length;
+  const total = resolved.length;
+
+  return (
+    <div className="border-t border-white/5 pt-2.5 mt-2.5 space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Target className="w-3 h-3 text-primary/60 shrink-0" />
+          <span className="text-[11px] font-mono text-white/70 truncate">
+            {top.recommendation}
+            {top.marketOdds ? ` · ${top.marketOdds.toFixed(2)}` : ""}
+          </span>
+        </div>
+        <div className="shrink-0">
+          {top.outcome === "hit" && <CheckCircle2 className="w-4 h-4 text-teal-400" />}
+          {top.outcome === "miss" && <XCircle className="w-4 h-4 text-amber-400" />}
+          {!top.outcome && total === 0 && <MinusCircle className="w-4 h-4 text-white/20" />}
+        </div>
+      </div>
+      {total > 1 && (
+        <div className="text-[10px] font-mono text-muted-foreground pl-4.5">
+          <span className="text-teal-400">{hits}W</span>
+          <span className="text-white/20 mx-1">·</span>
+          <span className="text-amber-400">{total - hits}L</span>
+          <span className="text-white/30 ml-1">of {total} tips</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface LeagueSection {
   leagueId: number;
@@ -25,6 +73,13 @@ export function PostMatch() {
     staleTime: 2 * 60 * 60_000,   // 2 hours — results don't change
     gcTime:   7 * 24 * 60 * 60_000, // keep in memory 7 days
     refetchInterval: false,
+  });
+
+  const { data: tipsData } = useQuery<{ tips: Record<number, PostMatchTip[]> }>({
+    queryKey: ["analysis", "postmatch-tips"],
+    queryFn: () => fetch("/api/analysis/postmatch-tips").then((r) => r.json()),
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
   });
 
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);
@@ -48,7 +103,7 @@ export function PostMatch() {
       <div className="space-y-8">
         <header>
           <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-2">POST-MATCH</h1>
-          <p className="text-muted-foreground">Finished fixtures from the last 7 days.</p>
+          <p className="text-muted-foreground text-sm">Finished fixtures from the last 7 days — click any fixture to see how the algorithm tips performed.</p>
         </header>
 
         {leagues.length > 1 && (
@@ -167,6 +222,8 @@ export function PostMatch() {
                               </span>
                             </div>
                           </div>
+                          <TipOutcomeStrip tips={tipsData?.tips?.[fixture.fixtureId]} />
+
                           {hasWeather && (
                             <div className={`mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-xs font-mono ${isAdverseWeather ? "text-amber-400" : "text-violet-300"}`}>
                               {fixture.weatherIcon

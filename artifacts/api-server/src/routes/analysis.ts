@@ -514,6 +514,48 @@ router.get("/analysis/prematch-tips", async (req, res) => {
   }
 });
 
+// ── Postmatch tips — resolved tips from the last 7 days grouped by fixtureId ──
+
+router.get("/analysis/postmatch-tips", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:postmatch-tips", TTL.MIN5, async () => {
+      const now = new Date();
+      const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const rawTips = await db
+        .select({
+          id: aiBettingTips.id,
+          fixtureId: aiBettingTips.fixtureId,
+          betType: aiBettingTips.betType,
+          recommendation: aiBettingTips.recommendation,
+          trustScore: aiBettingTips.trustScore,
+          marketOdds: aiBettingTips.marketOdds,
+          outcome: aiBettingTips.outcome,
+          reviewHeadline: aiBettingTips.reviewHeadline,
+          confidence: aiBettingTips.confidence,
+        })
+        .from(aiBettingTips)
+        .where(
+          and(
+            lt(aiBettingTips.kickoff, now),
+            gte(aiBettingTips.kickoff, sevenDaysAgo),
+          )
+        )
+        .orderBy(desc(aiBettingTips.trustScore));
+
+      const grouped: Record<number, typeof rawTips> = {};
+      for (const tip of rawTips) {
+        if (!grouped[tip.fixtureId]) grouped[tip.fixtureId] = [];
+        grouped[tip.fixtureId].push(tip);
+      }
+      return { tips: grouped };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.postmatchTips]", error);
+    return res.status(500).json({ error: "Failed to load postmatch tips" });
+  }
+});
+
 // ── Per-fixture live analysis ─────────────────────────────────────────────────
 
 router.get("/analysis/:id/live", async (req, res) => {

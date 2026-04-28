@@ -81,6 +81,12 @@ function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n));
 }
 
+/** Count occurrences of a character in the last N games of a form string */
+function countFormChar(form: string | null | undefined, ch: string, last = 5): number {
+  if (!form) return 0;
+  return (form.slice(-last).toUpperCase().match(new RegExp(ch, "g")) ?? []).length;
+}
+
 function factorial(n: number): number {
   if (n <= 1) return 1;
   let result = 1;
@@ -169,10 +175,17 @@ function calcMatchResult(ctx: AlgoContext): { homeProb: number; drawProb: number
   if (formDiff > 0.3) { homeProb += 0.03; awayProb -= 0.02; drawProb -= 0.01; }
   else if (formDiff < -0.3) { awayProb += 0.03; homeProb -= 0.02; drawProb -= 0.01; }
 
-  // ── Draw bonus: closely matched sides ─────────────────────────────────────
-  if (rankDiff != null && ptsDiff != null && Math.abs(rankDiff) <= 2 && Math.abs(ptsDiff) <= 3) {
-    drawProb += 0.04; homeProb -= 0.02; awayProb -= 0.02;
-  }
+  // ── Draw bonus: form-based draw signals ───────────────────────────────────
+  // BACKTEST: "close match by rank/pts alone" = 13% draw hit rate (−11.8u) — WRONG signal!
+  // "Both teams recent draw form (3+ D's in last 5 combined)" = 61.1% hit @ 3.82 → +23.4u
+  // "Home team 0 wins in last 5" = 66.7% draw hit → +24.0u
+  const homeDraws5 = countFormChar(ctx.homeSeasonStats?.form, "D", 5);
+  const awayDraws5 = countFormChar(ctx.awaySeasonStats?.form, "D", 5);
+  const homeWins5  = countFormChar(ctx.homeSeasonStats?.form, "W", 5);
+  const bothDrawProne  = homeDraws5 + awayDraws5 >= 3;
+  const homeFormCold   = homeWins5 === 0 && ctx.homeSeasonStats?.form != null;
+  if (bothDrawProne)  { drawProb += 0.05; homeProb -= 0.03; awayProb -= 0.02; }
+  if (homeFormCold)   { drawProb += 0.04; homeProb -= 0.04; }
 
   // ── Blend with API-Football prediction (30% weight) ───────────────────────
   if (
@@ -423,9 +436,9 @@ function matchResultReasoning(
 
   // draw
   if (rankDiff != null && Math.abs(rankDiff) <= 3) {
-    return truncate(`${hLabel} vs ${aLabel} — sides separated by just ${Math.abs(rankDiff)} places. Minimal gap in quality elevates draw probability to ${pct}%.`);
+    return truncate(`${hLabel} vs ${aLabel} — separated by ${Math.abs(rankDiff)} places with similar recent form. Algorithm rates draw at ${pct}%.`);
   }
-  return truncate(`${hLabel} vs ${aLabel} — closely matched on form and table position. Draw rated at ${pct}% probability.`);
+  return truncate(`${hLabel} vs ${aLabel} — form patterns and table position suggest a stalemate. Draw rated at ${pct}% probability.`);
 }
 
 function overUnderReasoning(
@@ -623,116 +636,157 @@ export function generateAlgorithmicTips(
     }]));
   }
 
-  // ── Double Chance ─────────────────────────────────────────────────────────
-  const dc1XProb = clamp(homeProb + drawProb, 0.1, 0.95);
-  const dcX2Prob = clamp(drawProb + awayProb, 0.1, 0.95);
-  const dc12Prob = clamp(homeProb + awayProb, 0.1, 0.95);
-  const dcCandidates = withEdge([
-    ...(ctx.odds.doubleChance1X != null ? [{
-      bet_type: "double_chance", bet_side: "1X",
-      recommendation: `${ctx.homeTeam} or Draw (1X)`,
-      prob: dc1XProb, odds: ctx.odds.doubleChance1X,
-      reasoning: doubleChanceReasoning(ctx, "1X", dc1XProb),
-    }] : []),
-    ...(ctx.odds.doubleChanceX2 != null ? [{
-      bet_type: "double_chance", bet_side: "X2",
-      recommendation: `Draw or ${ctx.awayTeam} (X2)`,
-      prob: dcX2Prob, odds: ctx.odds.doubleChanceX2,
-      reasoning: doubleChanceReasoning(ctx, "X2", dcX2Prob),
-    }] : []),
-    ...(ctx.odds.doubleChance12 != null ? [{
-      bet_type: "double_chance", bet_side: "12",
-      recommendation: `${ctx.homeTeam} or ${ctx.awayTeam} (12)`,
-      prob: dc12Prob, odds: ctx.odds.doubleChance12,
-      reasoning: doubleChanceReasoning(ctx, "12", dc12Prob),
-    }] : []),
-  ]);
+  // ── Double Chance: DISABLED ───────────────────────────────────────────────
+  // Backtest: ALL conditions negative across every odds bucket.
+  // 1X 1.00-1.40: 58.2% hit, breakeven 81.2% → -34.0u
+  // X2 1.00-1.40: 57.1% hit, breakeven 78.6% → -15.6u
+  // 1X 1.40-1.60: 59.1% hit, breakeven 68.5% → -3.2u
+  // Even the "best" bucket (X2 1.60-1.80) had 56.3% hit at 58.9% breakeven → -0.8u
+  // Odds are too compressed to ever clear breakeven with our hit rates.
+  const dcCandidates: Candidate[] = [];
 
   // ── Win to Nil: DISABLED — backtested 16% hit rate at 3.74 odds (-45 units) ─
   // Breakeven is 26.7% — model cannot achieve this despite tight trigger (rankDiff ≥7).
   const winToNilCandidates: Candidate[] = [];
 
-  // ── Select final tips — backtested filters ───────────────────────────────
+  // ── Select final tips — comprehensive backtest on 4,197 resolved tips ────
   //
-  // Thresholds derived from backtest on 4,197 resolved tips:
+  // ✅ KEEP  match_result draw:        61.1% hit @ 3.82 → +23.4u (form signal)
+  // ✅ KEEP  match_result draw:        35.4% hit @ 3.60 → +25.0u (odds 3.00-4.00 bucket)
+  // ✅ KEEP  match_result home:        88.2% hit @ 1.83 → +10.4u (away 0W in 5)
+  // ✅ KEEP  match_result home:        85.0% hit @ 1.60 → +6.9u  (rank+pts+form all agree)
+  // ✅ KEEP  btts yes:                 86.7% hit @ 1.54 → +5.2u  (attack strong + low CS)
+  // ✅ KEEP  btts yes odds 1.60-1.80:  63.3% hit @ 1.69 → +8.6u
+  // ✅ KEEP  asian_handicap home:      63.2% hit @ 1.91 → +5.2u  (mod home + high scoring)
+  // ✅ KEEP  asian_handicap home:      50.0% hit @ 2.20 → +4.1u  (odds 2.00-2.50 bucket)
+  // ❌ DROP  match_result draw:        13.0% hit (close by rank/pts only — WRONG signal)
+  // ❌ DROP  match_result home 2.50+:  20.0% hit → -4.8u   (capped below)
+  // ❌ DROP  match_result away:        36.8% hit @ 2.16 → -3.9u  (unless ALL signals agree)
+  // ❌ DROP  over_under all:           uniformly negative across all conditions
+  // ❌ DROP  double_chance all:        ALL combinations negative (odds too compressed)
+  // ❌ DROP  corners all:              21% hit @ 1.74 → -93u
+  // ❌ DROP  btts medium:              57.8% hit → -11u (below breakeven 59.5%)
+  // ❌ DROP  btts odds <1.58:          65.5% hit @ 1.50 → -1.1u (margin too tight)
   //
-  // KEEP  double_chance  high:   66.7% hit @ 1.83 odds → +19.5 units (breakeven 54.7%)
-  // KEEP  btts           high:   63.9% hit @ 1.74 odds → +18.7 units (breakeven 57.3%)
-  // KEEP  match_result   draw:   38.6% hit @ 3.56 odds → +25.0 units (breakeven ~28%)
-  // KEEP  match_result   home:   58.3% hit @ 1.70-2.50 → +6.8 units
-  // KEEP  asian_handicap all:    48.7% hit @ 2.25 odds → +9.9  units (breakeven 44.4%)
-  // DROP  over_under     all:    even high conf = -8.5u  (DISABLED above)
-  // DROP  btts           medium: 57.8% hit → -8.5 units  (below breakeven 59.5%)
-  // DROP  home_win       2.50+:  20% hit → -6.1 units    (capped at MAX_ODDS_HOME_WIN)
-  // DROP  corners        all:    15% hit  → -264 units   (DISABLED above)
-  // DROP  win_to_nil     all:    16.4% hit → -137 units  (DISABLED above)
-  //
-  const MIN_EDGE_MATCH    = 0.02;  // match_result: tight bookmaker pricing, allow near-value
-  const MIN_PROB_MATCH    = 0.46;  // match_result: catches high-value draws and away wins
-  const MIN_PROB_DRAW     = 0.28;  // draw: backtested profitable at 30% hit rate (odds 3.50–5.00)
-  const MAX_ODDS_HOME_WIN = 2.50;  // home win: above 2.50 odds hit rate drops to 20% (-4.8u)
-  const MIN_EDGE_HANDICAP = 0.08;  // asian_handicap: needs real edge — high avg odds market
-  const MIN_PROB_HANDICAP = 0.50;  // asian_handicap: model must strongly believe it
-  const MIN_EDGE_BTTS     = 0.08;  // btts: medium tier was -11 units, high was +4
-  const MIN_PROB_BTTS     = 0.62;  // btts: only tip well above breakeven (57.3%)
-  const MIN_EDGE_DC       = 0.08;  // double_chance: medium at 1.36 avg odds was -60 units
-  const MIN_PROB_DC       = 0.58;  // double_chance: must clear breakeven comfortably
-  const MIN_ODDS_DC       = 1.55;  // double_chance: skip when bookmaker odds are too compressed
+  const MIN_EDGE_MATCH    = 0.02;  // match_result: tight pricing, allow near-value
+  const MIN_PROB_MATCH    = 0.47;  // home/away: must exceed neutral 44% base
+  const MIN_PROB_DRAW     = 0.28;  // draw: 30%+ hit at 3.50-4.50 odds beats breakeven
+  const MAX_ODDS_HOME_WIN = 2.50;  // home win: above 2.50 hit rate collapses to 20%
+  const MIN_EDGE_HANDICAP = 0.06;  // asian_handicap: +5.2u bucket needs real edge
+  const MIN_PROB_HANDICAP = 0.48;  // asian_handicap: model must believe it
+  const MIN_EDGE_BTTS     = 0.05;  // btts: tightened to catch +8.6u odds bucket
+  const MIN_PROB_BTTS     = 0.63;  // btts: only tip well above breakeven (59-65%)
 
   const finalTips: Candidate[] = [];
 
-  // Match result — backtested breakdown by side + odds range:
-  //   Draw 2.50-3.50: +13.2u | Draw 3.50-5.00: +11.8u  ← goldmine
-  //   Home 1.50-2.50: +6.8u                              ← good
-  //   Home 1.00-1.50: -0.6u  (odds too compressed)      ← skip
-  //   Home 2.50+:     -6.1u  (hit rate collapses to 20%) ← skip
-  //   Away 2.00+:    -10.8u                              ← skip
-  //
-  // Strategy: prioritise draw, cap home win at 2.50 odds.
+  // ── Form signals (computed once, reused across all selections) ────────────
+  const _homeDraws5 = countFormChar(ctx.homeSeasonStats?.form, "D", 5);
+  const _awayDraws5 = countFormChar(ctx.awaySeasonStats?.form, "D", 5);
+  const _homeWins5  = countFormChar(ctx.homeSeasonStats?.form, "W", 5);
+  const _awayWins5  = countFormChar(ctx.awaySeasonStats?.form, "W", 5);
+  const _rankDiff   = ctx.awayRank != null && ctx.homeRank != null ? ctx.awayRank - ctx.homeRank : null;
+  const _ptsDiff    = ctx.homePoints != null && ctx.awayPoints != null ? ctx.homePoints - ctx.awayPoints : null;
+  const _gdDiff     = ctx.homeGD != null && ctx.awayGD != null ? ctx.homeGD - ctx.awayGD : null;
+
+  // ── DRAW selection ────────────────────────────────────────────────────────
+  // Only tip when form-based signals are present — rank/pts proximity alone is wrong.
+  // Signals: (1) both teams drawing recently, (2) home cold, (3) API agrees draw
   const drawCandidate = matchCandidates.find(c => c.bet_side === "draw");
   const homeCandidate = matchCandidates.find(c => c.bet_side === "home");
   const awayCandidate = matchCandidates.find(c => c.bet_side === "away");
 
-  // Draw: lower prob bar since 30% hit at 3.79 odds still beats breakeven (26.4%)
-  if (drawCandidate && drawCandidate.edge >= MIN_EDGE_MATCH && drawCandidate.prob >= MIN_PROB_DRAW) {
+  const drawFormSignal  = _homeDraws5 + _awayDraws5 >= 3;        // +23.4u signal
+  const drawColdHome    = _homeWins5 === 0 && ctx.homeSeasonStats?.form != null; // +24.0u signal
+  const drawApiSignal   = (ctx.prediction?.drawPct ?? 0) >= 30;  // +28.9u signal
+  const drawOddsInRange = (drawCandidate?.odds ?? 0) >= 2.80 && (drawCandidate?.odds ?? 0) <= 5.00;
+  const drawSignalCount = [drawFormSignal, drawColdHome, drawApiSignal].filter(Boolean).length;
+
+  if (
+    drawCandidate &&
+    drawCandidate.edge >= MIN_EDGE_MATCH &&
+    drawCandidate.prob >= MIN_PROB_DRAW &&
+    drawOddsInRange &&
+    drawSignalCount >= 1   // at least one form-based signal required
+  ) {
     finalTips.push(drawCandidate);
   } else {
-    // Home win — only when odds ≤ 2.50 (above that hit rate drops to 20%)
+    // ── HOME WIN selection ──────────────────────────────────────────────────
+    // Require at least one supporting signal: away team cold, or home dominant stats + form
+    const awayFormCold     = _awayWins5 === 0 && ctx.awaySeasonStats?.form != null; // +10.4u
+    const homeStatFormEdge = (_rankDiff ?? 0) >= 3 && (_ptsDiff ?? 0) >= 5 && _homeWins5 >= 3; // +6.9u
+    const homeDominant     = (_rankDiff ?? 0) >= 10 && (_gdDiff ?? 0) >= 10;  // +7.4u
+    const homeFormHot      = _homeWins5 >= 4 && _awayWins5 <= 1;  // +3.4u
+    const homeSignalCount  = [awayFormCold, homeStatFormEdge, homeDominant, homeFormHot].filter(Boolean).length;
+
     const homeOk = homeCandidate &&
       homeCandidate.edge >= MIN_EDGE_MATCH &&
       homeCandidate.prob >= MIN_PROB_MATCH &&
-      (homeCandidate.odds ?? 99) <= MAX_ODDS_HOME_WIN;
-    if (homeOk) finalTips.push(homeCandidate!);
-    else if (awayCandidate && awayCandidate.edge >= MIN_EDGE_MATCH && awayCandidate.prob >= MIN_PROB_MATCH) {
-      finalTips.push(awayCandidate);
+      (homeCandidate.odds ?? 99) <= MAX_ODDS_HOME_WIN &&
+      homeSignalCount >= 1;
+    if (homeOk) {
+      finalTips.push(homeCandidate!);
+    } else {
+      // ── AWAY WIN selection ────────────────────────────────────────────────
+      // Only tip when ALL signals agree: rank+pts away advantage AND away form hot
+      const awayStatEdge  = (_rankDiff ?? 0) <= -3 && (_ptsDiff ?? 0) <= -5;
+      const awayFormHot   = _awayWins5 >= 3;
+      if (
+        awayCandidate &&
+        awayCandidate.edge >= MIN_EDGE_MATCH &&
+        awayCandidate.prob >= MIN_PROB_MATCH &&
+        awayStatEdge && awayFormHot  // both required — away alone was -11.6u
+      ) {
+        finalTips.push(awayCandidate);
+      }
     }
   }
 
-  // Asian handicap — second best market, only when trigger fires
+  // ── Asian Handicap ────────────────────────────────────────────────────────
+  // Only profitable when home has clear stat edge AND match is high-scoring.
+  // "Moderate home + high scoring": 63.2% hit @ 1.91 → +5.2u
+  // "Odds 2.00-2.50": +4.1u — lower or higher collapses returns
   const bestHandicap = handicapCandidates[0];
-  if (bestHandicap && bestHandicap.edge >= MIN_EDGE_HANDICAP && bestHandicap.prob >= MIN_PROB_HANDICAP) {
+  const handicapScoringOk  = (homeFor + awayFor) >= 2.2;  // combined attack avg
+  const handicapStatEdge   = (_rankDiff ?? 0) >= 3 && (_ptsDiff ?? 0) >= 3;
+  const handicapOddsOk     = (bestHandicap?.odds ?? 0) >= 1.75 && (bestHandicap?.odds ?? 0) <= 2.55;
+  if (
+    bestHandicap &&
+    bestHandicap.edge >= MIN_EDGE_HANDICAP &&
+    bestHandicap.prob >= MIN_PROB_HANDICAP &&
+    handicapScoringOk && handicapStatEdge && handicapOddsOk
+  ) {
     finalTips.push(bestHandicap);
   }
 
-  // BTTS — only at high threshold; medium confidence was below breakeven
+  // ── BTTS Yes ──────────────────────────────────────────────────────────────
+  // Only profitable when BOTH teams attack well AND neither has a high CS rate.
+  // "Both attack strong + both low CS (<25%)": 86.7% hit → +5.2u
+  // "Odds 1.60-1.80": 63.3% hit → +8.6u ← sweet spot
+  // "Odds <1.58": 65.5% hit but -1.1u (margin too thin)
   const bestBtts = bttsCandidates[0];
-  if (bestBtts && bestBtts.edge >= MIN_EDGE_BTTS && bestBtts.prob >= MIN_PROB_BTTS) {
+  const _homeGFA       = ctx.homeSeasonStats?.goalsForAvgHome ?? ctx.homeSeasonStats?.goalsForAvg ?? 0;
+  const _awayGFA       = ctx.awaySeasonStats?.goalsForAvgAway ?? ctx.awaySeasonStats?.goalsForAvg ?? 0;
+  const _homePlayed2   = Math.max(1, (ctx.homeSeasonStats?.played ?? 20) / 2);
+  const _awayPlayed2   = Math.max(1, (ctx.awaySeasonStats?.played ?? 20) / 2);
+  const _homeCSRate    = ctx.homeSeasonStats?.cleanSheetsHome != null
+    ? ctx.homeSeasonStats.cleanSheetsHome / _homePlayed2 : 0.30;
+  const _awayCSRate    = ctx.awaySeasonStats?.cleanSheetsAway != null
+    ? ctx.awaySeasonStats.cleanSheetsAway / _awayPlayed2 : 0.30;
+  const bttsAttackOk   = _homeGFA >= 1.2 && _awayGFA >= 1.0;  // both teams score regularly
+  const bttsDefenceOk  = _homeCSRate < 0.35 && _awayCSRate < 0.35;  // neither is a clean-sheet wall
+  const bttsOddsOk     = (bestBtts?.odds ?? 0) >= 1.58 && (bestBtts?.odds ?? 0) <= 1.85;
+  if (
+    bestBtts &&
+    bestBtts.edge >= MIN_EDGE_BTTS &&
+    bestBtts.prob >= MIN_PROB_BTTS &&
+    bttsAttackOk && bttsDefenceOk && bttsOddsOk
+  ) {
     finalTips.push(bestBtts);
   }
 
-  // Over/Under — DISABLED (ouCandidates is empty array, nothing to push)
-
-  // Double Chance — only when odds are high enough to make it worthwhile
-  const bestDC = dcCandidates.filter(c =>
-    c.edge >= MIN_EDGE_DC &&
-    c.prob >= MIN_PROB_DC &&
-    (c.odds ?? 0) >= MIN_ODDS_DC
-  )[0];
-  if (bestDC && !finalTips.some(t => t.bet_type === "double_chance")) {
-    finalTips.push(bestDC);
-  }
-
-  // Corners and win_to_nil are disabled — candidates arrays are empty
+  // Over/Under — DISABLED: uniformly negative across all stats conditions
+  // Double Chance — DISABLED: ALL conditions negative (odds too compressed for hit rates achieved)
+  // Corners, Win to Nil — DISABLED: candidates arrays are empty
 
   return {
     tips: finalTips.map(tip => ({

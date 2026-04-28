@@ -103,7 +103,7 @@ export function PostMatch() {
       <div className="space-y-8">
         <header>
           <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-2">POST-MATCH</h1>
-          <p className="text-muted-foreground text-sm">Finished fixtures from the last 7 days — click any fixture to see how the algorithm tips performed.</p>
+          <p className="text-muted-foreground text-sm">Finished fixtures from the last 7 days — click any to see how algorithm tips performed. Active markets: Match Result, BTTS &amp; Asian Handicap.</p>
         </header>
 
         {leagues.length > 1 && (

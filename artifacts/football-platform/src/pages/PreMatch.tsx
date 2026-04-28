@@ -351,7 +351,7 @@ export function PreMatch() {
             <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PRE-MATCH</h1>
           </div>
           <p className="text-muted-foreground text-sm">
-            Upcoming fixtures with algorithm tips — Match Result, BTTS, Double Chance & Asian Handicap.
+            Upcoming fixtures with algorithm tips — Match Result (form-filtered), BTTS &amp; Asian Handicap. <a href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">View backtest →</a>
           </p>
         </header>
 

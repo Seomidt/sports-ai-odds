@@ -646,8 +646,8 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                         </div>
                       )}
                       {(pred.drawPct ?? 0) > 0 && (
-                        <div className="h-full flex items-center justify-center bg-white/5 border-r border-white/10 min-w-[2rem]" style={{ flex: pred.drawPct ?? 0 }}>
-                          <span className="text-xs font-mono text-white/50 px-1">{pred.drawPct}%</span>
+                        <div className="h-full flex items-center justify-center bg-amber-400/20 border-r border-amber-400/20 min-w-[2rem]" style={{ flex: pred.drawPct ?? 0 }}>
+                          <span className="text-xs font-mono font-bold text-amber-300 px-1">{pred.drawPct}%</span>
                         </div>
                       )}
                       {(pred.awayWinPct ?? 0) > 0 && (

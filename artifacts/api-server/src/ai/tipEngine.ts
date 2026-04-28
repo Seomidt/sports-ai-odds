@@ -623,15 +623,9 @@ export function generateAlgorithmicTips(
     },
   ]);
 
-  // ── Corners ───────────────────────────────────────────────────────────────
-  const cornerCandidates = withEdge([
-    {
-      bet_type: "corners", bet_side: "over",
-      recommendation: "Corners Over",
-      prob: cornersOverProb, odds: ctx.odds.cornersOver,
-      reasoning: cornersReasoning(ctx, true, cornersOverProb),
-    },
-  ]);
+  // ── Corners: DISABLED — backtested 21% hit rate at 1.74 odds (-95 units) ──
+  // Model cannot reliably predict corners volume above bookmaker breakeven (57%).
+  const cornerCandidates: Candidate[] = [];
 
   // ── Asian Handicap (only if strong home favorite) ─────────────────────────
   const rankDiff = ctx.awayRank != null && ctx.homeRank != null ? ctx.awayRank - ctx.homeRank : null;
@@ -672,60 +666,70 @@ export function generateAlgorithmicTips(
     }] : []),
   ]);
 
-  // ── Win to Nil ────────────────────────────────────────────────────────────
-  const winToNilCandidates = withEdge([
-    ...(ctx.odds.winToNilHome != null && rankDiff != null && rankDiff >= 7 ? [{
-      bet_type: "win_to_nil", bet_side: "home",
-      recommendation: `${ctx.homeTeam} Win to Nil`,
-      prob: clamp(homeProb * 0.45, 0.10, 0.50), // win AND clean sheet
-      odds: ctx.odds.winToNilHome,
-      reasoning: truncate(`${ctx.homeTeam} ${rankLabel(ctx.homeRank)} ranked ${rankDiff} places above ${ctx.awayTeam} ${rankLabel(ctx.awayRank)} — dominant home side with defensive record backs win to nil at ${Math.round(homeProb * 0.45 * 100)}%.`),
-    }] : []),
-  ]);
+  // ── Win to Nil: DISABLED — backtested 16% hit rate at 3.74 odds (-45 units) ─
+  // Breakeven is 26.7% — model cannot achieve this despite tight trigger (rankDiff ≥7).
+  const winToNilCandidates: Candidate[] = [];
 
-  // ── Select final tips — dual filter: edge AND minimum probability ────────
-  // MIN_EDGE: minimum positive expected value required (+4 cents per €1 staked).
-  // MIN_PROB per market: only tip when the estimated probability is high enough
-  //   to produce a realistic hit rate. Without this, we tip 47% shots all day
-  //   and wonder why we're losing. These thresholds target ~60% hit rate.
-  const MIN_EDGE         = 0.05;  // standard edge bar — matches "value" threshold so all tips show in Yesterday
-  const MIN_EDGE_MATCH   = 0.02;  // match result: bookmaker pricing is tight, allow near-value picks
-  const MIN_PROB_MATCH   = 0.50;  // match_result — any clear lean (not exactly 50/50)
-  const MIN_PROB_OU      = 0.54;  // over/under
-  const MIN_PROB_BTTS    = 0.55;  // btts yes
-  const MIN_PROB_OTHER   = 0.55;  // corners, handicap, double chance, win to nil
+  // ── Select final tips — backtested filters ───────────────────────────────
+  //
+  // Thresholds derived from backtest on 4,197 resolved tips:
+  //
+  // KEEP  match_result   medium: 44.1% hit @ 2.87 odds → +24 units  (breakeven 34.9%)
+  // KEEP  asian_handicap medium: 47.9% hit @ 2.25 odds → +13 units  (breakeven 44.4%)
+  // KEEP  btts           high:   61.5% hit @ 1.74 odds → +4  units  (breakeven 57.3%)
+  // KEEP  double_chance  high:   58.3% hit @ 1.83 odds → +1  units  (breakeven 54.7%)
+  // DROP  over_under     medium: 48.8% hit @ 1.64 odds → -70 units  (breakeven 61.0%)
+  // DROP  btts           medium: 57.8% hit @ 1.68 odds → -11 units  (breakeven 59.5%)
+  // DROP  corners        all:    21.8% hit → -95 units  (DISABLED above)
+  // DROP  win_to_nil     all:    16.4% hit → -45 units  (DISABLED above)
+  //
+  const MIN_EDGE_MATCH   = 0.02;  // match_result: tight bookmaker pricing, allow near-value
+  const MIN_PROB_MATCH   = 0.46;  // match_result: catches high-value draws and away wins
+  const MIN_EDGE_HANDICAP = 0.08; // asian_handicap: needs real edge — high avg odds market
+  const MIN_PROB_HANDICAP = 0.50; // asian_handicap: model must strongly believe it
+  const MIN_EDGE_OU      = 0.10;  // over_under: raise bar hard — medium tier was -70 units
+  const MIN_PROB_OU      = 0.63;  // over_under: only tip when model is very confident
+  const MIN_EDGE_BTTS    = 0.08;  // btts: medium tier was -11 units, high was +4
+  const MIN_PROB_BTTS    = 0.62;  // btts: only tip well above breakeven (57.3%)
+  const MIN_EDGE_DC      = 0.08;  // double_chance: medium at 1.36 avg odds was -60 units
+  const MIN_PROB_DC      = 0.58;  // double_chance: must clear breakeven comfortably
+  const MIN_ODDS_DC      = 1.55;  // double_chance: skip when bookmaker odds are too compressed
 
   const finalTips: Candidate[] = [];
 
-  // Match result: best side if it clears both bars
+  // Match result: best side — our strongest backtested market
   const bestMatch = matchCandidates[0];
-  if (bestMatch && bestMatch.edge >= MIN_EDGE_MATCH && bestMatch.prob >= MIN_PROB_MATCH) finalTips.push(bestMatch);
-
-  // Over/Under: allow up to 2 picks (e.g. both Over 1.5 and Over 2.5) when both have edge
-  const qualifiedOU = ouCandidates.filter(c => c.edge >= MIN_EDGE && c.prob >= MIN_PROB_OU);
-  for (const ou of qualifiedOU.slice(0, 2)) finalTips.push(ou);
-
-  // BTTS
-  const bestBtts = bttsCandidates[0];
-  if (bestBtts && bestBtts.edge >= MIN_EDGE && bestBtts.prob >= MIN_PROB_BTTS) finalTips.push(bestBtts);
-
-  // Optional markets: same edge gate, then fill up to 5
-  const usedTypes = new Set(finalTips.map(t => t.bet_type));
-  const optional = [
-    ...cornerCandidates,
-    ...handicapCandidates,
-    ...dcCandidates,
-    ...winToNilCandidates,
-  ]
-    .filter(c => !usedTypes.has(c.bet_type) && c.edge >= MIN_EDGE && c.prob >= MIN_PROB_OTHER)
-    .sort((a, b) => b.edge - a.edge);
-
-  for (const opt of optional) {
-    if (finalTips.length >= 6) break;
-    if (!finalTips.some(t => t.bet_type === opt.bet_type)) {
-      finalTips.push(opt);
-    }
+  if (bestMatch && bestMatch.edge >= MIN_EDGE_MATCH && bestMatch.prob >= MIN_PROB_MATCH) {
+    finalTips.push(bestMatch);
   }
+
+  // Asian handicap — second best market, only when trigger fires
+  const bestHandicap = handicapCandidates[0];
+  if (bestHandicap && bestHandicap.edge >= MIN_EDGE_HANDICAP && bestHandicap.prob >= MIN_PROB_HANDICAP) {
+    finalTips.push(bestHandicap);
+  }
+
+  // BTTS — only at high threshold; medium confidence was below breakeven
+  const bestBtts = bttsCandidates[0];
+  if (bestBtts && bestBtts.edge >= MIN_EDGE_BTTS && bestBtts.prob >= MIN_PROB_BTTS) {
+    finalTips.push(bestBtts);
+  }
+
+  // Over/Under — very high bar: medium confidence was -70 units
+  const bestOU = ouCandidates.filter(c => c.edge >= MIN_EDGE_OU && c.prob >= MIN_PROB_OU)[0];
+  if (bestOU) finalTips.push(bestOU);
+
+  // Double Chance — only when odds are high enough to make it worthwhile
+  const bestDC = dcCandidates.filter(c =>
+    c.edge >= MIN_EDGE_DC &&
+    c.prob >= MIN_PROB_DC &&
+    (c.odds ?? 0) >= MIN_ODDS_DC
+  )[0];
+  if (bestDC && !finalTips.some(t => t.bet_type === "double_chance")) {
+    finalTips.push(bestDC);
+  }
+
+  // Corners and win_to_nil are disabled — candidates arrays are empty
 
   return {
     tips: finalTips.map(tip => ({

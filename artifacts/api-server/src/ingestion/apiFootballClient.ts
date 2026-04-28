@@ -351,8 +351,8 @@ export async function fetchFixtureStatsForBackfill(fixtureId: number): Promise<A
     }
   })();
 
-  // Hard 12-second cap — if fetch doesn't resolve, we return null and move on
-  const hardTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000));
+  // Hard 5-second cap — if fetch doesn't resolve, we return null and move on
+  const hardTimeout = new Promise<null>((resolve) => setTimeout(() => resolve(null), 5_000));
   return Promise.race([fetchAttempt, hardTimeout]);
 }
 

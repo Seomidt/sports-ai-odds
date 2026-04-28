@@ -2621,9 +2621,26 @@ export async function backfillH2HStats(): Promise<void> {
       }
       // Uses dedicated backfill fetch that bypasses the shared serialiseRequest queue
       const stats = await fetchFixtureStatsForBackfill(fixtureId);
-      if (stats) await upsertH2HFixtureStats(fixtureId, stats);
+      if (stats && stats.length > 0) {
+        await upsertH2HFixtureStats(fixtureId, stats);
+      } else {
+        // API has no stats for this fixture — insert stub rows so it's never retried
+        // Uses fixture's h2h team IDs to satisfy the unique constraint
+        const teams = await db
+          .selectDistinct({ forTeam1Id: h2hFixtures.forTeam1Id, forTeam2Id: h2hFixtures.forTeam2Id })
+          .from(h2hFixtures)
+          .where(eq(h2hFixtures.fixtureId, fixtureId))
+          .limit(1);
+        if (teams[0]) {
+          for (const teamId of [teams[0].forTeam1Id, teams[0].forTeam2Id]) {
+            await db.insert(h2hFixtureStats)
+              .values({ fixtureId, teamId, updatedAt: new Date() })
+              .onConflictDoNothing();
+          }
+        }
+      }
       h2hBackfillProgress.done++;
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => setTimeout(r, 150));
     }
 
     h2hBackfillProgress.finished = true;

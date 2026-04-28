@@ -733,26 +733,6 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
             </div>
           )}
 
-          {accData && accData.reviewed > 0 && (
-            <div className="glass-card p-4 rounded-xl flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-violet-400" />
-                <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">AI Track Record</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <div className="text-xs font-mono text-muted-foreground">Hit Rate</div>
-                  <div className={`text-sm font-mono font-bold tabular-nums ${(accData.hitRate ?? 0) >= 55 ? 'text-teal-400' : 'text-amber-400'}`}>
-                    {accData.hitRate ?? '—'}%
-                  </div>
-                </div>
-                <div className="text-right">
-                  <div className="text-xs font-mono text-muted-foreground">Tips Reviewed</div>
-                  <div className="text-sm font-mono font-bold text-white tabular-nums">{accData.hits}/{accData.reviewed}</div>
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

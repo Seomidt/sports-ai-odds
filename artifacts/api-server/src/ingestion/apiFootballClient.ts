@@ -327,6 +327,35 @@ export async function fetchFixtureStats(fixtureId: number): Promise<ApiTeamStats
   return apiFetch<ApiTeamStats[]>("/fixtures/statistics", { fixture: fixtureId });
 }
 
+/**
+ * Backfill-only variant — bypasses the shared serialiseRequest queue so a
+ * hanging regular-poller call can never block the backfill. Has its own
+ * 12-second AbortController timeout. Rate-limiting is handled by the caller.
+ */
+export async function fetchFixtureStatsForBackfill(fixtureId: number): Promise<ApiTeamStats[] | null> {
+  if (!API_KEY || isQuotaExhausted()) return null;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const url = `${BASE_URL}/fixtures/statistics?fixture=${fixtureId}`;
+    const res = await fetch(url, {
+      headers: { "x-apisports-key": API_KEY },
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    requestsToday++;
+    scheduleFlush();
+    if (!res.ok) return null;
+    const json = await res.json() as { response: ApiTeamStats[]; errors: unknown };
+    if (json.errors && Object.keys(json.errors as object).length > 0) return null;
+    return json.response ?? null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export interface ApiLineupPlayer {
   player: { id: number; name: string; number: number; pos: string; grid: string | null };
 }

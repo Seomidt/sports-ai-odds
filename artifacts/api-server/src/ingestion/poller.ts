@@ -34,6 +34,7 @@ import {
   fetchLiveFixtures,
   fetchFixtureEvents,
   fetchFixtureStats,
+  fetchFixtureStatsForBackfill,
   fetchFixtureLineups,
   fetchFixturePlayerStats,
   fetchStandings,
@@ -2618,11 +2619,8 @@ export async function backfillH2HStats(): Promise<void> {
         console.warn("[h2h-backfill] Quota exhausted — stopping");
         break;
       }
-      // Race the fetch against a hard 12s timeout — prevents a single slow fixture from blocking forever
-      const stats = await Promise.race([
-        fetchFixtureStats(fixtureId).catch(() => null),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
-      ]);
+      // Uses dedicated backfill fetch that bypasses the shared serialiseRequest queue
+      const stats = await fetchFixtureStatsForBackfill(fixtureId);
       if (stats) await upsertH2HFixtureStats(fixtureId, stats);
       h2hBackfillProgress.done++;
       await new Promise((r) => setTimeout(r, 250));

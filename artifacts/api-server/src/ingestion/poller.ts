@@ -2618,7 +2618,11 @@ export async function backfillH2HStats(): Promise<void> {
         console.warn("[h2h-backfill] Quota exhausted — stopping");
         break;
       }
-      const stats = await fetchFixtureStats(fixtureId).catch(() => null);
+      // Race the fetch against a hard 12s timeout — prevents a single slow fixture from blocking forever
+      const stats = await Promise.race([
+        fetchFixtureStats(fixtureId).catch(() => null),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 12_000)),
+      ]);
       if (stats) await upsertH2HFixtureStats(fixtureId, stats);
       h2hBackfillProgress.done++;
       await new Promise((r) => setTimeout(r, 250));

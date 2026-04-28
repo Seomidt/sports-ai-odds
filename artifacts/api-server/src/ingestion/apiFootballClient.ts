@@ -110,6 +110,7 @@ async function apiFetch<T>(endpoint: string, params: Record<string, string | num
       headers: {
         "x-apisports-key": API_KEY,
       },
+      signal: AbortSignal.timeout(10_000), // 10s timeout — prevents backfill from hanging on slow API responses
     });
 
     requestsToday++;

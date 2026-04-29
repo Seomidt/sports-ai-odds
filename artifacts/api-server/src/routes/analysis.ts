@@ -275,7 +275,8 @@ router.get("/analysis/daily-summary", async (_req, res) => {
     const result = await getOrFetch("analysis:daily-summary", TTL.MIN5, async () => {
       const now = new Date();
       const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-      const todayEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59, 999));
+      // "Today picks" covers next 7 days — so the Highest Edge widget always has content
+      const todayEnd = new Date(todayStart.getTime() + 7 * 24 * 60 * 60 * 1000);
       const yesterdayStart = new Date(todayStart.getTime() - 86400_000);
       const yesterdayEnd = new Date(todayStart.getTime() - 1);
 
@@ -301,7 +302,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
         })
           .from(aiBettingTips)
           .where(and(gte(aiBettingTips.kickoff, todayStart), lte(aiBettingTips.kickoff, todayEnd)))
-          .orderBy(desc(aiBettingTips.edge)),
+          .orderBy(asc(aiBettingTips.kickoff), desc(aiBettingTips.edge)),
 
         // Yesterday's tips with outcome
         db.select({

@@ -375,7 +375,7 @@ function oddsFromSnap(snap: { homeWin?: number | null; draw?: number | null; awa
   return null;
 }
 
-function TipCard({ tip, betTypeLabel, bookmaker, snap }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null; snap?: { homeWin?: number | null; draw?: number | null; awayWin?: number | null; btts?: number | null; overUnder25?: number | null; handicapHome?: number | null } | null }) {
+function TipCard({ tip, betTypeLabel, bookmaker, snap, pred }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null; snap?: { homeWin?: number | null; draw?: number | null; awayWin?: number | null; btts?: number | null; overUnder25?: number | null; handicapHome?: number | null } | null; pred?: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null } | null }) {
   const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
   const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
@@ -415,10 +415,19 @@ function TipCard({ tip, betTypeLabel, bookmaker, snap }: { tip: BettingTip; betT
           {(aiPct != null || implPct != null) && (
             <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground pt-1">
               {aiPct != null && (
-                <span>AI <span className="text-white/85 tabular-nums font-bold">{aiPct}%</span></span>
+                <span>Algo <span className="text-white/85 tabular-nums font-bold">{aiPct}%</span></span>
               )}
+              {pred != null && tip.betType === 'match_result' && (() => {
+                const apiFbPct = tip.betSide === 'home' ? pred.homeWinPct
+                  : tip.betSide === 'draw' ? pred.drawPct
+                  : tip.betSide === 'away' ? pred.awayWinPct
+                  : null;
+                return apiFbPct != null ? (
+                  <span className="border-l border-white/10 pl-3">API-FB <span className="text-violet-300 tabular-nums font-bold">{apiFbPct}%</span></span>
+                ) : null;
+              })()}
               {implPct != null && (
-                <span>Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span></span>
+                <span className="border-l border-white/10 pl-3">Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span></span>
               )}
             </div>
           )}
@@ -636,6 +645,12 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                         Predicted {pred.goalsHome ?? '?'}–{pred.goalsAway ?? '?'}
                       </div>
                     )}
+                    {pred.advice != null && (
+                      <div className="flex items-center gap-2 pt-1">
+                        <span className="text-[9px] font-mono text-violet-400/60 uppercase tracking-wider shrink-0">API-Football</span>
+                        <span className="text-xs font-mono text-violet-300 font-semibold">{pred.advice}</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -696,15 +711,49 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
           {tips.length > 0 ? (
             <>
               {tips.map((tip) => (
-                <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} />
+                <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} pred={pred} />
               ))}
               <div className="text-[10px] font-mono text-muted-foreground/40 text-center">
                 Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
               </div>
             </>
           ) : (
-            /* No algorithm picks yet — only show if intel panel has no data either */
-            !pred && homeSidelined.length === 0 && awaySidelined.length === 0 && !homeTopScorer && !awayTopScorer ? (
+            /* No algorithm picks — show API-Football tip if available, else bullets */
+            pred && (pred.homeWinPct != null || pred.drawPct != null || pred.awayWinPct != null) ? (
+              <div className="glass-card rounded-xl border border-violet-400/15 overflow-hidden">
+                <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
+                  <Zap className="w-3.5 h-3.5 text-violet-400/70" />
+                  <span className="text-xs font-mono text-violet-400/80 uppercase tracking-widest">API-Football Prediction</span>
+                  <span className="text-[9px] font-mono text-muted-foreground/30 ml-auto">No algorithm pick for this fixture</span>
+                </div>
+                <div className="p-5 space-y-3">
+                  {pred.advice && (
+                    <div className="text-lg font-bold text-white">{pred.advice}</div>
+                  )}
+                  <div className="flex gap-4 text-sm font-mono">
+                    {pred.homeWinPct != null && (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-teal-300 font-bold tabular-nums text-base">{pred.homeWinPct}%</span>
+                        <span className="text-muted-foreground/50 text-[10px] uppercase tracking-wider">{homeTeam}</span>
+                      </div>
+                    )}
+                    {pred.drawPct != null && (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-amber-300 font-bold tabular-nums text-base">{pred.drawPct}%</span>
+                        <span className="text-muted-foreground/50 text-[10px] uppercase tracking-wider">Draw</span>
+                      </div>
+                    )}
+                    {pred.awayWinPct != null && (
+                      <div className="flex flex-col items-center gap-0.5">
+                        <span className="text-violet-300 font-bold tabular-nums text-base">{pred.awayWinPct}%</span>
+                        <span className="text-muted-foreground/50 text-[10px] uppercase tracking-wider">{awayTeam}</span>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] font-mono text-muted-foreground/35">Probabilites from API-Football · Algorithm signal gates not met for this fixture</p>
+                </div>
+              </div>
+            ) : !pred && homeSidelined.length === 0 && awaySidelined.length === 0 && !homeTopScorer && !awayTopScorer ? (
               <div className="glass-card p-6 rounded-xl border border-white/5 space-y-2.5">
                 {[
                   { label: "Odds data", desc: "Market prices from tracked bookmakers" },

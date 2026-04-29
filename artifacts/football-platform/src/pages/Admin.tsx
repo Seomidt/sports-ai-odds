@@ -787,6 +787,32 @@ function ForceSyncSection() {
   const [syncError, setSyncError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  type TipGenProgress = {
+    running: boolean; done: number; total: number; ok: number;
+    skipped: number; current: string | null;
+    startedAt: string | null; finishedAt: string | null;
+  };
+  const [tipProgress, setTipProgress] = useState<TipGenProgress | null>(null);
+  const tipPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startTipProgressPolling = async () => {
+    const fetchStatus = async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch("/api/admin/force-ai-tips/status", { headers });
+        if (!res.ok) return;
+        const data: TipGenProgress = await res.json();
+        setTipProgress(data);
+        if (!data.running && tipPollRef.current) {
+          clearInterval(tipPollRef.current);
+          tipPollRef.current = null;
+        }
+      } catch { /* ignore */ }
+    };
+    fetchStatus();
+    tipPollRef.current = setInterval(fetchStatus, 1500);
+  };
+
   const authHeaders = async (): Promise<Record<string, string>> => {
     const token = await getToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
@@ -878,6 +904,7 @@ function ForceSyncSection() {
     setLoadingAi(true);
     setAiTipsError(null);
     setAiTipsSuccess(false);
+    setTipProgress(null);
     try {
       const headers = await authHeaders();
       const res = await fetch("/api/admin/force-ai-tips", { method: "POST", headers });
@@ -888,7 +915,7 @@ function ForceSyncSection() {
         toast({ title: msg, variant: "destructive" });
       } else {
         setAiTipsSuccess(true);
-        toast({ title: "AI tip generation startet", description: "Kører i baggrunden for alle kommende kampe" });
+        startTipProgressPolling();
       }
     } catch (err) {
       const msg = `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`;
@@ -967,9 +994,36 @@ function ForceSyncSection() {
             <p className="text-xs font-mono text-red-400">{aiTipsError}</p>
           </div>
         )}
-        {aiTipsSuccess && !aiTipsError && (
-          <div className="bg-teal-500/10 border border-teal-500/20 rounded-lg p-3">
-            <p className="text-xs font-mono text-teal-400">Generation startet — check AI USAGE for progress</p>
+        {tipProgress && (
+          <div className="bg-violet-500/8 border border-violet-500/20 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">
+                {tipProgress.running ? "Genererer tips..." : "Færdig"}
+              </span>
+              <span className="text-xs font-mono font-bold text-violet-300">
+                {tipProgress.done} / {tipProgress.total}
+              </span>
+            </div>
+            {/* Progress bar */}
+            <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-violet-400 rounded-full transition-all duration-300"
+                style={{ width: tipProgress.total > 0 ? `${Math.round((tipProgress.done / tipProgress.total) * 100)}%` : "0%" }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground">
+              <span>{tipProgress.total > 0 ? `${Math.round((tipProgress.done / tipProgress.total) * 100)}%` : "0%"}</span>
+              <span className="text-teal-400">{tipProgress.ok} ok</span>
+              {tipProgress.skipped > 0 && <span className="text-amber-400">{tipProgress.skipped} skipped</span>}
+            </div>
+            {tipProgress.current && (
+              <div className="text-[10px] font-mono text-muted-foreground/60 truncate">
+                → {tipProgress.current}
+              </div>
+            )}
+            {!tipProgress.running && tipProgress.finishedAt && (
+              <div className="text-[10px] font-mono text-teal-400">✓ Alle tips genereret</div>
+            )}
           </div>
         )}
         {syncError && (

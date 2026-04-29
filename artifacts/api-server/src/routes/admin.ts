@@ -16,6 +16,7 @@ import {
   backfillH2HStats,
   getH2HBackfillStatus,
   backfillMissingConfidence,
+  tipGenProgress,
 } from "../ingestion/poller.js";
 
 const router = Router();
@@ -222,8 +223,17 @@ router.post("/admin/force-sync/:id", requireAdmin, async (req, res) => {
 // ── Force AI tip generation ───────────────────────────────────────────────────
 
 router.post("/admin/force-ai-tips", requireAdmin, (_req, res) => {
-  bulkGenerateAiTips(200).catch(console.error);
+  if (tipGenProgress.running) {
+    return res.json({ ok: false, message: "Already running", progress: tipGenProgress });
+  }
+  bulkGenerateAiTips(200)
+    .then(() => sweepMissedPostMatchReviews())
+    .catch(console.error);
   return res.json({ ok: true, message: "AI tip generation started for up to 200 upcoming fixtures" });
+});
+
+router.get("/admin/force-ai-tips/status", requireAdmin, (_req, res) => {
+  return res.json(tipGenProgress);
 });
 
 // ── H2H stats backfill ────────────────────────────────────────────────────────

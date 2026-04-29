@@ -2119,6 +2119,18 @@ async function startupSignalCompute() {
  * getBettingTips() skips fixtures already having ≥10 tips.
  * Processes up to BATCH_SIZE per call to avoid hammering the AI API.
  */
+// ─── Tip generation progress (in-memory, resets on restart) ──────────────────
+export const tipGenProgress = {
+  running: false,
+  done: 0,
+  total: 0,
+  ok: 0,
+  skipped: 0,
+  startedAt: null as Date | null,
+  finishedAt: null as Date | null,
+  current: null as string | null,
+};
+
 export async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
   const now = new Date();
   const in7Days = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -2152,24 +2164,36 @@ export async function bulkGenerateAiTips(batchSize = 30): Promise<void> {
     return;
   }
 
-  // Algorithmic engine doesn't require odds — process all fixtures that have signals/stats
   const batch = missing.slice(0, batchSize);
   console.log(`[ai-tips] Generating for ${batch.length} fixtures (${missing.length} total pending)`);
-  let ok = 0;
-  let skipped = 0;
+
+  // Reset progress tracker
+  tipGenProgress.running = true;
+  tipGenProgress.done = 0;
+  tipGenProgress.total = batch.length;
+  tipGenProgress.ok = 0;
+  tipGenProgress.skipped = 0;
+  tipGenProgress.startedAt = new Date();
+  tipGenProgress.finishedAt = null;
+  tipGenProgress.current = null;
 
   for (const fix of batch) {
+    tipGenProgress.current = `${fix.homeTeamName} vs ${fix.awayTeamName}`;
     try {
       const tips = await getBettingTips(fix.fixtureId);
-      if (tips) ok++;
-      else skipped++;
+      if (tips) tipGenProgress.ok++;
+      else tipGenProgress.skipped++;
     } catch (err) {
       console.error(`[ai-tips] Error for fixture ${fix.fixtureId}:`, err);
-      skipped++;
+      tipGenProgress.skipped++;
     }
+    tipGenProgress.done++;
   }
 
-  console.log(`[ai-tips] Done — ${ok} generated, ${skipped} skipped (no odds/error)`);
+  tipGenProgress.running = false;
+  tipGenProgress.finishedAt = new Date();
+  tipGenProgress.current = null;
+  console.log(`[ai-tips] Done — ${tipGenProgress.ok} generated, ${tipGenProgress.skipped} skipped`);
 }
 
 // ─── Midnight odds sweep ───────────────────────────────────────────────────────

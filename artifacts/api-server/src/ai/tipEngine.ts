@@ -742,11 +742,12 @@ export function generateAlgorithmicTips(
   }
 
   // ── API-Football Prediction Fallback ────────────────────────────────────────
-  // When the strict algorithm finds no match result tip, fall back to pure edge
-  // calculation using API-Football's probability vs market odds.
-  // Requires edge >= 10% and odds <= 4.50 to avoid noise and longshots.
-  // Trust score is capped at 5 to signal lower confidence vs backtested tips.
-  if (!finalTips.some(t => t.bet_type === "match_result") && ctx.prediction) {
+  // Only when the algorithm generated NO tips at all — not just no match_result.
+  // If BTTS or handicap already fired, the fixture is covered; skip fallback.
+  // Requires edge >= 12% to avoid the systematic draw bias (API-FB draw probs
+  // are consistently higher than bookmaker pricing, so lower thresholds flood
+  // the output with draws). Draw also requires >= 35% probability.
+  if (finalTips.length === 0 && ctx.prediction) {
     const pred = ctx.prediction;
     const fallbackPool = withEdge([
       ...(pred.homeWinPct != null && ctx.odds.home != null ? [{
@@ -770,7 +771,13 @@ export function generateAlgorithmicTips(
         odds: ctx.odds.away,
         reasoning: `API-Football rates ${ctx.awayTeam} at ${pred.awayWinPct}% — market implies ${Math.round((1 / ctx.odds.away) * 100)}%. Edge: +${Math.round((pred.awayWinPct / 100 * ctx.odds.away - 1) * 100)}%.`,
       }] : []),
-    ]).filter(c => c.edge >= 0.10 && (c.odds ?? 0) <= 4.50);
+    ]).filter(c =>
+      c.edge >= 0.12 &&
+      (c.odds ?? 0) <= 4.50 &&
+      // Extra guard on draws: API-FB systematically over-rates draws vs market,
+      // so require a stronger signal (≥35%) before tipping draw via fallback.
+      (c.bet_side !== "draw" || c.prob >= 0.35)
+    );
 
     if (fallbackPool.length > 0) {
       finalTips.push(fallbackPool[0]);

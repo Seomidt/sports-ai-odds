@@ -692,14 +692,17 @@ function ForceSyncSection() {
   const [syncProgressData, setSyncProgressData] = useState<SyncProgress | null>(null);
   const syncProgressPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const startSyncProgressPolling = async () => {
+  const startSyncProgressPolling = () => {
     const fetchStatus = async () => {
       try {
         const headers = await authHeaders();
         const res = await fetch("/api/admin/force-full-sync/status", { headers });
         if (!res.ok) return;
         const data: SyncProgress = await res.json();
-        setSyncProgressData(data);
+        // Only show if there's something meaningful to display
+        if (data.running || data.logs.length > 0 || data.result || data.error) {
+          setSyncProgressData(data);
+        }
         if (!data.running && syncProgressPollRef.current) {
           clearInterval(syncProgressPollRef.current);
           syncProgressPollRef.current = null;
@@ -707,10 +710,12 @@ function ForceSyncSection() {
       } catch { /* ignore */ }
     };
     fetchStatus();
-    syncProgressPollRef.current = setInterval(fetchStatus, 1500);
+    if (!syncProgressPollRef.current) {
+      syncProgressPollRef.current = setInterval(fetchStatus, 1500);
+    }
   };
 
-  const startTipProgressPolling = async () => {
+  const startTipProgressPolling = () => {
     const fetchStatus = async () => {
       try {
         const headers = await authHeaders();
@@ -725,8 +730,21 @@ function ForceSyncSection() {
       } catch { /* ignore */ }
     };
     fetchStatus();
-    tipPollRef.current = setInterval(fetchStatus, 1500);
+    if (!tipPollRef.current) {
+      tipPollRef.current = setInterval(fetchStatus, 1500);
+    }
   };
+
+  // On mount: restore any in-progress sync/tip-gen that was running before navigation
+  useEffect(() => {
+    startSyncProgressPolling();
+    startTipProgressPolling();
+    return () => {
+      if (syncProgressPollRef.current) { clearInterval(syncProgressPollRef.current); syncProgressPollRef.current = null; }
+      if (tipPollRef.current) { clearInterval(tipPollRef.current); tipPollRef.current = null; }
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const authHeaders = async (): Promise<Record<string, string>> => {
     const token = await getToken();
@@ -910,7 +928,7 @@ function ForceSyncSection() {
             <p className="text-xs font-mono text-red-400">{aiTipsError}</p>
           </div>
         )}
-        {tipProgress && (
+        {tipProgress && (tipProgress.running || tipProgress.total > 0) && (
           <div className="bg-violet-500/8 border border-violet-500/20 rounded-lg p-3 space-y-2">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">

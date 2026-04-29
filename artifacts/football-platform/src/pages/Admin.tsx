@@ -658,119 +658,7 @@ function BillingSection() {
   );
 }
 
-interface H2HStatus { running: boolean; finished: boolean; done: number; total: number; dbDone: number; dbTotal: number; remaining: number; }
 
-function H2HBackfillPanel() {
-  const { getToken } = useAuth();
-  const { toast } = useToast();
-  const [starting, setStarting] = useState(false);
-  const [fastPoll, setFastPoll] = useState(false);
-
-  const authHeaders = async () => {
-    const token = await getToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
-  const { data: status, refetch } = useQuery<H2HStatus>({
-    queryKey: ["h2h-backfill-status"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/h2h-backfill/status", { headers: await authHeaders() });
-      return res.json();
-    },
-    // Poll every 3s when running or just started, every 10s otherwise
-    refetchInterval: (query) => (query.state.data?.running || fastPoll ? 3000 : 10000),
-    staleTime: 1000,
-  });
-
-  // Stop fast polling once server confirms running or after 20s
-  useEffect(() => {
-    if (!fastPoll) return;
-    const t = setTimeout(() => setFastPoll(false), 20_000);
-    return () => clearTimeout(t);
-  }, [fastPoll]);
-
-  const handleStart = async () => {
-    setStarting(true);
-    setFastPoll(true);
-    try {
-      const res = await fetch("/api/admin/h2h-backfill", { method: "POST", headers: await authHeaders() });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast({ title: data.error ?? `Fejl (${res.status})`, variant: "destructive" });
-        setFastPoll(false);
-      } else {
-        // Refetch immediately so status updates right away
-        refetch();
-      }
-    } catch (err) {
-      toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
-      setFastPoll(false);
-    } finally {
-      setStarting(false);
-    }
-  };
-
-  const done = status?.dbDone ?? 0;
-  const total = status?.dbTotal ?? 0;
-  const remaining = status?.remaining ?? 0;
-  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-  const isRunning = status?.running ?? false;
-  const isFinished = done >= total && total > 0;
-  const canStart = !starting && !isRunning && !isFinished && remaining > 0;
-
-  return (
-    <div className="rounded-xl border border-teal-400/20 bg-teal-400/5 p-5 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-wrap">
-          <Database className="w-4 h-4 text-teal-400 shrink-0" />
-          <span className="text-sm font-bold font-mono text-white">H2H Stats Backfill</span>
-          {isRunning && (
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-teal-400/15 text-teal-300 border border-teal-400/30 animate-pulse">
-              KØRER
-            </span>
-          )}
-          {(fastPoll && !isRunning) && (
-            <span className="text-[10px] font-mono text-muted-foreground/60 animate-pulse">starter…</span>
-          )}
-          {isFinished && (
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-primary/15 text-primary border border-primary/30">
-              FÆRDIG
-            </span>
-          )}
-        </div>
-        <button
-          onClick={handleStart}
-          disabled={!canStart}
-          className="shrink-0 px-3 py-1.5 rounded-md bg-teal-500/20 border border-teal-500/30 text-teal-300 text-xs font-mono font-bold hover:bg-teal-500/30 disabled:opacity-40 transition-colors"
-        >
-          {starting ? "Starter…" : isRunning ? "Kører…" : isFinished ? "Færdig" : `Start (${remaining.toLocaleString()} mangler)`}
-        </button>
-      </div>
-
-      {/* Progress bar */}
-      <div className="space-y-1.5">
-        <div className="flex justify-between text-[11px] font-mono text-muted-foreground">
-          <span>xG · Skud · Hjørner hentet</span>
-          <span className="tabular-nums text-white/70">{done.toLocaleString()} / {total.toLocaleString()}</span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-white/8 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-teal-400 transition-all duration-500"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60">
-          <span>{pct}% færdig</span>
-          <span className={remaining > 0 ? "text-amber-400/70" : "text-teal-400/70"}>{remaining.toLocaleString()} mangler</span>
-        </div>
-      </div>
-
-      <p className="text-[11px] text-muted-foreground/60 font-mono">
-        Springer allerede hentede fixtures over — henter kun de {remaining.toLocaleString()} der mangler. Koster ~{remaining.toLocaleString()} API-kald.
-      </p>
-    </div>
-  );
-}
 
 interface SyncResult { fixtures: number; oddsFetched: number; predictionsFetched: number; h2hFetched: number; injuriesFetched: number; tipsQueued: number; }
 
@@ -977,7 +865,6 @@ function ForceSyncSection() {
           <Brain className="w-4 h-4" />
           {loadingAi ? "Starting..." : "Force AI Tips Generation"}
         </button>
-        <H2HBackfillPanel />
         <button
           onClick={handleTestPing}
           className="w-full h-8 bg-white/5 border border-white/10 text-muted-foreground text-xs font-mono rounded-md hover:bg-white/10 transition-colors"

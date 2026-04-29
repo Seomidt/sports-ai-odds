@@ -557,38 +557,19 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
         <div className="glass-card p-10 rounded-xl flex items-center justify-center">
           <Activity className="w-6 h-6 text-primary animate-pulse" />
         </div>
-      ) : tips.length === 0 ? (
-        <div className="glass-card p-6 rounded-xl border border-white/5 space-y-2.5">
-          {[
-            { label: "Odds data", desc: "Market prices from tracked bookmakers" },
-            { label: "Form & H2H", desc: "Last 5 matches + head-to-head history" },
-            { label: "Signal engine", desc: "Pattern detection across 20+ indicators" },
-          ].map(({ label, desc }) => (
-            <div key={label} className="flex items-center gap-3">
-              <div className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
-              <div>
-                <span className="text-xs font-mono text-white/70">{label}</span>
-                <span className="text-xs text-muted-foreground/50 ml-2">{desc}</span>
-              </div>
-            </div>
-          ))}
-          <p className="text-[11px] text-muted-foreground/40 font-mono pt-2">
-            Picks are ready once all data sources are synced — typically a few hours before kickoff.
-          </p>
-        </div>
       ) : (
         <>
-          {/* ── AI Pre-Match Synthesis ── */}
-          {isSynthesisLoading && !synthesis ? (
+          {/* ── Match Synthesis (only when tips exist) ── */}
+          {tips.length > 0 && (isSynthesisLoading && !synthesis ? (
             <div className="glass-card p-4 rounded-xl border border-violet-400/15 flex items-center gap-3">
               <Activity className="w-4 h-4 text-violet-400 animate-pulse shrink-0" />
-              <span className="text-xs font-mono text-muted-foreground">Generating AI match briefing…</span>
+              <span className="text-xs font-mono text-muted-foreground">Generating match briefing…</span>
             </div>
           ) : synthesis ? (
             <div className="glass-card rounded-xl border border-violet-400/20 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-white/6 flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-violet-400" />
-              <span className="text-xs font-mono text-violet-400 uppercase tracking-widest">Match Briefing</span>
+                <span className="text-xs font-mono text-violet-400 uppercase tracking-widest">Match Briefing</span>
                 <span className="ml-auto text-[9px] font-mono text-muted-foreground/30">
                   {format(new Date(synthesis.generatedAt), 'HH:mm')}
                 </span>
@@ -610,9 +591,9 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                 )}
               </div>
             </div>
-          ) : null}
+          ) : null)}
 
-          {/* ── Compact Intel Panel: prediction + injuries + top scorer ── */}
+          {/* ── Intel Panel: prediction bars + injuries + top scorer — always shown when data exists ── */}
           {(pred || homeSidelined.length > 0 || awaySidelined.length > 0 || homeTopScorer || awayTopScorer) && (
             <div className="glass-card rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
@@ -712,16 +693,38 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
           )}
 
           {/* ── Tip Cards ── */}
-          {tips.map((tip) => (
-            <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} />
-          ))}
-
-          {tips[0] && (
-            <div className="text-[10px] font-mono text-muted-foreground/40 text-center">
-              Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
-            </div>
+          {tips.length > 0 ? (
+            <>
+              {tips.map((tip) => (
+                <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} />
+              ))}
+              <div className="text-[10px] font-mono text-muted-foreground/40 text-center">
+                Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
+              </div>
+            </>
+          ) : (
+            /* No algorithm picks yet — only show if intel panel has no data either */
+            !pred && homeSidelined.length === 0 && awaySidelined.length === 0 && !homeTopScorer && !awayTopScorer ? (
+              <div className="glass-card p-6 rounded-xl border border-white/5 space-y-2.5">
+                {[
+                  { label: "Odds data", desc: "Market prices from tracked bookmakers" },
+                  { label: "Form & H2H", desc: "Last 5 matches + head-to-head history" },
+                  { label: "Signal engine", desc: "Pattern detection across 20+ indicators" },
+                ].map(({ label, desc }) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
+                    <div>
+                      <span className="text-xs font-mono text-white/70">{label}</span>
+                      <span className="text-xs text-muted-foreground/50 ml-2">{desc}</span>
+                    </div>
+                  </div>
+                ))}
+                <p className="text-[11px] text-muted-foreground/40 font-mono pt-2">
+                  Picks are ready once all data sources are synced — typically a few hours before kickoff.
+                </p>
+              </div>
+            ) : null
           )}
-
         </>
       )}
     </div>

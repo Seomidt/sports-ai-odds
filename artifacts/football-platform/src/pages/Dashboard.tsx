@@ -227,7 +227,8 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
   const [yesterdayOpen, setYesterdayOpen] = useState(false);
 
   const yr = yesterdayResults;
-  const yrHitRate = yr.total > 0 ? Math.round((yr.wins / yr.total) * 100) : null;
+  const yrResolved = yr.wins + yr.losses + yr.pushes;
+  const yrHitRate = yrResolved > 0 ? Math.round((yr.wins / yrResolved) * 100) : null;
   const topPick = todayPicks[0];
   const badge = streak.badge ? BADGE_CONFIG[streak.badge] : null;
 

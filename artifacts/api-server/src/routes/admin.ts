@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { supabaseAdmin } from "../lib/supabase.js";
 import { db } from "@workspace/db";
-import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets, h2hFixtures, h2hFixtureStats } from "@workspace/db/schema";
+import { allowedUsers, fixtures, teams, standings, fixtureSignals, aiBettingTips, oddsMarkets, h2hFixtures, h2hFixtureStats, predictions } from "@workspace/db/schema";
 import { eq, sql, and, gte, lte, inArray } from "drizzle-orm";
 import { requireAdmin } from "../middlewares/requireAuth.js";
 import { getApiStats, kvSet } from "../ingestion/apiFootballClient.js";
@@ -17,6 +17,7 @@ import {
   getH2HBackfillStatus,
   backfillMissingConfidence,
   tipGenProgress,
+  fullSyncProgress,
 } from "../ingestion/poller.js";
 
 const router = Router();
@@ -305,6 +306,121 @@ router.get("/admin/ai-health", requireAdmin, (_req, res) => {
     apiKeyConfigured: hasKey,
     keyEnvVar: process.env["ANTHROPIC_API_KEY"] ? "ANTHROPIC_API_KEY" : process.env["AI_INTEGRATIONS_ANTHROPIC_API_KEY"] ? "AI_INTEGRATIONS_ANTHROPIC_API_KEY" : "MISSING",
   });
+});
+
+// ── Algorithm benchmark vs API-Football predictions ───────────────────────────
+// Compares our algorithm's hit rate against API-Football's built-in predictions
+// on the same resolved fixtures (FT, goals known, both sources present).
+
+router.get("/admin/benchmark", requireAdmin, async (_req, res) => {
+  try {
+    const { rows } = await db.execute(sql`
+      SELECT
+        f.fixture_id,
+        DATE_TRUNC('week', f.kickoff) AS week,
+        CASE
+          WHEN f.home_goals > f.away_goals THEN 'home_win'
+          WHEN f.home_goals = f.away_goals THEN 'draw'
+          ELSE 'away_win'
+        END AS actual_outcome,
+        CASE
+          WHEN COALESCE(p.home_win_percent,0) >= COALESCE(p.draw_percent,0)
+           AND COALESCE(p.home_win_percent,0) >= COALESCE(p.away_win_percent,0)
+          THEN 'home_win'
+          WHEN COALESCE(p.draw_percent,0) >= COALESCE(p.home_win_percent,0)
+           AND COALESCE(p.draw_percent,0) >= COALESCE(p.away_win_percent,0)
+          THEN 'draw'
+          ELSE 'away_win'
+        END AS api_predicted,
+        t.bet_type,
+        t.outcome,
+        t.market_odds
+      FROM fixtures f
+      INNER JOIN predictions p ON p.fixture_id = f.fixture_id
+      INNER JOIN ai_betting_tips t ON t.fixture_id = f.fixture_id
+      WHERE f.status_short = 'FT'
+        AND f.home_goals IS NOT NULL
+        AND f.away_goals IS NOT NULL
+        AND t.outcome IN ('win', 'loss')
+        AND t.bet_type IN ('home_win', 'draw', 'away_win')
+        AND f.kickoff > NOW() - INTERVAL '90 days'
+      ORDER BY f.kickoff ASC
+    `);
+
+    const allRows = rows as Array<{
+      fixture_id: number; week: string; actual_outcome: string;
+      api_predicted: string; bet_type: string; outcome: string; market_odds: number | null;
+    }>;
+
+    // ── Our algorithm ──────────────────────────────────────────────────────────
+    const ourWins = allRows.filter(r => r.outcome === "win").length;
+    const ourLosses = allRows.filter(r => r.outcome === "loss").length;
+    const ourTotal = ourWins + ourLosses;
+    const ourProfit = allRows.reduce((sum, r) => {
+      if (r.outcome === "win") return sum + ((r.market_odds ?? 2) - 1);
+      if (r.outcome === "loss") return sum - 1;
+      return sum;
+    }, 0);
+
+    // ── API-Football (one prediction per fixture, deduplicated) ────────────────
+    const apiSeen = new Set<number>();
+    let apiTotal = 0, apiCorrect = 0;
+    for (const r of allRows) {
+      if (!apiSeen.has(r.fixture_id)) {
+        apiSeen.add(r.fixture_id);
+        apiTotal++;
+        if (r.api_predicted === r.actual_outcome) apiCorrect++;
+      }
+    }
+
+    // ── Weekly breakdown ───────────────────────────────────────────────────────
+    type WeekBucket = { ourWins: number; ourTotal: number; apiCorrect: number; apiTotal: number };
+    const weekMap = new Map<string, WeekBucket>();
+    const apiSeenWeek = new Set<number>();
+
+    for (const r of allRows) {
+      const week = new Date(r.week).toISOString().slice(0, 10);
+      if (!weekMap.has(week)) weekMap.set(week, { ourWins: 0, ourTotal: 0, apiCorrect: 0, apiTotal: 0 });
+      const w = weekMap.get(week)!;
+      if (r.outcome === "win") { w.ourWins++; w.ourTotal++; }
+      else if (r.outcome === "loss") { w.ourTotal++; }
+      if (!apiSeenWeek.has(r.fixture_id)) {
+        apiSeenWeek.add(r.fixture_id);
+        w.apiTotal++;
+        if (r.api_predicted === r.actual_outcome) w.apiCorrect++;
+      }
+    }
+
+    const timeline = [...weekMap.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-10) // last 10 weeks
+      .map(([week, w]) => ({
+        week,
+        ourHitRate: w.ourTotal > 0 ? Math.round(w.ourWins / w.ourTotal * 1000) / 10 : null,
+        ourTotal: w.ourTotal,
+        apiHitRate: w.apiTotal > 0 ? Math.round(w.apiCorrect / w.apiTotal * 1000) / 10 : null,
+        apiTotal: w.apiTotal,
+      }));
+
+    return res.json({
+      ours: {
+        total: ourTotal,
+        wins: ourWins,
+        losses: ourLosses,
+        hitRate: ourTotal > 0 ? Math.round(ourWins / ourTotal * 1000) / 10 : 0,
+        profitUnits: Math.round(ourProfit * 10) / 10,
+      },
+      apiFootball: {
+        total: apiTotal,
+        correct: apiCorrect,
+        hitRate: apiTotal > 0 ? Math.round(apiCorrect / apiTotal * 1000) / 10 : 0,
+      },
+      timeline,
+    });
+  } catch (err) {
+    console.error("[admin/benchmark]", err);
+    return res.status(500).json({ error: "Failed to compute benchmark" });
+  }
 });
 
 // ── User management ───────────────────────────────────────────────────────────

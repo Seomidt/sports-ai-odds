@@ -2373,19 +2373,44 @@ export interface ForceSyncResult {
  * Only fetches data that is genuinely missing from the database.
  * Does NOT re-fetch or overwrite data that already exists.
  */
+// ─── Force full sync progress (in-memory, survives navigation) ───────────────
+export const fullSyncProgress = {
+  running: false,
+  step: "",
+  stepDone: 0,
+  stepTotal: 0,
+  totalFixtures: 0,
+  startedAt: null as string | null,
+  finishedAt: null as string | null,
+  error: null as string | null,
+  result: null as ForceSyncResult | null,
+};
+
 export async function forceFullSync(onProgress?: (msg: string) => void): Promise<ForceSyncResult> {
   const log = (msg: string) => {
     console.log(`[force-full-sync] ${msg}`);
+    fullSyncProgress.step = msg;
     onProgress?.(msg);
   };
+
+  fullSyncProgress.running = true;
+  fullSyncProgress.step = "Syncer kamplister...";
+  fullSyncProgress.stepDone = 0;
+  fullSyncProgress.stepTotal = 7;
+  fullSyncProgress.totalFixtures = 0;
+  fullSyncProgress.startedAt = new Date().toISOString();
+  fullSyncProgress.finishedAt = null;
+  fullSyncProgress.error = null;
+  fullSyncProgress.result = null;
 
   const now = new Date();
   const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   // ── 1. Sync fixture lists for next 7 days (upsert — safe to always run) ──
-  log("Syncing fixture lists for next 7 days...");
   for (let i = 0; i < 7; i++) {
     const date = getDateOffset(i);
+    fullSyncProgress.step = `Syncer kampliste dag ${i + 1}/7...`;
+    fullSyncProgress.stepDone = i + 1;
     await syncFixturesForDate(date).catch(console.error);
   }
 
@@ -2394,8 +2419,15 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     where: (f, { and: andFn, gte: gteFn, lte, inArray: inArr }) =>
       andFn(gteFn(f.kickoff, now), lte(f.kickoff, in7d), inArr(f.statusShort, ["NS", "TBD"])),
   });
-  log(`Found ${upcoming.length} upcoming fixtures`);
-  if (upcoming.length === 0) return { fixtures: 0, oddsFetched: 0, predictionsFetched: 0, h2hFetched: 0, injuriesFetched: 0, tipsQueued: 0 };
+  fullSyncProgress.totalFixtures = upcoming.length;
+  log(`Fandt ${upcoming.length} kommende kampe`);
+  if (upcoming.length === 0) {
+    fullSyncProgress.running = false;
+    fullSyncProgress.finishedAt = new Date().toISOString();
+    const empty = { fixtures: 0, oddsFetched: 0, predictionsFetched: 0, h2hFetched: 0, injuriesFetched: 0, tipsQueued: 0 };
+    fullSyncProgress.result = empty;
+    return empty;
+  }
 
   const allIds = upcoming.map((f) => f.fixtureId);
   const result: ForceSyncResult = { fixtures: upcoming.length, oddsFetched: 0, predictionsFetched: 0, h2hFetched: 0, injuriesFetched: 0, tipsQueued: 0 };
@@ -2408,10 +2440,14 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     ).map((r) => r.fixtureId)
   );
   const missingOdds = upcoming.filter((f) => !withOdds.has(f.fixtureId));
-  log(`Odds: ${withOdds.size} already have odds, fetching for ${missingOdds.length} missing`);
   result.oddsFetched = missingOdds.length;
+  fullSyncProgress.stepDone = 0;
+  fullSyncProgress.stepTotal = missingOdds.length;
+  log(`Odds: ${withOdds.size} OK — henter ${missingOdds.length} manglende`);
 
   for (const fix of missingOdds) {
+    fullSyncProgress.stepDone++;
+    fullSyncProgress.step = `Odds ${fullSyncProgress.stepDone}/${missingOdds.length}: ${fix.homeTeamName} vs ${fix.awayTeamName}`;
     const seen = new Set<string>();
     const snappedAt = new Date();
 
@@ -2448,7 +2484,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
       await new Promise((r) => setTimeout(r, 150));
     }
   }
-  log("Odds done");
+  log(`Odds færdig — ${missingOdds.length} hentet`);
 
   // ── 4. Predictions: only fetch for fixtures that have NO prediction ────────
   const withPredictions = new Set(
@@ -2458,25 +2494,34 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     ).map((r) => r.fixtureId)
   );
   const missingPredictions = upcoming.filter((f) => !withPredictions.has(f.fixtureId));
-  log(`Predictions: ${withPredictions.size} already present, fetching ${missingPredictions.length} missing`);
   result.predictionsFetched = missingPredictions.length;
+  fullSyncProgress.stepDone = 0;
+  fullSyncProgress.stepTotal = missingPredictions.length;
+  log(`Predictions: ${withPredictions.size} OK — henter ${missingPredictions.length} manglende`);
 
   for (const fix of missingPredictions) {
+    fullSyncProgress.stepDone++;
+    fullSyncProgress.step = `Prediction ${fullSyncProgress.stepDone}/${missingPredictions.length}: ${fix.homeTeamName} vs ${fix.awayTeamName}`;
     await syncPredictionForFixture(fix.fixtureId).catch(console.error);
     await new Promise((r) => setTimeout(r, 100));
   }
-  log("Predictions done");
+  log(`Predictions færdig — ${missingPredictions.length} hentet`);
 
   // ── 5. H2H: fixtures + per-match stats (shots, corners, xG, possession) ──────
-  log("Syncing H2H for pairs with no existing data...");
+  const missingH2H = upcoming.filter((f) => f.homeTeamId && f.awayTeamId);
+  fullSyncProgress.stepDone = 0;
+  fullSyncProgress.stepTotal = missingH2H.length;
+  log(`H2H: tjekker ${missingH2H.length} kampe...`);
   for (const fix of upcoming) {
     if (!fix.homeTeamId || !fix.awayTeamId) continue;
+    fullSyncProgress.stepDone++;
     const existing = await db.query.h2hFixtures.findFirst({
       where: (h, { and: andFn, eq: eqFn }) =>
         andFn(eqFn(h.forTeam1Id, fix.homeTeamId!), eqFn(h.forTeam2Id, fix.awayTeamId!)),
     });
-    if (existing) continue; // Already have H2H for this pair
+    if (existing) continue;
     result.h2hFetched++;
+    fullSyncProgress.step = `H2H ${fullSyncProgress.stepDone}/${missingH2H.length}: ${fix.homeTeamName} vs ${fix.awayTeamName}`;
 
     const data = await fetchH2H(fix.homeTeamId, fix.awayTeamId, 10).catch(() => null);
     if (!data) continue;
@@ -2513,7 +2558,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     }
     await new Promise((r) => setTimeout(r, 150));
   }
-  log("H2H done");
+  log(`H2H færdig — ${result.h2hFetched} nye par hentet`);
 
   // ── 6. Injuries: only fetch for fixtures that have NO injury data ──────────
   const withInjuries = new Set(
@@ -2523,10 +2568,14 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     ).map((r) => r.fixtureId)
   );
   const missingInjuries = upcoming.filter((f) => !withInjuries.has(f.fixtureId));
-  log(`Injuries: ${withInjuries.size} already present, fetching ${missingInjuries.length} missing`);
+  fullSyncProgress.stepDone = 0;
+  fullSyncProgress.stepTotal = missingInjuries.length;
+  log(`Injuries: ${withInjuries.size} OK — henter ${missingInjuries.length} manglende`);
   result.injuriesFetched = missingInjuries.length;
 
   for (const fix of missingInjuries) {
+    fullSyncProgress.stepDone++;
+    fullSyncProgress.step = `Injuries ${fullSyncProgress.stepDone}/${missingInjuries.length}: ${fix.homeTeamName} vs ${fix.awayTeamName}`;
     const data = await fetchFixtureInjuries(fix.fixtureId).catch(() => null);
     if (!data || data.length === 0) continue;
     for (const inj of data) {
@@ -2541,19 +2590,22 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  log("Injuries done");
+  log(`Injuries færdig — ${missingInjuries.length} hentet`);
 
-  // ── 7. AI tips: only generate for fixtures that have fewer than 10 tips ───
-  log("Generating AI tips for fixtures with missing tips...");
+  // ── 7. Algoritme tips: kun for fixtures der mangler tips ─────────────────
   const tipsCountRows = await db
     .selectDistinct({ fixtureId: aiBettingTips.fixtureId })
     .from(aiBettingTips)
     .where(inArray(aiBettingTips.fixtureId, allIds));
   const withTips = new Set(tipsCountRows.map((r) => r.fixtureId));
   result.tipsQueued = upcoming.filter((f) => !withTips.has(f.fixtureId)).length;
-  // bulkGenerateAiTips already skips fixtures with ≥10 tips — no delete needed
+  fullSyncProgress.step = `Algoritme tips: ${result.tipsQueued} kampe mangler tips`;
   bulkGenerateAiTips(upcoming.length).catch(console.error);
-  log(`AI tip generation queued in background (${result.tipsQueued} fixtures need tips)`);
+  log(`Algoritme tips: ${result.tipsQueued} fixtures kører i baggrunden`);
+
+  fullSyncProgress.running = false;
+  fullSyncProgress.finishedAt = new Date().toISOString();
+  fullSyncProgress.result = result;
 
   return result;
 }

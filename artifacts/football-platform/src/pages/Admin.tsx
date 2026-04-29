@@ -1034,6 +1034,151 @@ function ForceSyncSection() {
   );
 }
 
+// ── Algorithm Benchmark vs API-Football ──────────────────────────────────────
+
+interface BenchmarkData {
+  ours: { total: number; wins: number; losses: number; hitRate: number; profitUnits: number };
+  apiFootball: { total: number; correct: number; hitRate: number };
+  timeline: Array<{ week: string; ourHitRate: number | null; ourTotal: number; apiHitRate: number | null; apiTotal: number }>;
+}
+
+function BenchmarkSection() {
+  const { getToken } = useAuth();
+  const { data, isLoading } = useQuery<BenchmarkData>({
+    queryKey: ["benchmark"],
+    queryFn: async () => {
+      const token = await getToken();
+      const res = await fetch("/api/admin/benchmark", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error("Failed to fetch benchmark");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+    refetchInterval: 10 * 60_000,
+  });
+
+  const edge = data ? data.ours.hitRate - data.apiFootball.hitRate : null;
+
+  const formatWeek = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  };
+
+  return (
+    <div className="border-t border-white/10 pt-8">
+      <h2 className="text-xl font-bold text-white uppercase tracking-wider mb-6 border-b border-white/10 pb-2 flex items-center gap-2">
+        <Activity className="w-5 h-5 text-teal-400" />
+        ALGORITME BENCHMARK
+        <span className="text-xs font-normal text-muted-foreground normal-case ml-2">vores vs API-Football predictions</span>
+      </h2>
+
+      {isLoading ? (
+        <div className="flex justify-center py-8"><Activity className="w-6 h-6 text-primary animate-pulse" /></div>
+      ) : !data || data.ours.total === 0 ? (
+        <div className="glass-card p-6 rounded-xl text-center text-muted-foreground font-mono text-sm">
+          Ingen resolved tips med API-Football predictions endnu. Kør Force Full Sync og vent på at kampe er færdige.
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Top-line comparison */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Ours */}
+            <div className="glass-card p-5 rounded-xl space-y-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">VOR ALGORITME</div>
+              <div className="text-4xl font-mono font-bold text-white">{data.ours.hitRate}<span className="text-xl text-muted-foreground">%</span></div>
+              <div className="w-full bg-white/5 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full bg-teal-400" style={{ width: `${Math.min(data.ours.hitRate, 100)}%` }} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                <div><span className="text-muted-foreground">Tips</span><br /><span className="text-white font-bold">{data.ours.total}</span></div>
+                <div><span className="text-muted-foreground">Profit</span><br /><span className={`font-bold ${data.ours.profitUnits >= 0 ? "text-teal-400" : "text-red-400"}`}>{data.ours.profitUnits >= 0 ? "+" : ""}{data.ours.profitUnits}u</span></div>
+                <div><span className="text-muted-foreground">Wins</span><br /><span className="text-teal-400 font-bold">{data.ours.wins}</span></div>
+                <div><span className="text-muted-foreground">Losses</span><br /><span className="text-red-400 font-bold">{data.ours.losses}</span></div>
+              </div>
+            </div>
+
+            {/* Edge */}
+            <div className="glass-card p-5 rounded-xl flex flex-col items-center justify-center text-center space-y-2">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">EDGE</div>
+              <div className={`text-5xl font-mono font-bold ${edge !== null && edge > 0 ? "text-teal-400" : edge !== null && edge < 0 ? "text-red-400" : "text-muted-foreground"}`}>
+                {edge !== null ? `${edge > 0 ? "+" : ""}${Math.round(edge * 10) / 10}%` : "—"}
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground">
+                {edge !== null && edge > 0 ? "vi slår baseline" : edge !== null && edge < 0 ? "under baseline" : ""}
+              </div>
+            </div>
+
+            {/* API-Football */}
+            <div className="glass-card p-5 rounded-xl space-y-3">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">API-FOOTBALL BASELINE</div>
+              <div className="text-4xl font-mono font-bold text-white">{data.apiFootball.hitRate}<span className="text-xl text-muted-foreground">%</span></div>
+              <div className="w-full bg-white/5 rounded-full h-1.5">
+                <div className="h-1.5 rounded-full bg-amber-400" style={{ width: `${Math.min(data.apiFootball.hitRate, 100)}%` }} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                <div><span className="text-muted-foreground">Kampe</span><br /><span className="text-white font-bold">{data.apiFootball.total}</span></div>
+                <div><span className="text-muted-foreground">Rigtige</span><br /><span className="text-amber-400 font-bold">{data.apiFootball.correct}</span></div>
+              </div>
+              <div className="text-[10px] font-mono text-muted-foreground/60 leading-relaxed">
+                Altid højeste sandsynlighed. Ingen odds-filtrering.
+              </div>
+            </div>
+          </div>
+
+          {/* Weekly timeline */}
+          {data.timeline.length > 0 && (
+            <div className="glass-card p-5 rounded-xl">
+              <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest mb-4">UGENTLIG SAMMENLIGNING</div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs font-mono">
+                  <thead>
+                    <tr className="text-muted-foreground/60 border-b border-white/5">
+                      <th className="text-left py-2 pr-4">Uge</th>
+                      <th className="text-right py-2 px-3">Vores %</th>
+                      <th className="text-right py-2 px-3">Tips</th>
+                      <th className="text-right py-2 px-3">API-FB %</th>
+                      <th className="text-right py-2 pl-3">Kampe</th>
+                      <th className="text-right py-2 pl-3">Edge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[...data.timeline].reverse().map((row) => {
+                      const weekEdge = row.ourHitRate !== null && row.apiHitRate !== null
+                        ? Math.round((row.ourHitRate - row.apiHitRate) * 10) / 10
+                        : null;
+                      return (
+                        <tr key={row.week} className="border-b border-white/5 hover:bg-white/3">
+                          <td className="py-2 pr-4 text-muted-foreground">{formatWeek(row.week)}</td>
+                          <td className="py-2 px-3 text-right">
+                            <span className={row.ourHitRate !== null && row.ourHitRate >= 55 ? "text-teal-400 font-bold" : row.ourHitRate !== null && row.ourHitRate < 45 ? "text-red-400" : "text-white"}>
+                              {row.ourHitRate !== null ? `${row.ourHitRate}%` : "—"}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-right text-muted-foreground">{row.ourTotal}</td>
+                          <td className="py-2 px-3 text-right text-amber-400/80">{row.apiHitRate !== null ? `${row.apiHitRate}%` : "—"}</td>
+                          <td className="py-2 pl-3 text-right text-muted-foreground">{row.apiTotal}</td>
+                          <td className="py-2 pl-3 text-right">
+                            {weekEdge !== null ? (
+                              <span className={weekEdge > 0 ? "text-teal-400" : weekEdge < 0 ? "text-red-400" : "text-muted-foreground"}>
+                                {weekEdge > 0 ? "+" : ""}{weekEdge}%
+                              </span>
+                            ) : "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Daily AI Admin Insight ────────────────────────────────────────────────────
 
 interface AdminInsight {
@@ -1531,6 +1676,9 @@ function AdminContent() {
 
         {/* AI Stats Section */}
         <AiStatsSection />
+
+        {/* Benchmark: vores algoritme vs API-Football */}
+        <BenchmarkSection />
 
         {/* Daily AI Insight Section */}
         <AdminInsightSection />

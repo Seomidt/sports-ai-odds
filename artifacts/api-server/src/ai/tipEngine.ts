@@ -741,6 +741,42 @@ export function generateAlgorithmicTips(
     }
   }
 
+  // ── API-Football Prediction Fallback ────────────────────────────────────────
+  // When the strict algorithm finds no match result tip, fall back to pure edge
+  // calculation using API-Football's probability vs market odds.
+  // Requires edge >= 10% and odds <= 4.50 to avoid noise and longshots.
+  // Trust score is capped at 5 to signal lower confidence vs backtested tips.
+  if (!finalTips.some(t => t.bet_type === "match_result") && ctx.prediction) {
+    const pred = ctx.prediction;
+    const fallbackPool = withEdge([
+      ...(pred.homeWinPct != null && ctx.odds.home != null ? [{
+        bet_type: "match_result", bet_side: "home",
+        recommendation: `${ctx.homeTeam} Win`,
+        prob: pred.homeWinPct / 100,
+        odds: ctx.odds.home,
+        reasoning: `API-Football rates ${ctx.homeTeam} at ${pred.homeWinPct}% — market implies ${Math.round((1 / ctx.odds.home) * 100)}%. Edge: +${Math.round((pred.homeWinPct / 100 * ctx.odds.home - 1) * 100)}%.`,
+      }] : []),
+      ...(pred.drawPct != null && ctx.odds.draw != null ? [{
+        bet_type: "match_result", bet_side: "draw",
+        recommendation: "Draw",
+        prob: pred.drawPct / 100,
+        odds: ctx.odds.draw,
+        reasoning: `API-Football rates draw at ${pred.drawPct}% — market implies ${Math.round((1 / ctx.odds.draw) * 100)}%. Edge: +${Math.round((pred.drawPct / 100 * ctx.odds.draw - 1) * 100)}%.`,
+      }] : []),
+      ...(pred.awayWinPct != null && ctx.odds.away != null ? [{
+        bet_type: "match_result", bet_side: "away",
+        recommendation: `${ctx.awayTeam} Win`,
+        prob: pred.awayWinPct / 100,
+        odds: ctx.odds.away,
+        reasoning: `API-Football rates ${ctx.awayTeam} at ${pred.awayWinPct}% — market implies ${Math.round((1 / ctx.odds.away) * 100)}%. Edge: +${Math.round((pred.awayWinPct / 100 * ctx.odds.away - 1) * 100)}%.`,
+      }] : []),
+    ]).filter(c => c.edge >= 0.10 && (c.odds ?? 0) <= 4.50);
+
+    if (fallbackPool.length > 0) {
+      finalTips.push(fallbackPool[0]);
+    }
+  }
+
   // ── Asian Handicap ────────────────────────────────────────────────────────
   // Only profitable when home has clear stat edge AND match is high-scoring.
   // "Moderate home + high scoring": 63.2% hit @ 1.91 → +5.2u

@@ -683,6 +683,33 @@ function ForceSyncSection() {
   const [tipProgress, setTipProgress] = useState<TipGenProgress | null>(null);
   const tipPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  type SyncProgress = {
+    running: boolean; step: string; logs: string[];
+    startedAt: string | null; finishedAt: string | null;
+    error: string | null;
+    result: SyncResult | null;
+  };
+  const [syncProgressData, setSyncProgressData] = useState<SyncProgress | null>(null);
+  const syncProgressPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startSyncProgressPolling = async () => {
+    const fetchStatus = async () => {
+      try {
+        const headers = await authHeaders();
+        const res = await fetch("/api/admin/force-full-sync/status", { headers });
+        if (!res.ok) return;
+        const data: SyncProgress = await res.json();
+        setSyncProgressData(data);
+        if (!data.running && syncProgressPollRef.current) {
+          clearInterval(syncProgressPollRef.current);
+          syncProgressPollRef.current = null;
+        }
+      } catch { /* ignore */ }
+    };
+    fetchStatus();
+    syncProgressPollRef.current = setInterval(fetchStatus, 1500);
+  };
+
   const startTipProgressPolling = async () => {
     const fetchStatus = async () => {
       try {
@@ -755,6 +782,7 @@ function ForceSyncSection() {
 
   const handleForceFullSync = async () => {
     setSyncResult(null);
+    setSyncProgressData(null);
     setLoadingFull(true);
     try {
       const headers = await authHeaders();
@@ -772,6 +800,7 @@ function ForceSyncSection() {
         return;
       }
       startPolling();
+      startSyncProgressPolling();
     } catch (err) {
       toast({ title: `Netværksfejl: ${err instanceof Error ? err.message : String(err)}`, variant: "destructive" });
       setLoadingFull(false);
@@ -913,40 +942,52 @@ function ForceSyncSection() {
             )}
           </div>
         )}
-        {syncError && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
-            <div className="text-[10px] font-mono text-muted-foreground uppercase mb-1">Sync fejl</div>
-            <p className="text-xs font-mono text-red-400">{syncError}</p>
-          </div>
-        )}
-
-        {syncResult && (
-          <div className="mt-3 bg-white/5 border border-white/10 rounded-lg p-4 font-mono text-xs space-y-1.5">
-            <div className="text-muted-foreground uppercase tracking-wider text-[10px] mb-2">Sync resultat</div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Fixtures i vindue</span>
-              <span className="text-white font-bold">{syncResult.fixtures}</span>
+        {/* Force Full Sync live progress */}
+        {syncProgressData && (
+          <div className="bg-white/3 border border-white/10 rounded-lg p-3 space-y-2 font-mono text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                {syncProgressData.running ? "Syncer..." : syncProgressData.error ? "Fejl" : "Færdig"}
+              </span>
+              {syncProgressData.running && <Activity className="w-3 h-3 text-primary animate-pulse" />}
+              {!syncProgressData.running && !syncProgressData.error && <CheckCircle2 className="w-3 h-3 text-teal-400" />}
+              {syncProgressData.error && <XCircle className="w-3 h-3 text-red-400" />}
             </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Odds hentet</span>
-              <span className={syncResult.oddsFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.oddsFetched}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Predictions hentet</span>
-              <span className={syncResult.predictionsFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.predictionsFetched}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">H2H holdepar hentet</span>
-              <span className={syncResult.h2hFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.h2hFetched}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Injuries hentet</span>
-              <span className={syncResult.injuriesFetched > 0 ? "text-teal-400 font-bold" : "text-muted-foreground"}>{syncResult.injuriesFetched}</span>
-            </div>
-            <div className="flex justify-between border-t border-white/10 pt-1.5 mt-1.5">
-              <span className="text-muted-foreground">AI tips i kø</span>
-              <span className={syncResult.tipsQueued > 0 ? "text-violet-400 font-bold" : "text-muted-foreground"}>{syncResult.tipsQueued} fixtures</span>
-            </div>
+            {/* Current step */}
+            {syncProgressData.running && syncProgressData.step && (
+              <div className="text-primary/80 truncate">→ {syncProgressData.step}</div>
+            )}
+            {/* Log lines */}
+            {syncProgressData.logs.length > 0 && (
+              <div className="space-y-0.5 max-h-32 overflow-y-auto">
+                {syncProgressData.logs.map((log, i) => (
+                  <div key={i} className={`truncate text-[10px] ${i === syncProgressData.logs.length - 1 && syncProgressData.running ? "text-white/70" : "text-muted-foreground/50"}`}>
+                    {log}
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Summary when done */}
+            {!syncProgressData.running && syncProgressData.result && (
+              <div className="border-t border-white/10 pt-2 space-y-1">
+                {[
+                  { label: "Fixtures", val: syncProgressData.result.fixtures },
+                  { label: "Odds hentet", val: syncProgressData.result.oddsFetched, color: "text-teal-400" },
+                  { label: "Predictions", val: syncProgressData.result.predictionsFetched, color: "text-teal-400" },
+                  { label: "H2H", val: syncProgressData.result.h2hFetched, color: "text-teal-400" },
+                  { label: "Injuries", val: syncProgressData.result.injuriesFetched, color: "text-teal-400" },
+                  { label: "Algoritme tips", val: syncProgressData.result.tipsQueued, color: "text-violet-400" },
+                ].map(({ label, val, color }) => (
+                  <div key={label} className="flex justify-between">
+                    <span className="text-muted-foreground">{label}</span>
+                    <span className={val > 0 ? (color ?? "text-white") : "text-muted-foreground"}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {syncProgressData.error && (
+              <div className="text-red-400">{syncProgressData.error}</div>
+            )}
           </div>
         )}
       </div>

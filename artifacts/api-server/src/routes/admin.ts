@@ -25,6 +25,15 @@ const router = Router();
 let syncRunning = false;
 let syncError: string | null = null;
 let syncResult: { fixtures: number; oddsFetched: number; predictionsFetched: number; h2hFetched: number; injuriesFetched: number; tipsQueued: number } | null = null;
+const syncProgress = {
+  running: false,
+  step: "",
+  logs: [] as string[],
+  startedAt: null as string | null,
+  finishedAt: null as string | null,
+  error: null as string | null,
+  result: null as typeof syncResult,
+};
 
 // ── Ping (no auth — for routing diagnostics) ──────────────────────────────────
 
@@ -195,20 +204,38 @@ router.post("/admin/force-full-sync", requireAdmin, async (_req, res) => {
   syncRunning = true;
   syncError = null;
   syncResult = null;
+  syncProgress.running = true;
+  syncProgress.step = "Starting...";
+  syncProgress.logs = [];
+  syncProgress.startedAt = new Date().toISOString();
+  syncProgress.finishedAt = null;
+  syncProgress.error = null;
+  syncProgress.result = null;
 
-  forceFullSync()
+  forceFullSync((msg) => {
+    syncProgress.step = msg;
+    syncProgress.logs.push(msg);
+  })
     .then((result) => {
       syncResult = result;
+      syncProgress.result = result;
     })
     .catch((err) => {
       console.error("[admin] force-full-sync error:", err);
       syncError = err instanceof Error ? err.message : "Unknown error";
+      syncProgress.error = syncError;
     })
     .finally(() => {
       syncRunning = false;
+      syncProgress.running = false;
+      syncProgress.finishedAt = new Date().toISOString();
     });
 
   return res.json({ ok: true, message: "Force sync started" });
+});
+
+router.get("/admin/force-full-sync/status", requireAdmin, (_req, res) => {
+  return res.json(syncProgress);
 });
 
 router.post("/admin/force-sync/:id", requireAdmin, async (req, res) => {

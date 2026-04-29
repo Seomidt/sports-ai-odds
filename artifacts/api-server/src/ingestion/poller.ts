@@ -2716,9 +2716,12 @@ export function startPoller() {
   setInterval(() => sweepStaleNsFixtures().catch(console.error), 10 * 60 * 1000);
 
   // Yesterday + day before (FT results): every 2 hours — finished games rarely change
+  syncRecentResults().catch(console.error); // also run on startup
   setInterval(() => syncRecentResults().catch(console.error), 2 * 60 * 60 * 1000);
 
   // Post-match review sweep: every 3 hours — now free (algo-only, no AI)
+  // Delayed 30s on startup so syncRecentResults has time to mark fixtures FT first
+  setTimeout(() => sweepMissedPostMatchReviews().catch(console.error), 30_000);
   setInterval(() => sweepMissedPostMatchReviews().catch(console.error), 3 * 60 * 60 * 1000);
 
   // Daily admin insight: one AI call/day analysing algorithm performance

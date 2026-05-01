@@ -229,7 +229,15 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
   const yr = yesterdayResults;
   const yrResolved = yr.wins + yr.losses + yr.pushes;
   const yrHitRate = yrResolved > 0 ? Math.round((yr.wins / yrResolved) * 100) : null;
-  const topPick = todayPicks[0];
+  const edgePpFor = (tip: TipSummary) => {
+    const implied = tip.impliedProbability ?? (tip.marketOdds && tip.marketOdds > 1 ? 1 / tip.marketOdds : null);
+    return tip.aiProbability != null && implied != null ? (tip.aiProbability - implied) * 100 : null;
+  };
+  const edgeRankFor = (tip: TipSummary) => edgePpFor(tip) ?? (tip.edge != null ? tip.edge * 100 : Number.NEGATIVE_INFINITY);
+  const topPick = todayPicks.reduce<TipSummary | null>((best, tip) => {
+    if (!best) return tip;
+    return edgeRankFor(tip) > edgeRankFor(best) ? tip : best;
+  }, null);
   const badge = streak.badge ? BADGE_CONFIG[streak.badge] : null;
 
   return (
@@ -267,8 +275,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                   <div className="text-xs text-muted-foreground/70 truncate">
                     Top: <span className="text-white/80">{topPick.recommendation}</span>
                     {(() => {
-                      const impl = topPick.impliedProbability ?? (topPick.marketOdds && topPick.marketOdds > 1 ? 1 / topPick.marketOdds : null);
-                      const pp = topPick.aiProbability != null && impl != null ? (topPick.aiProbability - impl) * 100 : null;
+                      const pp = edgePpFor(topPick);
                       return pp != null ? <span className="text-teal-400 font-mono ml-1">{pp >= 0 ? '+' : ''}{pp.toFixed(1)}pp</span> : null;
                     })()}
                     {topPick.marketOdds != null && topPick.aiProbability == null && (
@@ -303,8 +310,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {(() => {
-                        const impl = tip.impliedProbability ?? (tip.marketOdds && tip.marketOdds > 1 ? 1 / tip.marketOdds : null);
-                        const pp = tip.aiProbability != null && impl != null ? (tip.aiProbability - impl) * 100 : null;
+                        const pp = edgePpFor(tip);
                         if (pp != null) {
                           return (
                             <span className={`font-mono text-sm font-bold tabular-nums ${

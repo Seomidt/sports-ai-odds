@@ -440,6 +440,24 @@ export interface ApiPlayerFixtureStat {
   }>;
 }
 
+export interface ApiPredictionLast5 {
+  played: number;
+  form: string | null;
+  att: string | null;
+  def: string | null;
+  goals: { for: { total: number; average: string }; against: { total: number; average: string } };
+}
+
+export interface ApiPredictionComparison {
+  form:    { home: string; away: string };
+  att:     { home: string; away: string };
+  def:     { home: string; away: string };
+  poisson_distribution: { home: string; away: string };
+  h2h:     { home: string; away: string };
+  goals:   { home: string; away: string };
+  total:   { home: string; away: string };
+}
+
 export interface ApiPrediction {
   predictions: {
     winner: { id: number | null; name: string | null; comment: string | null } | null;
@@ -450,9 +468,28 @@ export interface ApiPrediction {
     percent: { home: string; draw: string; away: string };
   };
   teams: {
-    home: { id: number; name: string };
-    away: { id: number; name: string };
+    home: {
+      id: number;
+      name: string;
+      last_5: ApiPredictionLast5 | null;
+      statistics?: {
+        form: string | null;
+        fixtures: { played: { total: number }; wins: { total: number }; draws: { total: number }; loses: { total: number } };
+        goals: { for: { average: { total: string } }; against: { average: { total: string } } };
+      } | null;
+    };
+    away: {
+      id: number;
+      name: string;
+      last_5: ApiPredictionLast5 | null;
+      statistics?: {
+        form: string | null;
+        fixtures: { played: { total: number }; wins: { total: number }; draws: { total: number }; loses: { total: number } };
+        goals: { for: { average: { total: string } }; against: { average: { total: string } } };
+      } | null;
+    };
   };
+  comparison: ApiPredictionComparison | null;
 }
 
 export interface ApiLiveOdds {

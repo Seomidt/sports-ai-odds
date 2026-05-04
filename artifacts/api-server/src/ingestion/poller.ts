@@ -542,38 +542,97 @@ async function syncPredictionForFixture(fixtureId: number) {
   if (!pred) return;
 
   const p = pred.predictions;
-  const parsePercent = (s: string | undefined) => {
+
+  const parsePercent = (s: string | undefined | null) => {
     if (s == null || s === "") return null;
     const n = parseFloat(s.replace("%", ""));
     return isNaN(n) ? null : n;
   };
 
+  // Guard: only store positive goal values — negative means API-Football
+  // returned an under_over threshold instead of actual predicted goals.
+  const parseGoals = (s: string | null | undefined): number | null => {
+    if (s == null || s === "") return null;
+    const n = parseFloat(s);
+    return isFinite(n) && n > 0 ? n : null;
+  };
+
+  const record = {
+    fixtureId,
+    homeWinPercent:  parsePercent(p.percent.home),
+    drawPercent:     parsePercent(p.percent.draw),
+    awayWinPercent:  parsePercent(p.percent.away),
+    goalsHome:       parseGoals(p.goals.home),
+    goalsAway:       parseGoals(p.goals.away),
+    underOver:       p.under_over ?? null,
+    winOrDraw:       p.win_or_draw ?? null,
+    adviceText:      p.advice ?? null,
+    winner:          p.winner?.name ?? null,
+    winnerComment:   p.winner?.comment ?? null,
+    comparison:      pred.comparison ?? null,
+    last5Home:       pred.teams.home.last_5 ?? null,
+    last5Away:       pred.teams.away.last_5 ?? null,
+    updatedAt:       new Date(),
+  };
+
   await db
     .insert(predictions)
-    .values({
-      fixtureId,
-      homeWinPercent: parsePercent(p.percent.home),
-      drawPercent: parsePercent(p.percent.draw),
-      awayWinPercent: parsePercent(p.percent.away),
-      goalsHome: p.goals.home ? parseFloat(p.goals.home) : null,
-      goalsAway: p.goals.away ? parseFloat(p.goals.away) : null,
-      adviceText: p.advice,
-      winner: p.winner?.name ?? null,
-      updatedAt: new Date(),
-    })
+    .values(record)
     .onConflictDoUpdate({
       target: predictions.fixtureId,
-      set: {
-        homeWinPercent: parsePercent(p.percent.home),
-        drawPercent: parsePercent(p.percent.draw),
-        awayWinPercent: parsePercent(p.percent.away),
-        goalsHome: p.goals.home ? parseFloat(p.goals.home) : null,
-        goalsAway: p.goals.away ? parseFloat(p.goals.away) : null,
-        adviceText: p.advice,
-        winner: p.winner?.name ?? null,
-        updatedAt: new Date(),
-      },
+      set: record,
     });
+}
+
+/**
+ * Fetch/refresh API-Football predictions for ALL upcoming fixtures in the next 14 days.
+ * Refreshes any prediction older than 24 hours. Safe to call on a schedule.
+ */
+export async function syncAllUpcomingPredictions(): Promise<void> {
+  const now = new Date();
+  const in14d = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const staleAfter = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+  // Ensure we have fixture lists for 14 days ahead
+  for (let i = 0; i < 14; i++) {
+    await syncFixturesForDate(getDateOffset(i)).catch(console.error);
+  }
+
+  const upcoming = await db.query.fixtures.findMany({
+    where: (f, { and: andFn, gte: gteFn, lte, inArray: inArr }) =>
+      andFn(gteFn(f.kickoff, now), lte(f.kickoff, in14d), inArr(f.statusShort, ["NS", "TBD"])),
+  });
+
+  if (upcoming.length === 0) {
+    console.log("[predictions-sync] No upcoming fixtures found");
+    return;
+  }
+
+  const allIds = upcoming.map((f) => f.fixtureId);
+
+  // Find predictions that are missing or stale (>24h old)
+  const existingPreds = await db
+    .select({ fixtureId: predictions.fixtureId, updatedAt: predictions.updatedAt })
+    .from(predictions)
+    .where(inArray(predictions.fixtureId, allIds));
+
+  const predMap = new Map(existingPreds.map((p) => [p.fixtureId, p.updatedAt]));
+  const toFetch = upcoming.filter((f) => {
+    const lu = predMap.get(f.fixtureId);
+    return !lu || lu < staleAfter;
+  });
+
+  console.log(`[predictions-sync] ${upcoming.length} upcoming — ${toFetch.length} need refresh (${existingPreds.length - toFetch.length + (upcoming.length - existingPreds.length)} fresh)`);
+
+  let done = 0;
+  for (const fix of toFetch) {
+    await syncPredictionForFixture(fix.fixtureId).catch(console.error);
+    done++;
+    if (done % 20 === 0) console.log(`[predictions-sync] ${done}/${toFetch.length} done`);
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  console.log(`[predictions-sync] Done — refreshed ${done} predictions`);
 }
 
 async function syncPlayerStatsForFixture(fixtureId: number) {
@@ -2396,7 +2455,7 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   fullSyncProgress.running = true;
   fullSyncProgress.step = "Syncer kamplister...";
   fullSyncProgress.stepDone = 0;
-  fullSyncProgress.stepTotal = 7;
+  fullSyncProgress.stepTotal = 14;
   fullSyncProgress.totalFixtures = 0;
   fullSyncProgress.startedAt = new Date().toISOString();
   fullSyncProgress.finishedAt = null;
@@ -2404,20 +2463,20 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   fullSyncProgress.result = null;
 
   const now = new Date();
-  const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const in14d = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
-  // ── 1. Sync fixture lists for next 7 days (upsert — safe to always run) ──
-  for (let i = 0; i < 7; i++) {
+  // ── 1. Sync fixture lists for next 14 days (upsert — safe to always run) ──
+  for (let i = 0; i < 14; i++) {
     const date = getDateOffset(i);
-    fullSyncProgress.step = `Syncer kampliste dag ${i + 1}/7...`;
+    fullSyncProgress.step = `Syncer kampliste dag ${i + 1}/14...`;
     fullSyncProgress.stepDone = i + 1;
     await syncFixturesForDate(date).catch(console.error);
   }
 
-  // ── 2. Get all upcoming NS/TBD fixtures in 7-day window ──────────────────
+  // ── 2. Get all upcoming NS/TBD fixtures in 14-day window ─────────────────
   const upcoming = await db.query.fixtures.findMany({
     where: (f, { and: andFn, gte: gteFn, lte, inArray: inArr }) =>
-      andFn(gteFn(f.kickoff, now), lte(f.kickoff, in7d), inArr(f.statusShort, ["NS", "TBD"])),
+      andFn(gteFn(f.kickoff, now), lte(f.kickoff, in14d), inArr(f.statusShort, ["NS", "TBD"])),
   });
   fullSyncProgress.totalFixtures = upcoming.length;
   log(`Fandt ${upcoming.length} kommende kampe`);
@@ -2486,26 +2545,20 @@ export async function forceFullSync(onProgress?: (msg: string) => void): Promise
   }
   log(`Odds færdig — ${missingOdds.length} hentet`);
 
-  // ── 4. Predictions: only fetch for fixtures that have NO prediction ────────
-  const withPredictions = new Set(
-    (await db.select({ fixtureId: predictions.fixtureId })
-      .from(predictions)
-      .where(inArray(predictions.fixtureId, allIds))
-    ).map((r) => r.fixtureId)
-  );
-  const missingPredictions = upcoming.filter((f) => !withPredictions.has(f.fixtureId));
-  result.predictionsFetched = missingPredictions.length;
+  // ── 4. Predictions: refresh ALL — Force Sync always re-fetches everything ──
+  // API-Football updates predictions as new data arrives, so always overwrite.
+  result.predictionsFetched = upcoming.length;
   fullSyncProgress.stepDone = 0;
-  fullSyncProgress.stepTotal = missingPredictions.length;
-  log(`Predictions: ${withPredictions.size} OK — henter ${missingPredictions.length} manglende`);
+  fullSyncProgress.stepTotal = upcoming.length;
+  log(`Predictions: henter alle ${upcoming.length} kampe (14-dages vindue)`);
 
-  for (const fix of missingPredictions) {
+  for (const fix of upcoming) {
     fullSyncProgress.stepDone++;
-    fullSyncProgress.step = `Prediction ${fullSyncProgress.stepDone}/${missingPredictions.length}: ${fix.homeTeamName} vs ${fix.awayTeamName}`;
+    fullSyncProgress.step = `Prediction ${fullSyncProgress.stepDone}/${upcoming.length}: ${fix.homeTeamName} vs ${fix.awayTeamName}`;
     await syncPredictionForFixture(fix.fixtureId).catch(console.error);
     await new Promise((r) => setTimeout(r, 100));
   }
-  log(`Predictions færdig — ${missingPredictions.length} hentet`);
+  log(`Predictions færdig — ${upcoming.length} hentet`);
 
   // ── 5. H2H: fixtures + per-match stats (shots, corners, xG, possession) ──────
   const missingH2H = upcoming.filter((f) => f.homeTeamId && f.awayTeamId);
@@ -2775,6 +2828,8 @@ export function startPoller() {
   setTimeout(() => syncWeatherForUpcomingFixtures().catch(console.error), 13 * 60 * 1000);
   // Second AI tips pass: runs after week-ahead odds sweep has fresh data
   setTimeout(() => bulkGenerateAiTips(200).catch(console.error), 14 * 60 * 1000);
+  // Predictions for all 14 days ahead: runs 18 min after boot (after fixtures are loaded)
+  setTimeout(() => syncAllUpcomingPredictions().catch(console.error), 18 * 60 * 1000);
   // Historical weather backfill: starts 15 min after boot
   setTimeout(() => backfillHistoricalWeather().catch(console.error), 15 * 60 * 1000);
   // Signal computation for all upcoming fixtures — runs in parallel with AI tips, not blocking them
@@ -2831,6 +2886,9 @@ export function startPoller() {
 
   // Week-ahead odds sweep: every 12 hours (fills odds for fixtures 2-7 days out)
   setInterval(() => syncOddsForUpcomingWeek().catch(console.error), 12 * 60 * 60 * 1000);
+
+  // Predictions refresh: every 12 hours — keeps all 14-day predictions fresh
+  setInterval(() => syncAllUpcomingPredictions().catch(console.error), 12 * 60 * 60 * 1000);
 
   // AI tips are now driven by fixed-time crons (06:00, 12:00, 18:00 UTC)
   // scheduled via scheduleAiTipsAtHour() below — no interval needed here.

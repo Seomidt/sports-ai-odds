@@ -202,13 +202,28 @@ export const predictions = pgTable(
   {
     id: serial("id").primaryKey(),
     fixtureId: integer("fixture_id").notNull(),
+    // Win probabilities from API-Football percent block
     homeWinPercent: real("home_win_percent"),
     drawPercent: real("draw_percent"),
     awayWinPercent: real("away_win_percent"),
+    // Predicted goals (positive decimals, e.g. 1.2 / 0.8)
     goalsHome: real("goals_home"),
     goalsAway: real("goals_away"),
+    // Under/over prediction with sign: "-2.5" = under, "+2.5" = over
+    underOver: text("under_over"),
+    // Boolean: home team predicted to win OR draw
+    winOrDraw: boolean("win_or_draw"),
+    // Natural language advice text
     adviceText: text("advice_text"),
+    // Predicted winner name + explanation comment
     winner: text("winner"),
+    winnerComment: text("winner_comment"),
+    // 7-metric comparison block (form, att, def, poisson, h2h, goals, total)
+    // Stored as { home: "55%", away: "45%" } per metric
+    comparison: jsonb("comparison"),
+    // Last 5 games snapshot per team (attack, defence, form %, goals)
+    last5Home: jsonb("last5_home"),
+    last5Away: jsonb("last5_away"),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (t) => [unique("predictions_fixture_unique").on(t.fixtureId)]

@@ -517,12 +517,21 @@ router.get("/fixtures/:id/intel", async (req: Request, res: Response) => {
 
       const pred = predRows[0] ?? null;
       return {
-        // All prediction fields (both naming conventions for different UI components)
+        // Full API-Football prediction fields
         prediction: pred ? {
-          homeWinPercent: pred.homeWinPercent, drawPercent: pred.drawPercent, awayWinPercent: pred.awayWinPercent,
-          homeWinPct: pred.homeWinPercent, drawPct: pred.drawPercent, awayWinPct: pred.awayWinPercent,
-          goalsHome: pred.goalsHome, goalsAway: pred.goalsAway,
-          adviceText: pred.adviceText, advice: pred.adviceText, winner: pred.winner,
+          homeWinPct: pred.homeWinPercent,
+          drawPct: pred.drawPercent,
+          awayWinPct: pred.awayWinPercent,
+          goalsHome: pred.goalsHome,
+          goalsAway: pred.goalsAway,
+          underOver: (pred as Record<string, unknown>).underOver ?? null,
+          winOrDraw: (pred as Record<string, unknown>).winOrDraw ?? null,
+          advice: pred.adviceText,
+          winner: pred.winner,
+          winnerComment: (pred as Record<string, unknown>).winnerComment ?? null,
+          comparison: (pred as Record<string, unknown>).comparison ?? null,
+          last5Home: (pred as Record<string, unknown>).last5Home ?? null,
+          last5Away: (pred as Record<string, unknown>).last5Away ?? null,
         } : null,
         homeCoach: homeCoachRows[0] ?? null,
         awayCoach: awayCoachRows[0] ?? null,

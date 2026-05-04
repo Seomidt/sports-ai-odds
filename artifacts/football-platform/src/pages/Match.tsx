@@ -375,17 +375,31 @@ function oddsFromSnap(snap: { homeWin?: number | null; draw?: number | null; awa
   return null;
 }
 
-function TipCard({ tip, betTypeLabel, bookmaker, snap, pred }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null; snap?: { homeWin?: number | null; draw?: number | null; awayWin?: number | null; btts?: number | null; overUnder25?: number | null; handicapHome?: number | null } | null; pred?: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null } | null }) {
+// Trust score badge (shared between TipCard and other places in Match.tsx)
+function TrustBadge({ score }: { score: number | null }) {
+  if (score == null) return null;
+  const clamped = Math.max(1, Math.min(9, Math.round(score)));
+  const color = clamped >= 8 ? 'text-teal-300 border-teal-400/40 bg-teal-400/10'
+    : clamped >= 6 ? 'text-violet-300 border-violet-400/30 bg-violet-400/10'
+    : 'text-amber-400 border-amber-400/30 bg-amber-400/10';
+  return (
+    <div
+      className={`flex items-center gap-1 px-2.5 py-1 rounded border text-sm font-mono font-bold ${color}`}
+      title="Trust score: 1–9 — baseret på sandsynlighedsstyrke, datakvalitet og odds-stabilitet"
+    >
+      <span className="tabular-nums">{clamped}</span>
+      <span className="opacity-40 text-xs">/9</span>
+    </div>
+  );
+}
+
+function TipCard({ tip, betTypeLabel, bookmaker, snap }: { tip: BettingTip; betTypeLabel: string; bookmaker?: string | null; snap?: { homeWin?: number | null; draw?: number | null; awayWin?: number | null; btts?: number | null; overUnder25?: number | null; handicapHome?: number | null } | null }) {
   const isValue = tip.valueRating === 'value' || tip.valueRating === 'strong_value';
   const borderColor = isValue ? 'border-teal-400/30' : 'border-white/10';
-  const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
   const resolvedMarketOdds = tip.marketOdds ?? oddsFromSnap(snap, tip.betType, tip.betSide);
   const impliedFromOdds = resolvedMarketOdds != null && resolvedMarketOdds > 1 ? 1 / resolvedMarketOdds : null;
   const impliedProb = tip.impliedProbability ?? impliedFromOdds;
   const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
-  const edgePp = tip.aiProbability != null && impliedProb != null
-    ? (tip.aiProbability - impliedProb) * 100
-    : null;
 
   return (
     <div className={`glass-card p-5 rounded-xl border ${borderColor} space-y-4`}>
@@ -396,7 +410,6 @@ function TipCard({ tip, betTypeLabel, bookmaker, snap, pred }: { tip: BettingTip
               {betTypeLabel}
             </span>
             <ValueBadge rating={tip.valueRating} />
-            <ConfidenceBadgeLarge confidence={tip.confidence} />
           </div>
           <div className="text-xl font-bold text-white leading-tight">
             {tip.recommendation}
@@ -412,51 +425,14 @@ function TipCard({ tip, betTypeLabel, bookmaker, snap, pred }: { tip: BettingTip
               )}
             </div>
           )}
-          {(aiPct != null || implPct != null) && (
-            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground pt-1">
-              {aiPct != null && (
-                <span>Algo <span className="text-white/85 tabular-nums font-bold">{aiPct}%</span></span>
-              )}
-              {pred != null && tip.betType === 'match_result' && (() => {
-                const apiFbPct = tip.betSide === 'home' ? pred.homeWinPct
-                  : tip.betSide === 'draw' ? pred.drawPct
-                  : tip.betSide === 'away' ? pred.awayWinPct
-                  : null;
-                return apiFbPct != null ? (
-                  <span className="border-l border-white/10 pl-3">API-FB <span className="text-violet-300 tabular-nums font-bold">{apiFbPct}%</span></span>
-                ) : null;
-              })()}
-              {implPct != null && (
-                <span className="border-l border-white/10 pl-3">Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span></span>
-              )}
+          {implPct != null && (
+            <div className="text-[11px] font-mono text-muted-foreground pt-1">
+              Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span>
             </div>
           )}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1.5">
-          {edgePp != null ? (
-            <div
-              className={`px-2.5 py-1 rounded text-sm font-mono font-bold tabular-nums border ${
-                edgePp >= 15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
-                edgePp >= 5 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
-                edgePp >= -5 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
-                'text-amber-400 bg-amber-400/10 border-amber-400/20'
-              }`}
-              title="Edge in percentage points (AI probability − market implied probability)"
-            >
-              {edgePp >= 0 ? '+' : ''}{edgePp.toFixed(1)}pp
-            </div>
-          ) : (
-            <div className="text-[10px] font-mono text-muted-foreground/50 italic">no odds</div>
-          )}
-          <HelpTooltip side="left" iconClassName="w-3 h-3">
-            <p className="font-bold text-white mb-1">Edge (percentage points)</p>
-            <p className="text-muted-foreground/80 mb-1">edge = AI prob − market implied prob</p>
-            {aiPct != null && implPct != null && (
-              <p className="text-teal-400 font-mono text-xs mb-1">{aiPct}% − {implPct}% = {edgePp != null ? (edgePp >= 0 ? '+' : '') + edgePp.toFixed(1) + 'pp' : '—'}</p>
-            )}
-            <p className="text-muted-foreground/80">≥5pp = value · ≥15pp = strong value</p>
-            <p className="text-muted-foreground/80 mt-1">Confidence score uses data completeness, odds stability, and league track record.</p>
-          </HelpTooltip>
+          <TrustBadge score={tip.trustScore} />
         </div>
       </div>
 
@@ -474,8 +450,39 @@ interface PrematchSynthesis {
   generatedAt: string;
 }
 
+interface PredComparison {
+  form:    { home: string; away: string };
+  att:     { home: string; away: string };
+  def:     { home: string; away: string };
+  poisson_distribution: { home: string; away: string };
+  h2h:     { home: string; away: string };
+  goals:   { home: string; away: string };
+  total:   { home: string; away: string };
+}
+interface PredLast5 {
+  played: number;
+  form: string | null;
+  att: string | null;
+  def: string | null;
+  goals: { for: { total: number; average: string }; against: { total: number; average: string } };
+}
+interface IntelPrediction {
+  homeWinPct: number | null;
+  drawPct: number | null;
+  awayWinPct: number | null;
+  goalsHome: number | null;
+  goalsAway: number | null;
+  underOver: string | null;
+  winOrDraw: boolean | null;
+  advice: string | null;
+  winner: string | null;
+  winnerComment: string | null;
+  comparison: PredComparison | null;
+  last5Home: PredLast5 | null;
+  last5Away: PredLast5 | null;
+}
 interface IntelData {
-  prediction: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null; goalsHome: number | null; goalsAway: number | null; advice: string | null } | null;
+  prediction: IntelPrediction | null;
   homeCoach: { name: string | null } | null;
   awayCoach: { name: string | null } | null;
   homeSidelined: Array<{ playerName: string | null; reason: string | null }>;
@@ -602,61 +609,146 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
             </div>
           ) : null)}
 
-          {/* ── Intel Panel: prediction bars + injuries + top scorer — always shown when data exists ── */}
-          {(pred || homeSidelined.length > 0 || awaySidelined.length > 0 || homeTopScorer || awayTopScorer) && (
-            <div className="glass-card rounded-xl overflow-hidden">
+          {/* ── API-Football Prediction Panel ── */}
+          {pred && (
+            <div className="glass-card rounded-xl overflow-hidden border border-violet-400/15">
               <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
-                <BarChart3 className="w-3.5 h-3.5 text-teal-400/70" />
-                <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Match Context</span>
+                <Zap className="w-3.5 h-3.5 text-violet-400/70" />
+                <span className="text-xs font-mono text-violet-400/80 uppercase tracking-widest">API-Football Prediction</span>
               </div>
-              <div className="p-4 space-y-3">
-                {/* Win probability */}
-                {pred && (pred.homeWinPct != null || pred.drawPct != null || pred.awayWinPct != null) && (
+              <div className="p-4 space-y-4">
+
+                {/* Advice headline */}
+                {pred.advice && (
+                  <div className="space-y-0.5">
+                    <div className="text-base font-bold text-white">{pred.advice}</div>
+                    {pred.winnerComment && pred.winnerComment !== pred.advice && (
+                      <div className="text-xs font-mono text-muted-foreground/60">{pred.winnerComment}</div>
+                    )}
+                  </div>
+                )}
+
+                {/* Win probability bar */}
+                {(pred.homeWinPct != null || pred.drawPct != null || pred.awayWinPct != null) && (
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 uppercase tracking-wider">
                       <span>{homeTeam}</span>
                       <span>Draw</span>
                       <span>{awayTeam}</span>
                     </div>
-                    <div className="flex items-center h-6 rounded overflow-hidden w-full">
+                    <div className="flex items-center h-7 rounded overflow-hidden w-full">
                       {(pred.homeWinPct ?? 0) > 0 && (
-                        <div className="h-full flex items-center justify-center bg-teal-400/20 border-r border-teal-400/30 min-w-[2rem]" style={{ flex: pred.homeWinPct ?? 0 }}>
+                        <div className="h-full flex items-center justify-center bg-teal-400/20 border-r border-teal-400/30 min-w-[2.5rem]" style={{ flex: pred.homeWinPct ?? 0 }}>
                           <span className="text-xs font-mono font-bold text-teal-300 px-1">{pred.homeWinPct}%</span>
                         </div>
                       )}
                       {(pred.drawPct ?? 0) > 0 && (
-                        <div className="h-full flex items-center justify-center border-r border-amber-400/40 min-w-[2rem]" style={{ flex: pred.drawPct ?? 0, backgroundColor: "rgba(251,191,36,0.28)" }}>
+                        <div className="h-full flex items-center justify-center border-r border-amber-400/40 min-w-[2.5rem]" style={{ flex: pred.drawPct ?? 0, backgroundColor: "rgba(251,191,36,0.28)" }}>
                           <span className="text-xs font-mono font-bold text-amber-300 px-1">{pred.drawPct}%</span>
                         </div>
                       )}
                       {(pred.awayWinPct ?? 0) > 0 && (
-                        <div className="h-full flex items-center justify-center bg-violet-400/20 min-w-[2rem]" style={{ flex: pred.awayWinPct ?? 0 }}>
+                        <div className="h-full flex items-center justify-center bg-violet-400/20 min-w-[2.5rem]" style={{ flex: pred.awayWinPct ?? 0 }}>
                           <span className="text-xs font-mono font-bold text-violet-300 px-1">{pred.awayWinPct}%</span>
                         </div>
                       )}
-                      {(pred.homeWinPct ?? 0) === 0 && (pred.drawPct ?? 0) === 0 && (pred.awayWinPct ?? 0) === 0 && (
-                        <div className="h-full flex-1 flex items-center justify-center bg-white/5">
-                          <span className="text-xs font-mono text-muted-foreground/40">No prediction data</span>
-                        </div>
+                    </div>
+                    {/* Extra info row */}
+                    <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground/50 flex-wrap">
+                      {pred.goalsHome != null && pred.goalsAway != null && (
+                        <span>Predicted score: {pred.goalsHome.toFixed(1)}–{pred.goalsAway.toFixed(1)}</span>
+                      )}
+                      {pred.underOver != null && (
+                        <span className="border-l border-white/10 pl-3">
+                          {pred.underOver.startsWith('-') ? `Under ${pred.underOver.replace('-', '')}` : `Over ${pred.underOver.replace('+', '')}`} goals
+                        </span>
+                      )}
+                      {pred.winOrDraw != null && (
+                        <span className="border-l border-white/10 pl-3">{pred.winOrDraw ? `${homeTeam} Win or Draw` : `${awayTeam} or Draw`}</span>
                       )}
                     </div>
-                    {(pred.goalsHome != null || pred.goalsAway != null) && (
-                      <div className="text-center text-xs font-mono text-muted-foreground/50">
-                        Predicted {pred.goalsHome ?? '?'}–{pred.goalsAway ?? '?'}
-                      </div>
-                    )}
-                    {pred.advice != null && (
-                      <div className="flex items-center gap-2 pt-1">
-                        <span className="text-[9px] font-mono text-violet-400/60 uppercase tracking-wider shrink-0">API-Football</span>
-                        <span className="text-xs font-mono text-violet-300 font-semibold">{pred.advice}</span>
-                      </div>
-                    )}
                   </div>
                 )}
 
-                {/* Top scorers from each team */}
+                {/* Comparison metrics */}
+                {pred.comparison && (
+                  <div className="space-y-1.5">
+                    <div className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest">Team Comparison</div>
+                    {([
+                      { key: 'total',   label: 'Overall' },
+                      { key: 'form',    label: 'Form' },
+                      { key: 'att',     label: 'Attack' },
+                      { key: 'def',     label: 'Defence' },
+                      { key: 'poisson_distribution', label: 'Poisson' },
+                      { key: 'h2h',     label: 'H2H' },
+                    ] as const).map(({ key, label }) => {
+                      const metric = pred.comparison?.[key as keyof PredComparison];
+                      if (!metric) return null;
+                      const hVal = parseFloat(metric.home);
+                      const aVal = parseFloat(metric.away);
+                      if (isNaN(hVal) || isNaN(aVal)) return null;
+                      return (
+                        <div key={key} className="flex items-center gap-2">
+                          <span className="text-[9px] font-mono text-muted-foreground/40 w-14 shrink-0 text-right">{label}</span>
+                          <div className="flex-1 flex items-center h-3.5 rounded overflow-hidden">
+                            <div className="h-full bg-teal-400/25 border-r border-teal-400/20" style={{ width: `${hVal}%` }} />
+                            <div className="h-full bg-violet-400/25" style={{ width: `${aVal}%` }} />
+                          </div>
+                          <div className="flex items-center gap-1 text-[9px] font-mono shrink-0">
+                            <span className="text-teal-300 tabular-nums w-8 text-right">{Math.round(hVal)}%</span>
+                            <span className="text-muted-foreground/20">·</span>
+                            <span className="text-violet-300 tabular-nums w-8">{Math.round(aVal)}%</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Last 5 */}
+                {(pred.last5Home || pred.last5Away) && (
+                  <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { label: homeTeam, data: pred.last5Home, color: 'teal' },
+                      { label: awayTeam, data: pred.last5Away, color: 'violet' },
+                    ].map(({ label, data, color }) => data ? (
+                      <div key={label} className="bg-white/3 rounded-lg p-2.5 space-y-1">
+                        <div className={`text-[9px] font-mono text-${color}-400/60 uppercase tracking-wider truncate`}>{label} — Last 5</div>
+                        {data.form && (
+                          <div className="flex gap-0.5">
+                            {data.form.split('').slice(0, 5).map((r, i) => (
+                              <span key={i} className={`text-[10px] font-mono font-bold px-1 py-0.5 rounded ${r === 'W' ? 'bg-teal-400/20 text-teal-300' : r === 'D' ? 'bg-amber-400/20 text-amber-300' : 'bg-red-400/20 text-red-400'}`}>{r}</span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="text-[10px] font-mono text-white/50">
+                          {data.goals.for.total} scored · {data.goals.against.total} conceded
+                        </div>
+                        {data.att && data.def && (
+                          <div className="text-[9px] font-mono text-muted-foreground/40">
+                            Att {data.att} · Def {data.def}
+                          </div>
+                        )}
+                      </div>
+                    ) : null)}
+                  </div>
+                )}
+
+              </div>
+            </div>
+          )}
+
+          {/* ── Injuries + Top Scorers Panel ── */}
+          {(homeSidelined.length > 0 || awaySidelined.length > 0 || homeTopScorer || awayTopScorer) && (
+            <div className="glass-card rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5 text-teal-400/70" />
+                <span className="text-xs font-mono text-muted-foreground uppercase tracking-widest">Squad Info</span>
+              </div>
+              <div className="p-4 space-y-3">
+                {/* Top scorers */}
                 {(homeTopScorer || awayTopScorer) && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="grid grid-cols-2 gap-2">
                     {homeTopScorer && (
                       <div className="bg-white/3 rounded-lg p-2.5 space-y-0.5">
                         <div className="text-[9px] font-mono text-teal-400/60 uppercase tracking-wider truncate">{homeTeam} — Top Scorer</div>
@@ -679,7 +771,6 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                     )}
                   </div>
                 )}
-
                 {/* Injuries */}
                 {(homeSidelined.length > 0 || awaySidelined.length > 0) && (
                   <div className="grid grid-cols-2 gap-2 pt-1">
@@ -711,49 +802,15 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
           {tips.length > 0 ? (
             <>
               {tips.map((tip) => (
-                <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} pred={pred} />
+                <TipCard key={tip.id} tip={tip} betTypeLabel={betTypeLabelFn(tip.betType)} bookmaker={bookmaker} snap={oddsData?.odds} />
               ))}
               <div className="text-[10px] font-mono text-muted-foreground/40 text-center">
                 Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
               </div>
             </>
           ) : (
-            /* No algorithm picks — show API-Football tip if available, else bullets */
-            pred && (pred.homeWinPct != null || pred.drawPct != null || pred.awayWinPct != null) ? (
-              <div className="glass-card rounded-xl border border-violet-400/15 overflow-hidden">
-                <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
-                  <Zap className="w-3.5 h-3.5 text-violet-400/70" />
-                  <span className="text-xs font-mono text-violet-400/80 uppercase tracking-widest">API-Football Prediction</span>
-                  <span className="text-[9px] font-mono text-muted-foreground/30 ml-auto">No algorithm pick for this fixture</span>
-                </div>
-                <div className="p-5 space-y-3">
-                  {pred.advice && (
-                    <div className="text-lg font-bold text-white">{pred.advice}</div>
-                  )}
-                  <div className="flex gap-4 text-sm font-mono">
-                    {pred.homeWinPct != null && (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-teal-300 font-bold tabular-nums text-base">{pred.homeWinPct}%</span>
-                        <span className="text-muted-foreground/50 text-[10px] uppercase tracking-wider">{homeTeam}</span>
-                      </div>
-                    )}
-                    {pred.drawPct != null && (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-amber-300 font-bold tabular-nums text-base">{pred.drawPct}%</span>
-                        <span className="text-muted-foreground/50 text-[10px] uppercase tracking-wider">Draw</span>
-                      </div>
-                    )}
-                    {pred.awayWinPct != null && (
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span className="text-violet-300 font-bold tabular-nums text-base">{pred.awayWinPct}%</span>
-                        <span className="text-muted-foreground/50 text-[10px] uppercase tracking-wider">{awayTeam}</span>
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-[10px] font-mono text-muted-foreground/35">Probabilites from API-Football · Algorithm signal gates not met for this fixture</p>
-                </div>
-              </div>
-            ) : !pred && homeSidelined.length === 0 && awaySidelined.length === 0 && !homeTopScorer && !awayTopScorer ? (
+            /* No algorithm picks — show placeholder */
+            !pred && homeSidelined.length === 0 && awaySidelined.length === 0 && !homeTopScorer && !awayTopScorer ? (
               <div className="glass-card p-6 rounded-xl border border-white/5 space-y-2.5">
                 {[
                   { label: "Odds data", desc: "Market prices from tracked bookmakers" },
@@ -1631,7 +1688,7 @@ function H2HTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: {
 // ─── Intel Tab ────────────────────────────────────────────────────────────────
 
 interface IntelData {
-  prediction: { homeWinPercent: number | null; drawPercent: number | null; awayWinPercent: number | null; goalsHome: number | null; goalsAway: number | null; adviceText: string | null; winner: string | null } | null;
+  prediction: IntelPrediction | null;
   homeCoach: { name: string | null; nationality: string | null; age: number | null } | null;
   awayCoach: { name: string | null; nationality: string | null; age: number | null } | null;
   homeSidelined: Array<{ playerName: string | null; type: string | null; startDate: string | null; endDate: string | null }>;
@@ -1700,32 +1757,97 @@ function IntelTab({ fixtureId, homeTeamId: _homeTeamId, awayTeamId: _awayTeamId,
   return (
     <div className="space-y-4">
       {data?.prediction && (
-        <div className="glass-card p-5 rounded-xl space-y-4">
-          <div className="text-xs font-mono text-muted-foreground uppercase tracking-widest flex items-center gap-2">
-            <Target className="w-3.5 h-3.5 text-violet-400" />
-            Algorithm Forecast
+        <div className="glass-card rounded-xl overflow-hidden border border-violet-400/15">
+          <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
+            <Zap className="w-3.5 h-3.5 text-violet-400/70" />
+            <span className="text-xs font-mono text-violet-400/80 uppercase tracking-widest">API-Football Prediction</span>
           </div>
-          <div className="space-y-3">
-            <PredictionBar label={`${homeTeam} Win`} pct={data.prediction.homeWinPercent} color="text-teal-400" />
-            <PredictionBar label="Draw" pct={data.prediction.drawPercent} color="text-violet-400" />
-            <PredictionBar label={`${awayTeam} Win`} pct={data.prediction.awayWinPercent} color="text-amber-400" />
-          </div>
-          {(data.prediction.goalsHome != null || data.prediction.goalsAway != null) && (
-            <div className="flex items-center justify-center gap-4 pt-2 border-t border-white/5">
-              <div className="text-center">
-                <div className="text-xs font-mono text-muted-foreground">Predicted Score</div>
-                <div className="font-mono text-lg font-bold text-white tabular-nums mt-0.5">
-                  {data.prediction.goalsHome?.toFixed(1) ?? '?'} – {data.prediction.goalsAway?.toFixed(1) ?? '?'}
-                </div>
+          <div className="p-5 space-y-4">
+            {data.prediction.advice && (
+              <div className="space-y-0.5">
+                <div className="text-base font-bold text-white">{data.prediction.advice}</div>
+                {data.prediction.winnerComment && data.prediction.winnerComment !== data.prediction.advice && (
+                  <div className="text-xs font-mono text-muted-foreground/60">{data.prediction.winnerComment}</div>
+                )}
               </div>
+            )}
+            {/* Win probability bars */}
+            <div className="space-y-2">
+              <PredictionBar label={`${homeTeam} Win`} pct={data.prediction.homeWinPct} color="text-teal-400" />
+              <PredictionBar label="Draw" pct={data.prediction.drawPct} color="text-amber-400" />
+              <PredictionBar label={`${awayTeam} Win`} pct={data.prediction.awayWinPct} color="text-violet-400" />
             </div>
-          )}
-          {data.prediction.adviceText && (
-            <div className="border-t border-white/5 pt-3">
-              <div className="text-xs font-mono text-muted-foreground uppercase mb-1">Recommendation</div>
-              <p className="text-sm text-white/80 font-mono">{data.prediction.adviceText}</p>
+            {/* Extra prediction details */}
+            <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground/50 flex-wrap border-t border-white/5 pt-3">
+              {data.prediction.goalsHome != null && data.prediction.goalsAway != null && (
+                <span>Predicted score: {data.prediction.goalsHome.toFixed(1)}–{data.prediction.goalsAway.toFixed(1)}</span>
+              )}
+              {data.prediction.underOver != null && (
+                <span className="border-l border-white/10 pl-3">
+                  {data.prediction.underOver.startsWith('-')
+                    ? `Under ${data.prediction.underOver.replace('-', '')}`
+                    : `Over ${data.prediction.underOver.replace('+', '')}`} goals
+                </span>
+              )}
             </div>
-          )}
+            {/* Comparison metrics */}
+            {data.prediction.comparison && (
+              <div className="space-y-1.5 border-t border-white/5 pt-3">
+                <div className="text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest mb-2">Team Comparison</div>
+                {([
+                  { key: 'total',   label: 'Overall' },
+                  { key: 'form',    label: 'Form' },
+                  { key: 'att',     label: 'Attack' },
+                  { key: 'def',     label: 'Defence' },
+                  { key: 'poisson_distribution', label: 'Poisson' },
+                  { key: 'h2h',     label: 'H2H' },
+                ] as const).map(({ key, label }) => {
+                  const metric = (data.prediction?.comparison as Record<string, { home: string; away: string } | undefined> | null)?.[key];
+                  if (!metric) return null;
+                  const hVal = parseFloat(metric.home);
+                  const aVal = parseFloat(metric.away);
+                  if (isNaN(hVal) || isNaN(aVal)) return null;
+                  return (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-[9px] font-mono text-muted-foreground/40 w-14 shrink-0 text-right">{label}</span>
+                      <div className="flex-1 flex items-center h-3 rounded overflow-hidden">
+                        <div className="h-full bg-teal-400/25 border-r border-teal-400/20" style={{ width: `${hVal}%` }} />
+                        <div className="h-full bg-violet-400/25" style={{ width: `${aVal}%` }} />
+                      </div>
+                      <div className="flex items-center gap-1 text-[9px] font-mono shrink-0">
+                        <span className="text-teal-300 tabular-nums w-8 text-right">{Math.round(hVal)}%</span>
+                        <span className="text-muted-foreground/20">·</span>
+                        <span className="text-violet-300 tabular-nums w-8">{Math.round(aVal)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {/* Last 5 */}
+            {(data.prediction.last5Home || data.prediction.last5Away) && (
+              <div className="grid grid-cols-2 gap-3 border-t border-white/5 pt-3">
+                {[
+                  { label: homeTeam, d: data.prediction.last5Home, color: 'teal' },
+                  { label: awayTeam, d: data.prediction.last5Away, color: 'violet' },
+                ].map(({ label, d, color }) => d ? (
+                  <div key={label} className="bg-white/3 rounded-lg p-2.5 space-y-1">
+                    <div className={`text-[9px] font-mono text-${color}-400/60 uppercase tracking-wider truncate`}>{label} — Last 5</div>
+                    {d.form && (
+                      <div className="flex gap-0.5">
+                        {d.form.split('').slice(0, 5).map((r: string, i: number) => (
+                          <span key={i} className={`text-[10px] font-mono font-bold px-1 py-0.5 rounded ${r === 'W' ? 'bg-teal-400/20 text-teal-300' : r === 'D' ? 'bg-amber-400/20 text-amber-300' : 'bg-red-400/20 text-red-400'}`}>{r}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-[10px] font-mono text-white/50">
+                      {d.goals.for.total} scored · {d.goals.against.total} conceded
+                    </div>
+                  </div>
+                ) : null)}
+              </div>
+            )}
+          </div>
         </div>
       )}
 

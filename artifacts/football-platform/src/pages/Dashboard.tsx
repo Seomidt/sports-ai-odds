@@ -476,6 +476,21 @@ function SignalSummaryPreview() {
 
 // ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
+// Trust score badge: shows 1-9 scale as filled dots (easy to read at a glance)
+function TrustBadge({ score }: { score: number | null }) {
+  if (score == null) return null;
+  const clamped = Math.max(1, Math.min(9, Math.round(score)));
+  const color = clamped >= 8 ? 'text-teal-300 border-teal-400/40 bg-teal-400/10'
+    : clamped >= 6 ? 'text-violet-300 border-violet-400/30 bg-violet-400/10'
+    : 'text-amber-400 border-amber-400/30 bg-amber-400/10';
+  return (
+    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-mono font-bold ${color}`} title="Trust score: 1–9 based on probability strength, data quality, and odds stability">
+      <span className="tabular-nums">{clamped}</span>
+      <span className="opacity-40">/9</span>
+    </div>
+  );
+}
+
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
   const borderClass = isTopValue
@@ -483,20 +498,9 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
     : 'border-white/8';
   const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
 
-  const aiPct = tip.aiProbability != null ? Math.round(tip.aiProbability * 100) : null;
   const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
   const impliedProb = tip.impliedProbability ?? impliedFromOdds;
   const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
-  // True percentage-point edge: AI probability minus market-implied probability
-  const edgePp = tip.aiProbability != null && impliedProb != null
-    ? (tip.aiProbability - impliedProb) * 100
-    : null;
-
-  const confStyles: Record<string, string> = {
-    high: 'text-teal-300 bg-teal-400/10 border-teal-400/30',
-    medium: 'text-violet-300 bg-violet-400/10 border-violet-400/25',
-    low: 'text-amber-400 bg-amber-400/10 border-amber-400/25',
-  };
 
   return (
     <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden`}>
@@ -507,26 +511,9 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             <span className={`text-xs font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
             <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(tip.betType)}</span>
             <ValueBadge rating={tip.valueRating} />
-            {tip.confidence && (
-              <span
-                className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${confStyles[tip.confidence]}`}
-                title="Data-derived confidence (edge realism, data completeness, odds stability, league accuracy)"
-              >
-                {tip.confidence}
-              </span>
-            )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {edgePp != null && (
-              <div className={`px-2 py-0.5 rounded text-xs font-mono font-bold tabular-nums border ${
-                edgePp >= 15 ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
-                edgePp >= 5 ? 'text-teal-400 bg-teal-400/10 border-teal-400/20' :
-                edgePp >= -5 ? 'text-violet-400 bg-violet-400/10 border-violet-400/20' :
-                'text-amber-400 bg-amber-400/10 border-amber-400/20'
-              }`}>
-                {edgePp >= 0 ? '+' : ''}{edgePp.toFixed(1)}pp
-              </div>
-            )}
+            <TrustBadge score={tip.trustScore} />
             {tip.marketOdds != null && (
               <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
             )}
@@ -535,10 +522,9 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
 
         <div className="mb-3">
           <div className="text-lg font-bold text-white leading-tight mb-1">{tip.recommendation}</div>
-          {(aiPct != null || implPct != null) && (
-            <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
-              {aiPct != null && <span>AI <span className="text-white/85 tabular-nums font-bold">{aiPct}%</span></span>}
-              {implPct != null && <span>Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span></span>}
+          {implPct != null && (
+            <div className="text-[11px] font-mono text-muted-foreground">
+              Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span>
             </div>
           )}
         </div>

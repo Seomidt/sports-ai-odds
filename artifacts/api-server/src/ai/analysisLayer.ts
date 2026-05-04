@@ -377,7 +377,29 @@ interface BettingContext {
   awayPoints: number | null;
   homeGD: number | null;
   awayGD: number | null;
-  prediction: { homeWinPct: number | null; drawPct: number | null; awayWinPct: number | null; goalsHome: number | null; goalsAway: number | null; advice: string | null; winner: string | null } | null;
+  prediction: {
+    homeWinPct: number | null;
+    drawPct: number | null;
+    awayWinPct: number | null;
+    goalsHome: number | null;
+    goalsAway: number | null;
+    underOver: string | null;
+    winOrDraw: boolean | null;
+    advice: string | null;
+    winner: string | null;
+    winnerComment: string | null;
+    comparison: {
+      form:    { home: string; away: string };
+      att:     { home: string; away: string };
+      def:     { home: string; away: string };
+      poisson_distribution: { home: string; away: string };
+      h2h:     { home: string; away: string };
+      goals:   { home: string; away: string };
+      total:   { home: string; away: string };
+    } | null;
+    last5Home: { played: number; form: string | null; att: string | null; def: string | null; goals: { for: { total: number; average: string }; against: { total: number; average: string } } } | null;
+    last5Away: { played: number; form: string | null; att: string | null; def: string | null; goals: { for: { total: number; average: string }; against: { total: number; average: string } } } | null;
+  } | null;
   homeSeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null; goalsForAvgHome: number | null; goalsAgainstAvgHome: number | null; cleanSheetsHome: number | null; failedToScoreHome: number | null; winsHome: number | null; lossesHome: number | null } | null;
   awaySeasonStats: { form: string | null; goalsForAvg: number | null; goalsAgainstAvg: number | null; cleanSheets: number | null; winStreak: number | null; played: number | null; goalsForAvgAway: number | null; goalsAgainstAvgAway: number | null; cleanSheetsAway: number | null; failedToScoreAway: number | null; winsAway: number | null; lossesAway: number | null } | null;
   homeTopScorers: Array<{ name: string; goals: number | null; assists: number | null }>;
@@ -909,13 +931,19 @@ async function buildBettingContext(fixtureId: number): Promise<BettingContext> {
     homeGD: homeStanding?.goalsDiff ?? null,
     awayGD: awayStanding?.goalsDiff ?? null,
     prediction: pred ? {
-      homeWinPct: pred.homeWinPercent,
-      drawPct: pred.drawPercent,
-      awayWinPct: pred.awayWinPercent,
-      goalsHome: pred.goalsHome,
-      goalsAway: pred.goalsAway,
-      advice: pred.adviceText,
-      winner: pred.winner,
+      homeWinPct:    pred.homeWinPercent,
+      drawPct:       pred.drawPercent,
+      awayWinPct:    pred.awayWinPercent,
+      goalsHome:     pred.goalsHome,
+      goalsAway:     pred.goalsAway,
+      underOver:     (pred as Record<string, unknown>).underOver as string | null ?? null,
+      winOrDraw:     (pred as Record<string, unknown>).winOrDraw as boolean | null ?? null,
+      advice:        pred.adviceText,
+      winner:        pred.winner,
+      winnerComment: (pred as Record<string, unknown>).winnerComment as string | null ?? null,
+      comparison:    (pred as Record<string, unknown>).comparison as Record<string, unknown> | null ?? null,
+      last5Home:     (pred as Record<string, unknown>).last5Home as Record<string, unknown> | null ?? null,
+      last5Away:     (pred as Record<string, unknown>).last5Away as Record<string, unknown> | null ?? null,
     } : null,
     homeSeasonStats: homeStats ? {
       form: homeStats.form,

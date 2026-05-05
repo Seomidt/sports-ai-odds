@@ -3,8 +3,9 @@ import {
   ArrowRight, CheckCircle2, XCircle, Target, Brain,
   Zap, RefreshCw, Globe, BarChart3, LineChart,
   Trophy, Bell, FlaskConical, ChevronRight, TrendingUp,
-  Activity,
+  Activity, ChevronDown, ChevronUp,
 } from "lucide-react";
+import { useState } from "react";
 
 const LEAGUES = [
   "Premier League", "La Liga", "Serie A", "Bundesliga", "Ligue 1",
@@ -158,6 +159,25 @@ const STEPS = [
   { n: "04", title: "Post-match: every tip is graded", desc: "After FT, each tip is automatically checked — HIT or MISS logged, a post-match summary written, and calibration data fed back into the model." },
 ];
 
+const FAQ_ITEMS = [
+  {
+    q: "What will I see after I sign in?",
+    a: "A Today screen that prioritises live games, upcoming kickoffs, and top model edges — not an endless wall of widgets. Everything else is one click away.",
+  },
+  {
+    q: "Is this betting advice?",
+    a: "No. Signal Terminal is software for analysing football and market data. You decide what to do with it. Betting involves risk; never stake more than you can afford to lose.",
+  },
+  {
+    q: "How do pre-match, live, and post-match fit together?",
+    a: "They are phases of the same match. Open any fixture and move between analysis tabs as the game progresses — you do not need three separate mental models.",
+  },
+  {
+    q: "Can I try it without paying?",
+    a: "Start from the sign-in page. Pricing and plan details are listed on the pricing page; billing runs through Stripe when enabled.",
+  },
+];
+
 function TrustDots({ score }: { score: number }) {
   return (
     <div className="flex gap-0.5">
@@ -172,8 +192,10 @@ function TrustDots({ score }: { score: number }) {
 }
 
 export function Home() {
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+
   return (
-    <div className="min-h-screen w-full text-white overflow-x-hidden">
+    <div className="min-h-screen w-full text-white overflow-x-hidden flex flex-col">
 
       {/* ── HERO ─────────────────────────────────────────────────── */}
       <div className="relative min-h-screen flex flex-col justify-center px-6 overflow-hidden">
@@ -200,13 +222,13 @@ export function Home() {
             </h1>
 
             <p className="text-lg text-muted-foreground mb-3 leading-relaxed max-w-lg">
-              AI-powered betting intelligence. Backtested algorithms, live match signals, and full transparency on every tip.
+              Clear daily football intelligence: what is live, what is next, and where the model sees edge — with full transparency on every tip.
             </p>
             <p className="text-sm text-muted-foreground/50 font-mono mb-10">
               27 leagues · 4,197 tips backtested · Live every 15s · Self-grading AI
             </p>
 
-            <div className="flex flex-col sm:flex-row gap-3 mb-12">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-12">
               <Link href="/login">
                 <div className="h-12 px-7 flex items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold hover:bg-primary/90 transition-colors cursor-pointer font-mono tracking-wider">
                   TRY FREE 14 DAYS <ArrowRight className="ml-2 w-4 h-4" />
@@ -215,6 +237,11 @@ export function Home() {
               <Link href="/login">
                 <div className="h-12 px-7 flex items-center justify-center rounded-lg glass-card text-white font-semibold hover:bg-white/10 transition-colors cursor-pointer font-mono tracking-wider">
                   SIGN IN
+                </div>
+              </Link>
+              <Link href="/pricing">
+                <div className="h-12 px-7 flex items-center justify-center rounded-lg border border-white/15 text-white/90 font-semibold hover:bg-white/5 transition-colors cursor-pointer font-mono tracking-wider text-sm">
+                  PRICING
                 </div>
               </Link>
             </div>
@@ -459,6 +486,42 @@ export function Home() {
         </div>
       </div>
 
+      {/* ── FAQ ───────────────────────────────────────────────────── */}
+      <div className="border-t border-white/8 bg-white/[0.02]">
+        <div className="max-w-3xl mx-auto px-6 py-20">
+          <p className="text-xs font-mono text-primary uppercase tracking-widest mb-3 text-center">FAQ</p>
+          <h2 className="text-3xl md:text-4xl font-bold font-mono tracking-tighter mb-10 text-center">
+            STRAIGHT ANSWERS
+          </h2>
+          <div className="rounded-xl border border-white/10 divide-y divide-white/10 overflow-hidden">
+            {FAQ_ITEMS.map((item, i) => {
+              const open = openFaq === i;
+              return (
+                <div key={item.q} className="bg-white/[0.02]">
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(open ? null : i)}
+                    className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/5 transition-colors"
+                  >
+                    <span className="text-sm font-medium text-white pr-4">{item.q}</span>
+                    {open ? (
+                      <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
+                    )}
+                  </button>
+                  {open && (
+                    <div className="px-5 pb-4 text-sm text-muted-foreground leading-relaxed border-t border-white/5">
+                      {item.a}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
       {/* ── FINAL CTA ───────────────────────────────────────────── */}
       <div className="border-t border-white/8 relative overflow-hidden">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-primary/10 via-background to-background pointer-events-none" />
@@ -492,6 +555,26 @@ export function Home() {
           </p>
         </div>
       </div>
+
+      <footer className="mt-auto border-t border-white/10 bg-black/40 py-10 px-6">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6 text-xs font-mono text-muted-foreground">
+          <div className="flex items-center gap-2">
+            <img src="/logo.png" alt="" className="w-6 h-6 rounded-md object-contain opacity-80" />
+            <span>Signal Terminal</span>
+          </div>
+          <p className="text-center sm:text-right max-w-md leading-relaxed">
+            Informational product only — not financial or betting advice. Past performance does not predict future results.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-4">
+            <Link href="/pricing">
+              <span className="hover:text-white cursor-pointer transition-colors">Pricing</span>
+            </Link>
+            <Link href="/login">
+              <span className="hover:text-white cursor-pointer transition-colors">Sign in</span>
+            </Link>
+          </div>
+        </div>
+      </footer>
 
     </div>
   );

@@ -180,16 +180,36 @@ router.get("/fixtures/:id", async (req: Request, res: Response) => {
       return badRequest(res, "Invalid fixture id");
     }
 
-    const result = await getOrFetch(`fixture:${fixtureId}`, TTL.MIN1, async () => {
-      const [fixtureRows, events, stats, lineups] = await Promise.all([
+    const result = await getOrFetch(`fixture:${fixtureId}:detail-v2`, TTL.MIN1, async () => {
+      const [fixtureRows, events, stats, lineups, predRows] = await Promise.all([
         db.select().from(fixtures).where(eq(fixtures.fixtureId, fixtureId)).limit(1),
         db.select().from(fixtureEvents).where(eq(fixtureEvents.fixtureId, fixtureId)),
         db.select().from(fixtureStats).where(eq(fixtureStats.fixtureId, fixtureId)),
         db.select().from(fixtureLineups).where(eq(fixtureLineups.fixtureId, fixtureId)),
+        db.select().from(predictions).where(eq(predictions.fixtureId, fixtureId)).limit(1),
       ]);
       const row = fixtureRows[0] ?? null;
       if (!row) return null;
-      return { fixture: row, events, stats, lineups };
+      const pr = predRows[0] ?? null;
+      const prediction = pr
+        ? {
+            homeWinPct: pr.homeWinPercent != null ? Math.round(pr.homeWinPercent) : null,
+            drawPct: pr.drawPercent != null ? Math.round(pr.drawPercent) : null,
+            awayWinPct: pr.awayWinPercent != null ? Math.round(pr.awayWinPercent) : null,
+            goalsHome: pr.goalsHome,
+            goalsAway: pr.goalsAway,
+            underOver: pr.underOver,
+            winOrDraw: pr.winOrDraw,
+            advice: pr.adviceText,
+            winner: pr.winner,
+            winnerComment: pr.winnerComment,
+            comparison: pr.comparison,
+            last5Home: pr.last5Home,
+            last5Away: pr.last5Away,
+            updatedAt: pr.updatedAt,
+          }
+        : null;
+      return { fixture: row, events, stats, lineups, prediction };
     });
 
     if (!result) {
@@ -568,6 +588,7 @@ router.post("/fixtures/:id/predictions/sync", async (req: Request, res: Response
 
     await syncPredictionForFixture(fixtureId);
     cacheDel(`fixture:${fixtureId}:intel`);
+    cacheDel(`fixture:${fixtureId}:detail-v2`);
 
     const [pred] = await db.select().from(predictions).where(eq(predictions.fixtureId, fixtureId)).limit(1);
     return res.json({

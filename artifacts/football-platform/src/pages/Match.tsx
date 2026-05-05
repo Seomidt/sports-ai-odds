@@ -220,6 +220,7 @@ export function Match() {
                   awayTeamId={fixture.awayTeamId ?? 0}
                   homeTeam={fixture.homeTeamName ?? "Home"}
                   awayTeam={fixture.awayTeamName ?? "Away"}
+                  dbPrediction={(fixtureData?.prediction as IntelPrediction | null | undefined) ?? null}
                 />
               )}
             </TabsContent>
@@ -546,7 +547,22 @@ function deriveMarketsClient(pred: IntelPrediction, homeTeam: string, awayTeam: 
   return markets.sort((x, y) => y.probability - x.probability);
 }
 
-function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: { fixtureId: number; homeTeamId: number; awayTeamId: number; homeTeam: string; awayTeam: string }) {
+function BettingIntelTab({
+  fixtureId,
+  homeTeamId,
+  awayTeamId,
+  homeTeam,
+  awayTeam,
+  dbPrediction = null,
+}: {
+  fixtureId: number;
+  homeTeamId: number;
+  awayTeamId: number;
+  homeTeam: string;
+  awayTeam: string;
+  /** From GET /fixtures/:id — always reflects DB even if /intel cache is stale */
+  dbPrediction?: IntelPrediction | null;
+}) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -591,6 +607,7 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
       return body as { ok: boolean; hasPrediction: boolean };
     },
     onSuccess: async (body) => {
+      await queryClient.invalidateQueries({ queryKey: ["fixture", fixtureId] });
       await queryClient.invalidateQueries({ queryKey: ["intel", fixtureId] });
       await queryClient.invalidateQueries({ queryKey: ["bettingTip", fixtureId] });
       await queryClient.invalidateQueries({ queryKey: ["prematchSynthesis", fixtureId] });
@@ -645,7 +662,7 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
   };
 
   const synthesis = synthesisData?.synthesis ?? null;
-  const pred = intelData?.prediction ?? null;
+  const pred = intelData?.prediction ?? dbPrediction ?? null;
   const homeSidelined = intelData?.homeSidelined ?? [];
   const awaySidelined = intelData?.awaySidelined ?? [];
   const homeTopScorer = intelData?.topScorers?.find(p => p.teamId === homeTeamId);

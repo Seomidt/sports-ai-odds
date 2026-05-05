@@ -118,11 +118,30 @@ export interface FixtureLineup {
   substitutes?: unknown | null;
 }
 
+/** Snapshot from `predictions` table — same shape as intel.prediction for UI reuse */
+export interface FixturePredictionSnapshot {
+  homeWinPct: number | null;
+  drawPct: number | null;
+  awayWinPct: number | null;
+  goalsHome: number | null;
+  goalsAway: number | null;
+  underOver: string | null;
+  winOrDraw: boolean | null;
+  advice: string | null;
+  winner: string | null;
+  winnerComment: string | null;
+  comparison: unknown | null;
+  last5Home: unknown | null;
+  last5Away: unknown | null;
+  updatedAt?: string;
+}
+
 export interface FixtureDetailResponse {
   fixture: Fixture;
   events: FixtureEvent[];
   stats: FixtureStats[];
   lineups: FixtureLineup[];
+  prediction?: FixturePredictionSnapshot | null;
 }
 
 export interface TeamFeature {

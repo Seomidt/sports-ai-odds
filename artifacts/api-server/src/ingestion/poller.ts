@@ -31,6 +31,7 @@ import {
   TRACKED_LEAGUES,
   fetchTodayFixtures,
   fetchFixturesByDate,
+  fetchAllFixturesByDate,
   fetchLiveFixtures,
   fetchFixtureEvents,
   fetchFixtureStats,
@@ -143,15 +144,13 @@ async function upsertFixture(f: ApiFixture) {
 }
 
 async function syncFixturesForDate(date: string) {
-  console.log(`[poller] Syncing fixtures for ${date}`);
-  for (const league of TRACKED_LEAGUES) {
-    const data = await fetchFixturesByDate(league.id, league.season, date);
-    if (!data) continue;
-    for (const f of data) {
-      await upsertFixture(f);
-    }
-    console.log(`[poller] ${league.name}: ${data.length} fixtures for ${date}`);
+  console.log(`[poller] Syncing all fixtures for ${date} (all leagues)`);
+  const data = await fetchAllFixturesByDate(date);
+  if (!data) { console.warn(`[poller] No fixture data returned for ${date}`); return; }
+  for (const f of data) {
+    await upsertFixture(f);
   }
+  console.log(`[poller] ${data.length} fixtures synced for ${date}`);
 }
 
 async function syncNearTermFixtures() {
@@ -1429,13 +1428,11 @@ async function adaptiveLiveLoop() {
   while (true) {
     try {
       const liveData = await fetchLiveFixtures();
-      // Filter to only our tracked leagues — avoids wasting API calls on untracked matches
-      const tracked = (liveData ?? []).filter((f) => TRACKED_LEAGUE_IDS.has(f.league.id));
+      const tracked = liveData ?? [];
       const trackedCount = tracked.length;
 
       if (trackedCount !== lastTrackedCount) {
-        const total = liveData?.length ?? 0;
-        console.log(`[poller] Tracked live: ${trackedCount}/${total} — switching to ${trackedCount > 0 ? "SPRINT (15s)" : "IDLE (2min)"} mode`);
+        console.log(`[poller] Live: ${trackedCount} — switching to ${trackedCount > 0 ? "SPRINT (15s)" : "IDLE (2min)"} mode`);
         lastTrackedCount = trackedCount;
       }
 

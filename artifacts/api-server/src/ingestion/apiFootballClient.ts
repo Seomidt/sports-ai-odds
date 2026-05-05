@@ -310,6 +310,11 @@ export async function fetchFixturesByDate(leagueId: number, season: number, date
   return apiFetch<ApiFixture[]>("/fixtures", { league: leagueId, season, date });
 }
 
+// Fetch ALL fixtures for a date across every league — 1 API call instead of N league calls
+export async function fetchAllFixturesByDate(date: string): Promise<ApiFixture[] | null> {
+  return apiFetch<ApiFixture[]>("/fixtures", { date });
+}
+
 export async function fetchLiveFixtures(): Promise<ApiFixture[] | null> {
   return apiFetch<ApiFixture[]>("/fixtures", { live: "all" });
 }

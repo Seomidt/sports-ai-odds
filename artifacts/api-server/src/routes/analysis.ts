@@ -7,9 +7,6 @@ import { getOrFetch, TTL } from "../lib/routeCache.js";
 import { generateLeagueNews, getLiveAnalysis } from "../ai/analysisLayer.js";
 import { filterPublishableTips } from "../ai/publishFilter.js";
 import { getPlanForRequest, requirePlan } from "../middlewares/requirePlan.js";
-import { TRACKED_LEAGUES } from "../ingestion/apiFootballClient.js";
-
-const TRACKED_LEAGUE_IDS = TRACKED_LEAGUES.map((l) => l.id);
 
 const router = Router();
 
@@ -357,7 +354,7 @@ async function fetchFixturePredictions(daysAhead = 14) {
     })
     .from(fixtures)
     .innerJoin(predictions, eq(fixtures.fixtureId, predictions.fixtureId))
-    .where(and(gte(fixtures.kickoff, now), lte(fixtures.kickoff, limit), inArray(fixtures.leagueId, TRACKED_LEAGUE_IDS)))
+    .where(and(gte(fixtures.kickoff, now), lte(fixtures.kickoff, limit)))
     .orderBy(asc(fixtures.kickoff))
     .limit(300);
 
@@ -518,7 +515,6 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           .where(and(
             gte(fixtures.kickoff, yesterdayStart),
             lte(fixtures.kickoff, yesterdayEnd),
-            inArray(fixtures.leagueId, TRACKED_LEAGUE_IDS),
           ))
           .limit(50),
 

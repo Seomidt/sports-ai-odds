@@ -243,7 +243,10 @@ interface DerivedMarket {
   marketOdds: number | null;
 }
 
-function deriveMarkets(pred: PredRow, trust: TrustInfo): DerivedMarket[] {
+type DeriveMarketsMode = "strict" | "prematch_full";
+
+function deriveMarkets(pred: PredRow, trust: TrustInfo, mode: DeriveMarketsMode = "strict"): DerivedMarket[] {
+  const strict = mode === "strict";
   const base = {
     fixtureId: pred.fixtureId,
     homeTeam: pred.homeTeam,
@@ -291,8 +294,9 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo): DerivedMarket[] {
     const hasUnderSignal = pred.underOver?.startsWith("-");
     const finalOverProb = hasOverSignal ? Math.min(92, overProb + 8) : hasUnderSignal ? Math.max(25, overProb - 8) : overProb;
     const finalUnderProb = 100 - finalOverProb;
-    if (finalOverProb >= 40) markets.push({ ...base, market: "over_under_25", side: "over", label: "Over 2.5 mål", probability: finalOverProb });
-    if (finalUnderProb >= 40) markets.push({ ...base, market: "over_under_25", side: "under", label: "Under 2.5 mål", probability: finalUnderProb });
+    const minOU = strict ? 40 : 1;
+    if (finalOverProb >= minOU) markets.push({ ...base, market: "over_under_25", side: "over", label: "Over 2.5 mål", probability: finalOverProb });
+    if (finalUnderProb >= minOU) markets.push({ ...base, market: "over_under_25", side: "under", label: "Under 2.5 mål", probability: finalUnderProb });
   }
 
   // ── BTTS ── P(team scores) ≈ 1 - e^(-λ) using Poisson
@@ -301,21 +305,26 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo): DerivedMarket[] {
     const awayScoreP = Math.round((1 - Math.exp(-ga)) * 100);
     const bttsYes = Math.round(homeScoreP * awayScoreP / 100);
     const bttsNo = 100 - bttsYes;
-    if (bttsYes >= 35) markets.push({ ...base, market: "btts", side: "yes", label: "Begge hold scorer", probability: bttsYes });
-    if (bttsNo >= 35) markets.push({ ...base, market: "btts", side: "no", label: "Ikke begge scorer", probability: bttsNo });
+    const minBtts = strict ? 35 : 1;
+    if (bttsYes >= minBtts) markets.push({ ...base, market: "btts", side: "yes", label: "Begge hold scorer", probability: bttsYes });
+    if (bttsNo >= minBtts) markets.push({ ...base, market: "btts", side: "no", label: "Ikke begge scorer", probability: bttsNo });
   }
 
-  // ── Double Chance (only when very lopsided — sums are always high for 1X/X2, so avoid flooding lists)
+  // ── Double Chance
+  const minDc = strict ? 72 : 50;
   if (pred.homeWinPercent && pred.drawPercent) {
     const dc = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
-    if (dc >= 72) markets.push({ ...base, market: "double_chance", side: "home_draw", label: `${home} eller uafgjort`, probability: dc });
+    if (dc >= minDc) markets.push({ ...base, market: "double_chance", side: "home_draw", label: `${home} eller uafgjort`, probability: dc });
   }
   if (pred.awayWinPercent && pred.drawPercent) {
     const dc = Math.min(99, Math.round(pred.awayWinPercent + pred.drawPercent));
-    if (dc >= 72) markets.push({ ...base, market: "double_chance", side: "away_draw", label: `${away} eller uafgjort`, probability: dc });
+    if (dc >= minDc) markets.push({ ...base, market: "double_chance", side: "away_draw", label: `${away} eller uafgjort`, probability: dc });
   }
 
-  // win_or_draw from API duplicates home_draw double chance — omit to avoid two identical cards
+  if (!strict && pred.winOrDraw === true && pred.homeWinPercent && pred.drawPercent) {
+    const wod = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
+    markets.push({ ...base, market: "win_or_draw", side: "home", label: `${home} vinder eller uafgjort`, probability: wod });
+  }
 
   return markets;
 }
@@ -449,11 +458,11 @@ router.get("/analysis/value-odds", async (_req, res) => {
 
 router.get("/analysis/prematch-predictions", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:prematch-predictions", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:prematch-predictions-v2", TTL.MIN5, async () => {
       const pairs = await fetchFixturePredictions(14);
       const grouped: Record<number, DerivedMarket[]> = {};
       for (const { row, trust } of pairs) {
-        grouped[row.fixtureId] = deriveMarkets(row as PredRow, trust);
+        grouped[row.fixtureId] = deriveMarkets(row as PredRow, trust, "prematch_full");
       }
       return { markets: grouped };
     });

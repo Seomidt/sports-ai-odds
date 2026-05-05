@@ -3,12 +3,13 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, Zap, TrendingUp, CloudRain, AlertTriangle } from "lucide-react";
+import { Activity, Clock, Zap, TrendingUp, CloudRain, AlertTriangle, Filter } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getLeagueLogo } from "@/lib/leagues";
+import { cn } from "@/lib/utils";
 
 function dayKey(date: Date): string {
   return format(date, "yyyy-MM-dd");
@@ -21,8 +22,8 @@ function dayLabel(dateStr: string): string {
   return format(d, "EEE dd/MM");
 }
 
-const LIVE_STATUSES = new Set(["1H","HT","2H","ET","BT","P","INT","LIVE"]);
-const POST_STATUSES = new Set(["FT","AET","PEN","ABD","CANC","AWD","WO"]);
+const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
+const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
 const SPECIAL_STATUS_LABEL: Record<string, string> = {
   PST: "Postponed",
   CANC: "Cancelled",
@@ -34,18 +35,14 @@ const SPECIAL_STATUS_LABEL: Record<string, string> = {
 function isPrematch(f: Fixture) {
   const s = f.statusShort ?? "";
   if (LIVE_STATUSES.has(s) || POST_STATUSES.has(s)) return false;
-  // Hide fixtures that are >2h past kickoff but still NS — stale status
   if (f.kickoff && new Date(f.kickoff).getTime() < Date.now() - 2 * 60 * 60 * 1000) return false;
   return true;
 }
 
-function kickoffLabel(kickoff: string | null | undefined): string {
-  if (!kickoff) return "--:--";
+function kickoffShort(kickoff: string | null | undefined): string {
+  if (!kickoff) return "—";
   const d = new Date(kickoff);
-  const time = format(d, "HH:mm");
-  if (isToday(d)) return `Today ${time}`;
-  if (isTomorrow(d)) return `Tomorrow ${time}`;
-  return format(d, "EE dd/MM HH:mm");
+  return format(d, "HH:mm");
 }
 
 interface LeagueSection {
@@ -55,33 +52,6 @@ interface LeagueSection {
   fixtures: Fixture[];
 }
 
-
-function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: string; wind: number | null; icon: string | null }) {
-  const isAdverse = (wind ?? 0) > 10 ||
-    desc.toLowerCase().includes("snow") || desc.toLowerCase().includes("blizzard") ||
-    desc.toLowerCase().includes("heavy rain") || desc.toLowerCase().includes("thunderstorm") ||
-    desc.toLowerCase().includes("hail") || (temp ?? 15) < -5 || (temp ?? 15) > 36;
-
-  return (
-    <span
-      className={`inline-flex items-center gap-1 text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-        isAdverse
-          ? "text-amber-400 bg-amber-400/10 border-amber-400/30"
-          : "text-violet-300 bg-violet-400/10 border-violet-400/20"
-      }`}
-      title={`${desc} — ${Math.round(temp ?? 0)}°C, vind ${Math.round(wind ?? 0)} m/s`}
-    >
-      {icon
-        ? <img src={`https://openweathermap.org/img/wn/${icon}.png`} className="w-3.5 h-3.5 object-contain" alt="" />
-        : <CloudRain className="w-3 h-3" />
-      }
-      {Math.round(temp ?? 0)}°
-      {isAdverse && <AlertTriangle className="w-2.5 h-2.5 text-amber-400" />}
-    </span>
-  );
-}
-
-
 interface DerivedMarket {
   market: string;
   side: string;
@@ -89,131 +59,152 @@ interface DerivedMarket {
   probability: number;
 }
 
-const MARKET_ORDER = ['match_result', 'over_under_25', 'btts', 'double_chance', 'win_or_draw'];
+type MarketFilter = "all" | "match_result" | "over_under_25" | "btts" | "double_chance" | "combo";
 
-function PredictionPreview({ fixtureId, allMarkets }: { fixtureId: number; allMarkets: Record<number, DerivedMarket[]> | undefined }) {
-  const markets = allMarkets?.[fixtureId] ?? [];
-  if (markets.length === 0) return null;
+const FILTER_TABS: { id: MarketFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "match_result", label: "1X2" },
+  { id: "over_under_25", label: "O/U 2.5" },
+  { id: "btts", label: "BTTS" },
+  { id: "double_chance", label: "1X / X2" },
+  { id: "combo", label: "Combo" },
+];
 
-  // One row per market type, pick strongest side per type
-  const byMarket: Record<string, DerivedMarket> = {};
-  for (const m of markets) {
-    if (!byMarket[m.market] || m.probability > byMarket[m.market].probability) {
-      byMarket[m.market] = m;
-    }
+function filterMarkets(markets: DerivedMarket[], filter: MarketFilter): DerivedMarket[] {
+  if (filter === "all") return [...markets].sort((a, b) => b.probability - a.probability);
+  if (filter === "combo") {
+    return markets
+      .filter((m) => m.market === "double_chance" || m.market === "win_or_draw")
+      .sort((a, b) => b.probability - a.probability);
   }
-  const rows = MARKET_ORDER.map(k => byMarket[k]).filter(Boolean);
-  if (rows.length === 0) return null;
+  return markets.filter((m) => m.market === filter).sort((a, b) => b.probability - a.probability);
+}
+
+function marketPillClass(market: string): string {
+  switch (market) {
+    case "match_result":
+      return "bg-teal-400/12 text-teal-300 border-teal-400/25";
+    case "over_under_25":
+      return "bg-violet-400/12 text-violet-200 border-violet-400/25";
+    case "btts":
+      return "bg-amber-400/12 text-amber-200 border-amber-400/25";
+    case "double_chance":
+    case "win_or_draw":
+      return "bg-white/6 text-white/70 border-white/12";
+    default:
+      return "bg-white/5 text-muted-foreground border-white/10";
+  }
+}
+
+function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: string; wind: number | null; icon: string | null }) {
+  const isAdverse =
+    (wind ?? 0) > 10 ||
+    desc.toLowerCase().includes("snow") ||
+    desc.toLowerCase().includes("blizzard") ||
+    desc.toLowerCase().includes("heavy rain") ||
+    desc.toLowerCase().includes("thunderstorm") ||
+    desc.toLowerCase().includes("hail") ||
+    (temp ?? 15) < -5 ||
+    (temp ?? 15) > 36;
 
   return (
-    <div className="border-t border-white/5 pt-2.5 mt-1 space-y-1">
-      {rows.map((m) => {
-        const col = m.probability >= 72 ? 'text-teal-300' : m.probability >= 60 ? 'text-violet-300' : 'text-white/60';
-        const barCol = m.probability >= 72 ? 'bg-teal-400/60' : m.probability >= 60 ? 'bg-violet-400/60' : 'bg-white/20';
-        return (
-          <div key={m.market} className="flex items-center gap-2">
-            <div className="flex-1 min-w-0">
-              <span className={`text-[11px] font-mono font-semibold truncate ${col}`}>{m.label}</span>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <div className="w-12 h-1 bg-white/8 rounded-full overflow-hidden">
-                <div className={`h-full rounded-full ${barCol}`} style={{ width: `${m.probability}%` }} />
-              </div>
-              <span className={`text-[10px] font-mono font-bold tabular-nums w-7 text-right ${col}`}>{m.probability}%</span>
-            </div>
-          </div>
-        );
-      })}
-    </div>
+    <span
+      className={cn(
+        "inline-flex items-center gap-0.5 text-[9px] font-mono px-1 py-0.5 rounded border shrink-0",
+        isAdverse ? "text-amber-400/90 bg-amber-400/8 border-amber-400/25" : "text-muted-foreground/70 bg-white/[0.04] border-white/8",
+      )}
+      title={`${desc} — ${Math.round(temp ?? 0)}°C`}
+    >
+      {icon ? (
+        <img src={`https://openweathermap.org/img/wn/${icon}.png`} className="w-3 h-3 object-contain" alt="" />
+      ) : (
+        <CloudRain className="w-2.5 h-2.5 opacity-60" />
+      )}
+      {Math.round(temp ?? 0)}°
+      {isAdverse && <AlertTriangle className="w-2 h-2 text-amber-400" />}
+    </span>
   );
 }
 
-function PreMatchCard({ fixture, allMarkets }: { fixture: Fixture; allMarkets: Record<number, DerivedMarket[]> | undefined }) {
-  const { data: signalData } = useGetFixtureSignals(
-    fixture.fixtureId,
-    { phase: "pre" },
-    { query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 3 * 60 * 1000, gcTime: 10 * 60 * 1000 } }
-  );
+function CompactPreRow({
+  fixture,
+  markets,
+  marketFilter,
+}: {
+  fixture: Fixture;
+  markets: DerivedMarket[];
+  marketFilter: MarketFilter;
+}) {
+  const { data: signalData } = useGetFixtureSignals(fixture.fixtureId, { phase: "pre" }, {
+    query: { queryKey: ["signals", fixture.fixtureId, "pre"], staleTime: 3 * 60 * 1000, gcTime: 10 * 60 * 1000 },
+  });
   const signals = signalData?.signals ?? [];
-
-  const hasMarkets = !!(allMarkets?.[fixture.fixtureId]?.length);
-  const borderClass = signals.length >= 4
-    ? "border-primary/40 shadow-[0_0_20px_rgba(0,255,200,0.06)]"
-    : signals.length >= 2
-    ? "border-amber-400/25"
-    : hasMarkets
-    ? "border-violet-400/20"
-    : "border-white/6";
+  const filtered = filterMarkets(markets, marketFilter);
+  const display = filtered.slice(0, 8);
+  const hasPred = markets.length > 0;
 
   return (
     <Link href={`/match/${fixture.fixtureId}`}>
-      <div className={`glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border ${borderClass} group`}>
-        <div className="flex justify-between items-center mb-4 gap-2 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded font-mono">
-              <Clock className="w-3 h-3 shrink-0" />
-              {kickoffLabel(fixture.kickoff)}
-            </span>
+      <div
+        className={cn(
+          "group rounded-lg border px-2.5 py-2 cursor-pointer transition-colors hover:bg-white/[0.04]",
+          signals.length >= 3 ? "border-primary/25" : "border-white/[0.07]",
+        )}
+      >
+        <div className="flex items-center gap-2 min-h-[2.25rem]">
+          <div className="flex items-center gap-1.5 shrink-0 w-[3.25rem]">
+            <Clock className="w-3 h-3 text-amber-400/80 shrink-0" />
+            <span className="text-[11px] font-mono font-semibold text-white tabular-nums">{kickoffShort(fixture.kickoff)}</span>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {fixture.homeTeamLogo && (
+                <img src={fixture.homeTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded-sm" />
+              )}
+              <span className="text-xs font-medium text-white truncate">{fixture.homeTeamName}</span>
+              <span className="text-[10px] text-white/25 shrink-0">v</span>
+              {fixture.awayTeamLogo && (
+                <img src={fixture.awayTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded-sm" />
+              )}
+              <span className="text-xs text-white/75 truncate">{fixture.awayTeamName}</span>
+            </div>
+          </div>
+          <div className="hidden sm:flex items-center gap-1 shrink-0">
             <WeatherMini
               temp={fixture.weatherTemp ?? null}
-              desc={fixture.weatherDesc ?? "Weather pending"}
+              desc={fixture.weatherDesc ?? ""}
               wind={fixture.weatherWind ?? null}
               icon={fixture.weatherIcon ?? null}
             />
-          </div>
-          {SPECIAL_STATUS_LABEL[fixture.statusShort ?? ""] ? (
-            <span className="text-xs font-mono font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 px-2 py-0.5 rounded">
-              {SPECIAL_STATUS_LABEL[fixture.statusShort!]}
-            </span>
-          ) : signals.length > 0 ? (
-            <span className={`inline-flex items-center gap-1 text-xs font-mono font-bold px-2 py-0.5 rounded ${
-              signals.length >= 4
-                ? "text-primary bg-primary/10 border border-primary/20"
-                : signals.length >= 2
-                ? "text-amber-400 bg-amber-400/10 border border-amber-400/20"
-                : "text-violet-400 bg-violet-400/10 border border-violet-400/20"
-            }`}>
-              <Zap className="w-3 h-3" />
-              {signals.length} {signals.length === 1 ? "signal" : "signals"}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="space-y-2.5 mb-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              {fixture.homeTeamLogo && (
-                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
-              )}
-              <span className="font-semibold text-white truncate text-sm">{fixture.homeTeamName}</span>
-            </div>
-            <span className="font-mono text-base font-bold text-muted-foreground/40 shrink-0">vs</span>
-          </div>
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2.5 min-w-0">
-              {fixture.awayTeamLogo && (
-                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
-              )}
-              <span className="font-medium text-white/50 truncate text-sm">{fixture.awayTeamName}</span>
-            </div>
-          </div>
-        </div>
-
-        <PredictionPreview fixtureId={fixture.fixtureId} allMarkets={allMarkets} />
-
-        {signals.length > 0 && (
-          <div className="border-t border-white/5 pt-3 mt-2.5 space-y-1">
-            {signals.slice(0, 2).map((s) => (
-              <div key={s.id} className="text-[11px] text-muted-foreground font-mono truncate">
-                · {s.signalLabel}
-              </div>
-            ))}
-            {signals.length > 2 && (
-              <div className="text-[11px] text-muted-foreground/40 font-mono">
-                +{signals.length - 2} more...
-              </div>
+            {signals.length > 0 && (
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-primary px-1 py-0.5 rounded border border-primary/20 bg-primary/5">
+                <Zap className="w-2.5 h-2.5" />
+                {signals.length}
+              </span>
             )}
           </div>
+        </div>
+
+        {SPECIAL_STATUS_LABEL[fixture.statusShort ?? ""] ? (
+          <div className="mt-1 text-[10px] font-mono text-amber-400">{SPECIAL_STATUS_LABEL[fixture.statusShort!]}</div>
+        ) : hasPred && display.length > 0 ? (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {display.map((m, i) => (
+              <span
+                key={`${m.market}-${m.side}-${i}`}
+                className={cn(
+                  "inline-flex items-center gap-1 max-w-[100%] rounded px-1.5 py-0.5 text-[10px] font-mono border truncate",
+                  marketPillClass(m.market),
+                )}
+                title={m.label}
+              >
+                <span className="truncate">{m.label}</span>
+                <span className="tabular-nums font-bold shrink-0 opacity-90">{m.probability}%</span>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-1 text-[10px] font-mono text-muted-foreground/50">No API prediction yet — open match to sync</div>
         )}
       </div>
     </Link>
@@ -223,6 +214,7 @@ function PreMatchCard({ fixture, allMarkets }: { fixture: Fixture; allMarkets: R
 export function PreMatch() {
   const [selectedLeague, setSelectedLeague] = useState<number | "all">("all");
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
+  const [marketFilter, setMarketFilter] = useState<MarketFilter>("all");
   const tabsRef = useRef<HTMLDivElement>(null);
 
   const { data, isLoading } = useGetTodayFixtures({
@@ -240,6 +232,8 @@ export function PreMatch() {
     gcTime: 15 * 60_000,
   });
 
+  const allMarkets = predMarketsData?.markets;
+
   const all: Fixture[] = (data?.leagues ?? []).flatMap((l) => l.fixtures);
   const prematch = all
     .filter(isPrematch)
@@ -249,25 +243,20 @@ export function PreMatch() {
       return ta - tb;
     });
 
-  // Compute unique days from all prematch fixtures (local timezone)
   const days: string[] = Array.from(
-    new Set(prematch.map((f) => f.kickoff ? dayKey(new Date(f.kickoff)) : null).filter(Boolean) as string[])
+    new Set(prematch.map((f) => (f.kickoff ? dayKey(new Date(f.kickoff)) : null)).filter(Boolean) as string[]),
   ).sort();
 
-  // Default to first available day
   const activeDay = selectedDay && days.includes(selectedDay) ? selectedDay : (days[0] ?? null);
 
-  // Reset league filter when day changes
-  useEffect(() => { setSelectedLeague("all"); }, [activeDay]);
+  useEffect(() => {
+    setSelectedLeague("all");
+  }, [activeDay]);
 
   useScrollRestoration("pre-match", !isLoading && all.length > 0);
 
-  // Filter by selected day
-  const dayFixtures = activeDay
-    ? prematch.filter((f) => f.kickoff && dayKey(new Date(f.kickoff)) === activeDay)
-    : prematch;
+  const dayFixtures = activeDay ? prematch.filter((f) => f.kickoff && dayKey(new Date(f.kickoff)) === activeDay) : prematch;
 
-  // Group by league
   const byLeague = new Map<number, LeagueSection>();
   for (const f of dayFixtures) {
     if (!byLeague.has(f.leagueId)) {
@@ -284,25 +273,42 @@ export function PreMatch() {
   const leagues = Array.from(byLeague.values());
   const visibleLeagues = selectedLeague === "all" ? leagues : leagues.filter((l) => l.leagueId === selectedLeague);
 
+  const marketSummary = useMemo(() => {
+    let withPred = 0;
+    if (!allMarkets) return { withPred: 0, totalLines: 0 };
+    let totalLines = 0;
+    for (const f of dayFixtures) {
+      const m = allMarkets[f.fixtureId];
+      if (m?.length) {
+        withPred++;
+        totalLines += m.length;
+      }
+    }
+    return { withPred, totalLines };
+  }, [allMarkets, dayFixtures]);
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <header>
-          <div className="flex items-center gap-3 mb-1">
-            <TrendingUp className="w-5 h-5 text-amber-400" />
-            <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PRE-MATCH</h1>
+      <div className="space-y-4 max-w-6xl mx-auto">
+        <header className="space-y-1">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-amber-400" />
+            <h1 className="text-xl md:text-2xl font-bold font-mono tracking-tight text-white">Pre-match</h1>
           </div>
-          <p className="text-muted-foreground text-sm">
-            Upcoming fixtures with algorithm tips — Match Result (form-filtered), BTTS &amp; Asian Handicap. <a href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">View backtest →</a>
+          <p className="text-xs md:text-sm text-muted-foreground leading-snug">
+            Compact list — all derived lines from API-Football per fixture. Use the chips to show only the market types you care about.
+            {!isLoading && (
+              <span className="text-muted-foreground/60 font-mono ml-1">
+                ({marketSummary.withPred}/{dayFixtures.length} with data · {marketSummary.totalLines} lines)
+              </span>
+            )}
           </p>
         </header>
 
-        {/* Day tabs */}
         {!isLoading && days.length > 0 && (
           <div
             ref={tabsRef}
-            className="flex gap-2 overflow-x-auto pb-1 scrollbar-none -mx-4 px-4"
+            className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none"
             style={{ scrollbarWidth: "none" }}
           >
             {days.map((d) => {
@@ -311,89 +317,112 @@ export function PreMatch() {
               return (
                 <button
                   key={d}
+                  type="button"
                   onClick={() => setSelectedDay(d)}
-                  className={`shrink-0 flex flex-col items-center gap-0.5 px-4 py-2 rounded-lg border text-xs font-mono font-bold transition-colors ${
-                    isActive
-                      ? "bg-primary/15 border-primary/40 text-primary"
-                      : "bg-white/3 border-white/8 text-white/50 hover:text-white/80 hover:bg-white/5"
-                  }`}
+                  className={cn(
+                    "shrink-0 px-3 py-1.5 rounded-md border text-[11px] font-mono font-semibold transition-colors",
+                    isActive ? "bg-primary/15 border-primary/35 text-primary" : "bg-white/[0.03] border-white/10 text-white/45 hover:text-white/70",
+                  )}
                 >
-                  <span>{dayLabel(d)}</span>
-                  <span className={`text-[10px] font-normal tabular-nums ${isActive ? "text-primary/70" : "text-white/30"}`}>
-                    {count} fixtures
-                  </span>
+                  {dayLabel(d)} <span className="tabular-nums opacity-60">{count}</span>
                 </button>
               );
             })}
           </div>
         )}
 
-        {/* League filter */}
-        {leagues.length > 1 && (
-          <Select
-            value={String(selectedLeague)}
-            onValueChange={(v) => setSelectedLeague(v === "all" ? "all" : Number(v))}
-          >
-            <SelectTrigger className="w-auto min-w-[200px] bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono">
-              <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
-                🌍 All Leagues ({leagues.length})
-              </SelectItem>
-              {leagues
-                .slice()
-                .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""))
-                .map((l) => (
-                  <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                    <span className="inline-flex items-center gap-2">
-                      <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
-                    </span>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground uppercase tracking-wider shrink-0">
+            <Filter className="w-3 h-3" />
+            Markets
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {FILTER_TABS.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setMarketFilter(t.id)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-mono font-medium border transition-colors",
+                  marketFilter === t.id
+                    ? "bg-white/12 border-white/25 text-white"
+                    : "bg-transparent border-white/10 text-muted-foreground hover:text-white/80 hover:border-white/15",
+                )}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {leagues.length > 1 && (
+            <div className="sm:ml-auto w-full sm:w-auto">
+              <Select
+                value={String(selectedLeague)}
+                onValueChange={(v) => setSelectedLeague(v === "all" ? "all" : Number(v))}
+              >
+                <SelectTrigger className="h-9 w-full sm:w-[220px] bg-white/5 border-white/10 text-white text-xs font-mono rounded-md">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[min(70vh,420px)]">
+                  <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
+                    All leagues ({leagues.length})
                   </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-        )}
+                  {leagues
+                    .slice()
+                    .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""))
+                    .map((l) => (
+                      <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
+                        <span className="inline-flex items-center gap-2">
+                          <img
+                            src={getLeagueLogo(l.leagueId)}
+                            alt=""
+                            className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.display = "none";
+                            }}
+                          />
+                          {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                        </span>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
 
         {isLoading ? (
-          <div className="flex items-center justify-center h-64">
-            <Activity className="w-8 h-8 text-primary animate-pulse" />
+          <div className="flex items-center justify-center h-48">
+            <Activity className="w-7 h-7 text-primary animate-pulse" />
           </div>
         ) : dayFixtures.length === 0 ? (
-          <div className="glass-card p-12 text-center rounded-xl flex flex-col items-center gap-4">
-            <Clock className="w-10 h-10 text-muted-foreground opacity-30" />
-            <div>
-              <h3 className="text-lg font-medium text-white mb-1">No upcoming fixtures</h3>
-              <p className="text-muted-foreground text-sm mb-4">
-                Fixtures in tracked leagues are either live or finished.
-              </p>
-              <Link href="/live">
-                <button className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/15 text-primary border border-primary/30 text-sm font-mono font-semibold hover:bg-primary/20 transition-colors">
-                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  View live matches
-                </button>
-              </Link>
-            </div>
+          <div className="rounded-lg border border-white/10 bg-white/[0.02] p-8 text-center">
+            <Clock className="w-8 h-8 text-muted-foreground opacity-30 mx-auto mb-2" />
+            <h3 className="text-sm font-medium text-white mb-1">No upcoming fixtures</h3>
+            <Link href="/live">
+              <span className="text-xs font-mono text-primary hover:underline cursor-pointer">View live →</span>
+            </Link>
           </div>
         ) : (
-          <div className="space-y-10">
+          <div className="space-y-5">
             {visibleLeagues.map((league) => (
-              <div key={league.leagueId} className="space-y-4">
-                <div className="flex items-center gap-3 pb-2 border-b border-white/8">
+              <div key={league.leagueId}>
+                <div className="flex items-center gap-2 mb-2 pb-1 border-b border-white/8">
                   {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
+                    <img src={league.leagueLogo} alt="" className="w-4 h-4 object-contain bg-white/90 rounded-sm p-0.5" />
                   )}
-                  <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
+                  <span className="text-xs font-mono font-bold text-white/90 uppercase tracking-wide truncate">
                     {league.leagueName ?? `League ${league.leagueId}`}
                   </span>
-                  <span className="text-xs text-muted-foreground font-mono ml-auto">
-                    {league.fixtures.length} {league.fixtures.length === 1 ? "fixture" : "fixtures"}
-                  </span>
+                  <span className="text-[10px] font-mono text-muted-foreground ml-auto tabular-nums">{league.fixtures.length}</span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="flex flex-col gap-1">
                   {league.fixtures.map((fixture) => (
-                    <PreMatchCard key={fixture.fixtureId} fixture={fixture} allMarkets={predMarketsData?.markets} />
+                    <CompactPreRow
+                      key={fixture.fixtureId}
+                      fixture={fixture}
+                      markets={allMarkets?.[fixture.fixtureId] ?? []}
+                      marketFilter={marketFilter}
+                    />
                   ))}
                 </div>
               </div>

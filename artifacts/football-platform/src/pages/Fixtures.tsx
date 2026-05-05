@@ -3,9 +3,10 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, CheckCircle2, Zap } from "lucide-react";
-import { useState } from "react";
+import { Activity, Clock, CheckCircle2, Zap, Search, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 // PST (Postponed) and SUSP (Suspended) treated as finished — never show in prematch
@@ -198,6 +199,48 @@ function EmptyState({ phase }: { phase: Tab }) {
   );
 }
 
+function FilterEmptyState({ phase, onClear }: { phase: Tab; onClear: () => void }) {
+  const phaseWord = phase === "live" ? "live" : phase === "prematch" ? "upcoming" : "finished";
+  return (
+    <div className="glass-card p-10 text-center rounded-xl flex flex-col items-center max-w-md mx-auto">
+      <Search className="w-10 h-10 text-muted-foreground mb-3 opacity-40" />
+      <h3 className="text-base font-semibold text-white mb-2">No {phaseWord} matches match your filters</h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        Try another team name, pick a different league, or browse the ranked prediction cards if you are looking for value picks rather than a specific fixture.
+      </p>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={onClear}
+          className="text-xs font-mono px-3 py-2 rounded-md border border-white/15 text-white hover:bg-white/5 transition-colors"
+        >
+          Clear search & league
+        </button>
+        <Link href="/predictions">
+          <span className="inline-flex text-xs font-mono px-3 py-2 rounded-md bg-primary/15 border border-primary/30 text-primary hover:bg-primary/25 transition-colors cursor-pointer">
+            Open predictions grid
+          </span>
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function normalizeTeamQuery(q: string): string {
+  return q
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "");
+}
+
+function fixtureMatchesSearch(f: Fixture, queryNorm: string): boolean {
+  if (!queryNorm) return true;
+  const home = normalizeTeamQuery(f.homeTeamName ?? "");
+  const away = normalizeTeamQuery(f.awayTeamName ?? "");
+  return home.includes(queryNorm) || away.includes(queryNorm);
+}
+
 export function Fixtures({
   pageTitle = "FIXTURES",
   pageSubtitle = "Pre-match · Live · Finished — updates automatically.",
@@ -216,7 +259,12 @@ export function Fixtures({
     refetchIntervalInBackground: true,
   });
   const [activeTab, setActiveTab] = useState<Tab>("prematch");
-  const [liveLeagueFilter, setLiveLeagueFilter] = useState<string>("all");
+  const [leagueFilter, setLeagueFilter] = useState<string>("all");
+  const [teamSearch, setTeamSearch] = useState("");
+
+  useEffect(() => {
+    setLeagueFilter("all");
+  }, [activeTab]);
 
   const allFixtures: Fixture[] = (data?.leagues ?? []).flatMap((league) => league.fixtures);
 
@@ -226,23 +274,32 @@ export function Fixtures({
     return ta - tb;
   });
 
-  const allLive = sorted.filter((f) => getPhase(f.statusShort) === "live");
-
-  // Unique leagues present in live fixtures — for the dropdown
-  const liveLeagues = Array.from(
-    new Map(allLive.map((f) => [f.leagueId, { id: f.leagueId, name: f.leagueName }])).values()
-  );
-
-  const filteredLive =
-    liveLeagueFilter === "all"
-      ? allLive
-      : allLive.filter((f) => String(f.leagueId) === liveLeagueFilter);
-
   const byPhase: Record<Tab, Fixture[]> = {
-    live: filteredLive,
+    live: sorted.filter((f) => getPhase(f.statusShort) === "live"),
     prematch: sorted.filter((f) => getPhase(f.statusShort) === "prematch"),
     postmatch: sorted.filter((f) => getPhase(f.statusShort) === "postmatch"),
   };
+
+  const phaseFixtures = byPhase[activeTab];
+
+  const tabLeagues = useMemo(() => {
+    return Array.from(
+      new Map(phaseFixtures.map((f) => [f.leagueId, { id: f.leagueId, name: f.leagueName }])).values()
+    ).sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  }, [phaseFixtures]);
+
+  const afterLeague =
+    leagueFilter === "all"
+      ? phaseFixtures
+      : phaseFixtures.filter((f) => String(f.leagueId) === leagueFilter);
+
+  const searchNorm = normalizeTeamQuery(teamSearch);
+  const visibleFixtures = useMemo(
+    () => afterLeague.filter((f) => fixtureMatchesSearch(f, searchNorm)),
+    [afterLeague, searchNorm]
+  );
+
+  const hasActiveFilters = teamSearch.trim().length > 0 || leagueFilter !== "all";
 
   return (
     <Layout>
@@ -250,6 +307,13 @@ export function Fixtures({
         <header>
           <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">{pageTitle}</h1>
           <p className="text-muted-foreground text-sm">{pageSubtitle}</p>
+          <p className="text-xs text-muted-foreground/80 mt-2 max-w-xl">
+            <span className="text-white/70">Tip:</span> Search by team name to find a match, then open it — predictions and analysis are on the match page. Or use{" "}
+            <Link href="/predictions" className="text-primary/80 hover:text-primary underline underline-offset-2">
+              Predictions
+            </Link>{" "}
+            to browse ranked picks.
+          </p>
         </header>
 
         {isLoading ? (
@@ -300,31 +364,73 @@ export function Fixtures({
               })}
             </div>
 
-            {activeTab === "live" && liveLeagues.length > 1 && (
-              <div className="flex items-center gap-3">
-                <Select value={liveLeagueFilter} onValueChange={(v) => setLiveLeagueFilter(v)}>
-                  <SelectTrigger className="w-56 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50">
-                    <SelectValue placeholder="All leagues" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
-                      All leagues ({allLive.length})
-                    </SelectItem>
-                    {liveLeagues.map((l) => (
-                      <SelectItem key={l.id} value={String(l.id)} className="text-white focus:bg-white/10 focus:text-white">
-                        {l.name ?? `League ${l.id}`}
+            {phaseFixtures.length > 0 && (
+              <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:flex-wrap">
+                <div className="relative flex-1 min-w-[min(100%,220px)] max-w-md">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    type="search"
+                    value={teamSearch}
+                    onChange={(e) => setTeamSearch(e.target.value)}
+                    placeholder="Search team (e.g. Bayern, Arsenal…)"
+                    className="pl-9 pr-9 bg-white/5 border-white/10 text-white placeholder:text-muted-foreground/60 h-10 font-mono text-sm"
+                    autoComplete="off"
+                  />
+                  {teamSearch.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTeamSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-white"
+                      aria-label="Clear search"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                {tabLeagues.length > 1 && (
+                  <Select value={leagueFilter} onValueChange={(v) => setLeagueFilter(v)}>
+                    <SelectTrigger className="w-full lg:w-64 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50">
+                      <SelectValue placeholder="All leagues" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
+                        All leagues ({phaseFixtures.length})
                       </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      {tabLeagues.map((l) => {
+                        const n = phaseFixtures.filter((f) => f.leagueId === l.id).length;
+                        return (
+                          <SelectItem key={l.id} value={String(l.id)} className="text-white focus:bg-white/10 focus:text-white">
+                            {l.name ?? `League ${l.id}`} ({n})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             )}
 
+            {hasActiveFilters && visibleFixtures.length > 0 && (
+              <p className="text-[11px] font-mono text-muted-foreground">
+                Showing {visibleFixtures.length} of {afterLeague.length} in this tab
+                {leagueFilter !== "all" ? ` · league filtered` : ""}
+                {teamSearch.trim() ? ` · search: "${teamSearch.trim()}"` : ""}
+              </p>
+            )}
+
             <div>
-              {byPhase[activeTab].length === 0 ? (
+              {phaseFixtures.length === 0 ? (
                 <EmptyState phase={activeTab} />
+              ) : visibleFixtures.length === 0 ? (
+                <FilterEmptyState
+                  phase={activeTab}
+                  onClear={() => {
+                    setTeamSearch("");
+                    setLeagueFilter("all");
+                  }}
+                />
               ) : (
-                <FixtureGrid fixtures={byPhase[activeTab]} />
+                <FixtureGrid fixtures={visibleFixtures} />
               )}
             </div>
           </>

@@ -229,10 +229,12 @@ interface DerivedMarket {
   label: string;
   probability: number;
   adviceText: string | null;
+  winner: string | null;
   winnerComment: string | null;
   goalsHome: number | null;
   goalsAway: number | null;
   underOver: string | null;
+  winOrDraw: boolean | null;
   homeWinPercent: number | null;
   drawPercent: number | null;
   awayWinPercent: number | null;
@@ -252,7 +254,9 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo): DerivedMarket[] {
     kickoff: pred.kickoff?.toISOString() ?? null,
     leagueName: pred.leagueName,
     adviceText: pred.adviceText,
+    winner: pred.winner,
     winnerComment: pred.winnerComment,
+    winOrDraw: pred.winOrDraw,
     goalsHome: pred.goalsHome,
     goalsAway: pred.goalsAway,
     underOver: pred.underOver,

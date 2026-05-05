@@ -485,7 +485,7 @@ interface IntelPrediction {
   underOver: string | null;
   winOrDraw: boolean | null;
   advice: string | null;
-  winner: string | null;
+  winner: string | null;       // predicted winner team name or "Draw"
   winnerComment: string | null;
   comparison: PredComparison | null;
   last5Home: PredLast5 | null;
@@ -676,8 +676,13 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
 
                 {/* Advice headline */}
                 {pred.advice && (
-                  <div className="space-y-0.5">
+                  <div className="space-y-1.5">
                     <div className="text-base font-bold text-white">{pred.advice}</div>
+                    {pred.winner && (
+                      <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border text-amber-300/80 bg-amber-400/8 border-amber-400/20 uppercase tracking-wider">
+                        ⚡ {pred.winner}
+                      </span>
+                    )}
                     {pred.winnerComment && pred.winnerComment !== pred.advice && (
                       <div className="text-xs font-mono text-muted-foreground/60">{pred.winnerComment}</div>
                     )}

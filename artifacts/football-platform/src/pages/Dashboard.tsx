@@ -34,14 +34,18 @@ interface ValueTip {
   probability: number; // 0-100
   // Supporting prediction context
   adviceText: string | null;
+  winner: string | null;
   winnerComment: string | null;
   goalsHome: number | null;
   goalsAway: number | null;
   underOver: string | null;
+  winOrDraw: boolean | null;
   homeWinPercent: number | null;
   drawPercent: number | null;
   awayWinPercent: number | null;
   comparison: Record<string, { home: string; away: string }> | null;
+  last5Home: { form: string | null; goals: { for: { total: number }; against: { total: number } }; att: string | null; def: string | null } | null;
+  last5Away: { form: string | null; goals: { for: { total: number }; against: { total: number } }; att: string | null; def: string | null } | null;
   // Trust
   trustScore: number;
   confidence: "high" | "medium" | "low" | null;
@@ -553,6 +557,14 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             {tip.leagueName && (
               <div className="text-[10px] font-mono text-muted-foreground/35 truncate mt-0.5">{tip.leagueName}</div>
             )}
+            {/* Predicted winner badge */}
+            {tip.winner && (
+              <div className="mt-1.5">
+                <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border text-amber-300/80 bg-amber-400/8 border-amber-400/20 uppercase tracking-wider">
+                  ⚡ {tip.winner}
+                </span>
+              </div>
+            )}
           </div>
           <TrustBadge score={tip.trustScore} confidence={tip.confidence} />
         </div>
@@ -644,15 +656,49 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             );
           })()}
 
-          {/* Predicted goals */}
-          {tip.goalsHome != null && tip.goalsAway != null && (
-            <div className="text-[10px] font-mono text-muted-foreground/40 pt-0.5">
-              Mål <span className="text-white/40">{tip.goalsHome.toFixed(1)}–{tip.goalsAway.toFixed(1)}</span>
-              {tip.underOver && (
-                <span className="ml-2 border-l border-white/10 pl-2">
-                  {tip.underOver.startsWith('-') ? `Under ${tip.underOver.replace('-', '')}` : `Over ${tip.underOver.replace('+', '')}`} goals
-                </span>
+          {/* Predicted goals + underOver + winOrDraw */}
+          {(tip.goalsHome != null || tip.underOver || tip.winOrDraw) && (
+            <div className="text-[10px] font-mono text-muted-foreground/40 pt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
+              {tip.goalsHome != null && tip.goalsAway != null && (
+                <span>Mål <span className="text-white/40">{tip.goalsHome.toFixed(1)}–{tip.goalsAway.toFixed(1)}</span></span>
               )}
+              {tip.underOver && (
+                <span>{tip.underOver.startsWith('-') ? `Under ${tip.underOver.replace('-', '')}` : `Over ${tip.underOver.replace('+', '')}`} goals</span>
+              )}
+              {tip.winOrDraw && (
+                <span className="text-teal-300/40">{tip.homeTeam} win or draw</span>
+              )}
+            </div>
+          )}
+
+          {/* Last 5 form */}
+          {(tip.last5Home || tip.last5Away) && (
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              {([
+                { label: tip.homeTeam, data: tip.last5Home, color: 'teal' },
+                { label: tip.awayTeam, data: tip.last5Away, color: 'violet' },
+              ] as const).map(({ label, data, color }) => data ? (
+                <div key={String(label)} className="bg-white/3 rounded-lg p-2 space-y-1">
+                  <div className={`text-[9px] font-mono text-${color}-400/50 uppercase tracking-wider truncate`}>{label} — Last 5</div>
+                  {data.form && (
+                    <div className="flex gap-0.5">
+                      {data.form.split('').slice(0, 5).map((r, i) => (
+                        <span key={i} className={`text-[9px] font-mono font-bold px-0.5 py-0.5 rounded ${
+                          r === 'W' ? 'bg-teal-400/20 text-teal-300' :
+                          r === 'D' ? 'bg-amber-400/20 text-amber-300' :
+                          'bg-red-400/20 text-red-400'
+                        }`}>{r}</span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="text-[9px] font-mono text-white/35">
+                    {data.goals.for.total} scored · {data.goals.against.total} conceded
+                  </div>
+                  {data.att && data.def && (
+                    <div className="text-[9px] font-mono text-white/20">Att {data.att} · Def {data.def}</div>
+                  )}
+                </div>
+              ) : null)}
             </div>
           )}
         </div>

@@ -16,7 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3 } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3, RefreshCw, CloudDownload } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelpTooltip } from "@/components/HelpTooltip";
@@ -24,7 +24,7 @@ import { Link } from "wouter";
 import { useSession } from "@/lib/session";
 import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
-import { useQueryClient, useQuery } from "@tanstack/react-query";
+import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
 import { useState, Component, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -547,6 +547,9 @@ function deriveMarketsClient(pred: IntelPrediction, homeTeam: string, awayTeam: 
 }
 
 function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: { fixtureId: number; homeTeamId: number; awayTeamId: number; homeTeam: string; awayTeam: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const { data, isLoading } = useQuery<{ tips: BettingTip[]; tip: BettingTip | null; message?: string }>({
     queryKey: ['bettingTip', fixtureId],
     queryFn: async () => {
@@ -565,12 +568,11 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
       if (!res.ok) throw new Error('Failed');
       return res.json();
     },
-    enabled: !isLoading,
     staleTime: 60 * 60_000,
     gcTime: 2 * 60 * 60_000,
   });
 
-  const { data: intelData } = useQuery<IntelData>({
+  const { data: intelData, isLoading: isIntelLoading, isFetching: isIntelFetching } = useQuery<IntelData>({
     queryKey: ['intel', fixtureId],
     queryFn: async () => {
       const res = await fetch(`/api/fixtures/${fixtureId}/intel`);
@@ -579,6 +581,32 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
     },
     staleTime: 30 * 60_000,
     gcTime: 60 * 60_000,
+  });
+
+  const syncPredictions = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/fixtures/${fixtureId}/predictions/sync`, { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error((body as { error?: string }).error ?? "Sync failed");
+      return body as { ok: boolean; hasPrediction: boolean };
+    },
+    onSuccess: async (body) => {
+      await queryClient.invalidateQueries({ queryKey: ["intel", fixtureId] });
+      await queryClient.invalidateQueries({ queryKey: ["bettingTip", fixtureId] });
+      await queryClient.invalidateQueries({ queryKey: ["prematchSynthesis", fixtureId] });
+      if (body.hasPrediction) {
+        toast({ title: "Prediction data loaded", description: "API-Football data is now on this page." });
+      } else {
+        toast({
+          title: "No API prediction for this fixture",
+          description: "API-Football returned nothing — common for some lower leagues. Try again later.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (e: Error) => {
+      toast({ title: "Could not sync", description: e.message, variant: "destructive" });
+    },
   });
 
   const { data: oddsData } = useGetFixtureOdds(fixtureId, { query: { queryKey: getGetFixtureOddsQueryKey(fixtureId), staleTime: 10 * 60_000 } });
@@ -623,6 +651,15 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
   const homeTopScorer = intelData?.topScorers?.find(p => p.teamId === homeTeamId);
   const awayTopScorer = intelData?.topScorers?.find(p => p.teamId === awayTeamId);
 
+  const showEmptyPreMatch =
+    !isIntelLoading &&
+    !pred &&
+    tips.length === 0 &&
+    homeSidelined.length === 0 &&
+    awaySidelined.length === 0 &&
+    !homeTopScorer &&
+    !awayTopScorer;
+
   return (
     <div className="space-y-4">
       {isLoading ? (
@@ -631,6 +668,13 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
         </div>
       ) : (
         <>
+          {isIntelLoading && !intelData && (
+            <div className="glass-card p-8 rounded-xl border border-white/8 flex flex-col items-center gap-3">
+              <Activity className="w-7 h-7 text-primary animate-pulse" />
+              <p className="text-sm text-muted-foreground font-mono text-center">Loading match data…</p>
+            </div>
+          )}
+
           {/* ── Match Synthesis (only when tips exist) ── */}
           {tips.length > 0 && (isSynthesisLoading && !synthesis ? (
             <div className="glass-card p-4 rounded-xl border border-violet-400/15 flex items-center gap-3">
@@ -907,29 +951,42 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
                 Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
               </div>
             </>
-          ) : (
-            /* No algorithm picks — show placeholder */
-            !pred && homeSidelined.length === 0 && awaySidelined.length === 0 && !homeTopScorer && !awayTopScorer ? (
-              <div className="glass-card p-6 rounded-xl border border-white/5 space-y-2.5">
-                {[
-                  { label: "Odds data", desc: "Market prices from tracked bookmakers" },
-                  { label: "Form & H2H", desc: "Last 5 matches + head-to-head history" },
-                  { label: "Signal engine", desc: "Pattern detection across 20+ indicators" },
-                ].map(({ label, desc }) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary/40 shrink-0" />
-                    <div>
-                      <span className="text-xs font-mono text-white/70">{label}</span>
-                      <span className="text-xs text-muted-foreground/50 ml-2">{desc}</span>
-                    </div>
-                  </div>
-                ))}
-                <p className="text-[11px] text-muted-foreground/40 font-mono pt-2">
-                  Picks are ready once all data sources are synced — typically a few hours before kickoff.
-                </p>
+          ) : showEmptyPreMatch ? (
+            <div className="glass-card p-8 rounded-xl border border-amber-400/20 bg-amber-400/[0.03] space-y-5">
+              <div className="flex items-start gap-3">
+                <CloudDownload className="w-8 h-8 text-amber-400 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="text-base font-semibold text-white mb-1">Ingen prediction-data i databasen endnu</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">
+                    Denne kamp har ikke en gemt API-Football prediction (typisk for nye eller små ligaer, eller før sync-køen har kørt).
+                    Tryk for at hente direkte fra API-Football nu. Brug også fanerne{" "}
+                    <span className="text-white/80 font-mono text-xs">Odds</span> og{" "}
+                    <span className="text-white/80 font-mono text-xs">H2H</span> for rå data.
+                  </p>
+                </div>
               </div>
-            ) : null
-          )}
+              <button
+                type="button"
+                disabled={syncPredictions.isPending || isIntelFetching}
+                onClick={() => syncPredictions.mutate()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-primary text-primary-foreground font-mono text-sm font-bold uppercase tracking-wider hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {syncPredictions.isPending ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <CloudDownload className="w-4 h-4" />
+                )}
+                {syncPredictions.isPending ? "Henter…" : "Hent prediction fra API"}
+              </button>
+              <div className="pt-2 border-t border-white/10 space-y-2">
+                <p className="text-[11px] font-mono text-muted-foreground/70 uppercase tracking-wider">Når data er på plads vises</p>
+                <ul className="text-xs text-muted-foreground space-y-1.5 list-disc list-inside">
+                  <li>1X2, mål og BTTS — afledt af API-Football</li>
+                  <li>AI picks og briefing — når tip-motoren har kørt for kampen</li>
+                </ul>
+              </div>
+            </div>
+          ) : null}
         </>
       )}
     </div>

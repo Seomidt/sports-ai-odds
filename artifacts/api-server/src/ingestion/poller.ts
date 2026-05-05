@@ -534,7 +534,7 @@ async function syncOddsForUpcomingWeek(): Promise<void> {
   console.log(`[odds-week] Done — odds fetched for ${ok}/${missing.length} fixtures`);
 }
 
-async function syncPredictionForFixture(fixtureId: number) {
+export async function syncPredictionForFixture(fixtureId: number) {
   const data = await fetchPredictions(fixtureId);
   if (!data || data.length === 0) return;
   const pred = data[0];

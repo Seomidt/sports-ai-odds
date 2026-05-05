@@ -9,7 +9,8 @@ import {
   predictions, coaches, sidelinedPlayers, playerSeasonStats, teamSeasonStats,
   fixtureSignals, trophies, playerStats as playerStatsTable, followedFixtures,
 } from "@workspace/db/schema";
-import { getOrFetch, TTL } from "../lib/routeCache.js";
+import { getOrFetch, TTL, cacheDel } from "../lib/routeCache.js";
+import { syncPredictionForFixture } from "../ingestion/poller.js";
 
 const router = Router();
 
@@ -549,6 +550,33 @@ router.get("/fixtures/:id/intel", async (req: Request, res: Response) => {
   } catch (error) {
     reqLogError("fixtures.intel", error);
     return res.status(500).json({ error: "Failed to load fixture intel" } satisfies ApiError);
+  }
+});
+
+/** On-demand fetch from API-Football /predictions into DB (fixes empty match pages for new/obscure leagues). */
+router.post("/fixtures/:id/predictions/sync", async (req: Request, res: Response) => {
+  try {
+    const fixtureId = Number(req.params.id);
+    if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
+
+    const [row] = await db
+      .select({ fixtureId: fixtures.fixtureId })
+      .from(fixtures)
+      .where(eq(fixtures.fixtureId, fixtureId))
+      .limit(1);
+    if (!row) return res.status(404).json({ error: "Fixture not found" } satisfies ApiError);
+
+    await syncPredictionForFixture(fixtureId);
+    cacheDel(`fixture:${fixtureId}:intel`);
+
+    const [pred] = await db.select().from(predictions).where(eq(predictions.fixtureId, fixtureId)).limit(1);
+    return res.json({
+      ok: true,
+      hasPrediction: Boolean(pred && (pred.homeWinPercent != null || pred.adviceText != null)),
+    });
+  } catch (error) {
+    reqLogError("fixtures.predictionsSync", error);
+    return res.status(500).json({ error: "Failed to sync predictions" } satisfies ApiError);
   }
 });
 

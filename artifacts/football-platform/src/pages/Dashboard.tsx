@@ -577,23 +577,84 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           {tip.winnerComment && tip.winnerComment !== tip.adviceText && (
             <p className="text-[11px] text-teal-300/50 font-mono italic">"{tip.winnerComment}"</p>
           )}
-          <div className="flex items-center gap-2 flex-wrap">
-            {tip.goalsHome != null && tip.goalsAway != null && (
-              <span className="text-[10px] font-mono text-muted-foreground/50">
-                Mål <span className="text-white/50">{tip.goalsHome.toFixed(1)}–{tip.goalsAway.toFixed(1)}</span>
-              </span>
-            )}
-            {/* Match result split as mini pills */}
-            {tip.homeWinPercent != null && (
-              <>
-                <span className="text-[10px] font-mono text-white/25 tabular-nums">1 {Math.round(tip.homeWinPercent)}%</span>
-                <span className="text-[10px] font-mono text-white/15">·</span>
-                <span className="text-[10px] font-mono text-white/25 tabular-nums">X {Math.round(tip.drawPercent ?? 0)}%</span>
-                <span className="text-[10px] font-mono text-white/15">·</span>
-                <span className="text-[10px] font-mono text-white/25 tabular-nums">2 {Math.round(tip.awayWinPercent ?? 0)}%</span>
-              </>
-            )}
-          </div>
+
+          {/* 1X2 win probability bar */}
+          {tip.homeWinPercent != null && (
+            <div className="space-y-1">
+              <div className="flex justify-between text-[9px] font-mono text-muted-foreground/40 uppercase tracking-wider">
+                <span>{tip.homeTeam}</span><span>Draw</span><span>{tip.awayTeam}</span>
+              </div>
+              <div className="flex items-center h-6 rounded overflow-hidden w-full">
+                {(tip.homeWinPercent ?? 0) > 0 && (
+                  <div className="h-full flex items-center justify-center bg-teal-400/20 border-r border-teal-400/30 min-w-[2rem]" style={{ flex: tip.homeWinPercent ?? 0 }}>
+                    <span className="text-[10px] font-mono font-bold text-teal-300 px-1">{Math.round(tip.homeWinPercent ?? 0)}%</span>
+                  </div>
+                )}
+                {(tip.drawPercent ?? 0) > 0 && (
+                  <div className="h-full flex items-center justify-center border-r border-amber-400/40 min-w-[2rem]" style={{ flex: tip.drawPercent ?? 0, backgroundColor: "rgba(251,191,36,0.2)" }}>
+                    <span className="text-[10px] font-mono font-bold text-amber-300 px-1">{Math.round(tip.drawPercent ?? 0)}%</span>
+                  </div>
+                )}
+                {(tip.awayWinPercent ?? 0) > 0 && (
+                  <div className="h-full flex items-center justify-center bg-violet-400/20 min-w-[2rem]" style={{ flex: tip.awayWinPercent ?? 0 }}>
+                    <span className="text-[10px] font-mono font-bold text-violet-300 px-1">{Math.round(tip.awayWinPercent ?? 0)}%</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Team comparison bars */}
+          {tip.comparison && (() => {
+            const comp = tip.comparison as Record<string, { home: string; away: string }>;
+            const rows = [
+              { key: 'total', label: 'Overall' },
+              { key: 'form',  label: 'Form' },
+              { key: 'att',   label: 'Attack' },
+              { key: 'def',   label: 'Defence' },
+            ];
+            const validRows = rows.filter(({ key }) => {
+              const m = comp[key]; if (!m) return false;
+              return !isNaN(parseFloat(m.home)) && !isNaN(parseFloat(m.away));
+            });
+            if (validRows.length === 0) return null;
+            return (
+              <div className="space-y-1 pt-1">
+                <div className="text-[9px] font-mono text-muted-foreground/30 uppercase tracking-widest">Team Comparison</div>
+                {validRows.map(({ key, label }) => {
+                  const m = comp[key]!;
+                  const h = parseFloat(m.home);
+                  const a = parseFloat(m.away);
+                  return (
+                    <div key={key} className="flex items-center gap-2">
+                      <span className="text-[9px] font-mono text-muted-foreground/30 w-12 shrink-0 text-right">{label}</span>
+                      <div className="flex-1 flex items-center h-2.5 rounded overflow-hidden">
+                        <div className="h-full bg-teal-400/25 border-r border-teal-400/15" style={{ width: `${h}%` }} />
+                        <div className="h-full bg-violet-400/20" style={{ width: `${a}%` }} />
+                      </div>
+                      <div className="flex items-center gap-1 text-[9px] font-mono shrink-0">
+                        <span className="text-teal-300/70 tabular-nums w-7 text-right">{Math.round(h)}%</span>
+                        <span className="text-white/15">·</span>
+                        <span className="text-violet-300/70 tabular-nums w-7">{Math.round(a)}%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
+          {/* Predicted goals */}
+          {tip.goalsHome != null && tip.goalsAway != null && (
+            <div className="text-[10px] font-mono text-muted-foreground/40 pt-0.5">
+              Mål <span className="text-white/40">{tip.goalsHome.toFixed(1)}–{tip.goalsAway.toFixed(1)}</span>
+              {tip.underOver && (
+                <span className="ml-2 border-l border-white/10 pl-2">
+                  {tip.underOver.startsWith('-') ? `Under ${tip.underOver.replace('-', '')}` : `Over ${tip.underOver.replace('+', '')}`} goals
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

@@ -379,14 +379,14 @@ async function fetchFixturePredictions(daysAhead = 14) {
 
 router.get("/analysis/value-odds", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:value-odds-v3", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:value-odds-v4", TTL.MIN5, async () => {
       const pairs = await fetchFixturePredictions(14);
       const all: DerivedMarket[] = pairs.flatMap(({ row, trust }) => deriveMarkets(row as PredRow, trust));
-      // Value = clear signal (≥ 58%) — avoid near-50/50 noise
+      // Value = strong signal only (≥ 68%) — avoid near-50/50 noise, keep only best picks
       const valueTips = all
-        .filter((m) => m.probability >= 58)
+        .filter((m) => m.probability >= 68)
         .sort((a, b) => b.probability - a.probability)
-        .slice(0, 60);
+        .slice(0, 20);
       return { tips: valueTips };
     });
     return res.json(result);

@@ -500,6 +500,52 @@ interface IntelData {
   topScorers: Array<{ playerName: string | null; teamId: number | null; goals: number | null; assists: number | null }>;
 }
 
+const MARKET_LABEL_MAP: Record<string, string> = {
+  match_result: 'Kampresultat', over_under_25: 'Over/Under 2.5',
+  btts: 'Begge scorer', double_chance: 'Double Chance', win_or_draw: 'Win or Draw',
+};
+
+function deriveMarketsClient(pred: IntelPrediction, homeTeam: string, awayTeam: string) {
+  const markets: { market: string; label: string; probability: number }[] = [];
+  const h = pred.homeWinPct ?? 0;
+  const d = pred.drawPct ?? 0;
+  const a = pred.awayWinPct ?? 0;
+
+  // Match result
+  if (h > 0) markets.push({ market: 'match_result', label: `${homeTeam} vinder`, probability: Math.round(h) });
+  if (d > 0) markets.push({ market: 'match_result', label: 'Uafgjort', probability: Math.round(d) });
+  if (a > 0) markets.push({ market: 'match_result', label: `${awayTeam} vinder`, probability: Math.round(a) });
+
+  // Over/Under 2.5 (Poisson-based)
+  const gh = pred.goalsHome ?? 0;
+  const ga = pred.goalsAway ?? 0;
+  if (gh > 0 || ga > 0) {
+    const overProb = Math.min(92, Math.max(25, Math.round(50 + (gh + ga - 2.5) * 18)));
+    const adjusted = pred.underOver?.startsWith('+') ? Math.min(92, overProb + 8)
+      : pred.underOver?.startsWith('-') ? Math.max(25, overProb - 8)
+      : overProb;
+    markets.push({ market: 'over_under_25', label: 'Over 2.5 mål', probability: adjusted });
+    markets.push({ market: 'over_under_25', label: 'Under 2.5 mål', probability: 100 - adjusted });
+  }
+
+  // BTTS
+  if (gh > 0 && ga > 0) {
+    const bttsYes = Math.round((1 - Math.exp(-gh)) * (1 - Math.exp(-ga)) * 100);
+    markets.push({ market: 'btts', label: 'Begge hold scorer', probability: bttsYes });
+    markets.push({ market: 'btts', label: 'Ikke begge scorer', probability: 100 - bttsYes });
+  }
+
+  // Double Chance
+  if (h > 0 && d > 0) markets.push({ market: 'double_chance', label: `${homeTeam} eller uafgjort`, probability: Math.min(99, Math.round(h + d)) });
+  if (a > 0 && d > 0) markets.push({ market: 'double_chance', label: `${awayTeam} eller uafgjort`, probability: Math.min(99, Math.round(a + d)) });
+
+  // Win or Draw
+  if (pred.winOrDraw === true && h > 0 && d > 0)
+    markets.push({ market: 'win_or_draw', label: `${homeTeam} vinder eller uafgjort`, probability: Math.min(99, Math.round(h + d)) });
+
+  return markets.sort((x, y) => y.probability - x.probability);
+}
+
 function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam }: { fixtureId: number; homeTeamId: number; awayTeamId: number; homeTeam: string; awayTeam: string }) {
   const { data, isLoading } = useQuery<{ tips: BettingTip[]; tip: BettingTip | null; message?: string }>({
     queryKey: ['bettingTip', fixtureId],
@@ -807,6 +853,44 @@ function BettingIntelTab({ fixtureId, homeTeamId, awayTeamId, homeTeam, awayTeam
               </div>
             </div>
           )}
+
+          {/* ── All Derived Market Predictions ── */}
+          {pred && (() => {
+            const markets = deriveMarketsClient(pred, homeTeam, awayTeam);
+            if (markets.length === 0) return null;
+            return (
+              <div className="glass-card rounded-xl overflow-hidden border border-teal-400/10">
+                <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
+                  <Target className="w-3.5 h-3.5 text-teal-400/70" />
+                  <span className="text-xs font-mono text-teal-400/80 uppercase tracking-widest">Alle Predictions</span>
+                </div>
+                <div className="divide-y divide-white/5">
+                  {markets.map((m, i) => {
+                    const col = m.probability >= 72 ? 'text-teal-300' : m.probability >= 60 ? 'text-violet-300' : 'text-white/50';
+                    const barCol = m.probability >= 72 ? 'bg-teal-400/60' : m.probability >= 60 ? 'bg-violet-400/60' : 'bg-white/15';
+                    return (
+                      <div key={i} className="flex items-center gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[9px] font-mono text-muted-foreground/35 uppercase tracking-wider mb-0.5">
+                            {MARKET_LABEL_MAP[m.market] ?? m.market}
+                          </div>
+                          <div className={`text-sm font-semibold ${col}`}>{m.label}</div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="w-16 h-1.5 bg-white/8 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${barCol}`} style={{ width: `${m.probability}%` }} />
+                          </div>
+                          <span className={`text-sm font-bold font-mono tabular-nums ${col} w-10 text-right`}>
+                            {m.probability}%
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* ── Tip Cards ── */}
           {tips.length > 0 ? (

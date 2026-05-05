@@ -4,8 +4,8 @@ import { Fixtures } from "./Fixtures";
 export function Matches() {
   return (
     <Fixtures
-      pageTitle="MATCHES"
-      pageSubtitle="One place for every phase: live games, upcoming kickoffs, and full-time results."
+      pageTitle="Matches"
+      pageSubtitle="Live games, upcoming kickoffs, and full-time results in one list — search by team or filter by league."
     />
   );
 }

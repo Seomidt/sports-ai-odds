@@ -3,7 +3,8 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, CheckCircle2, Zap, Search, X } from "lucide-react";
+import { Activity, Clock, CheckCircle2, Zap, Search, X, CalendarDays } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -33,7 +34,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 function LiveBadge({ elapsed }: { elapsed?: number | null }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded font-mono">
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary bg-primary/10 px-2.5 py-1 rounded-md tabular-nums">
       <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
       {elapsed != null ? `${elapsed}'` : "LIVE"}
     </span>
@@ -42,7 +43,7 @@ function LiveBadge({ elapsed }: { elapsed?: number | null }) {
 
 function PrematchBadge({ kickoff }: { kickoff?: string | null }) {
   return (
-    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded font-mono">
+    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-400 bg-amber-400/10 px-2.5 py-1 rounded-md tabular-nums">
       <Clock className="w-3 h-3 shrink-0" />
       {kickoff ? format(new Date(kickoff), "HH:mm") : "--:--"}
     </span>
@@ -52,7 +53,7 @@ function PrematchBadge({ kickoff }: { kickoff?: string | null }) {
 function PostMatchBadge({ statusShort }: { statusShort?: string | null }) {
   const isCancelled = statusShort === "PST" || statusShort === "CANC" || statusShort === "ABD";
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded font-mono ${
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-md ${
       isCancelled ? "text-amber-400 bg-amber-400/10" : "text-muted-foreground bg-white/5"
     }`}>
       <CheckCircle2 className="w-3 h-3 shrink-0" />
@@ -242,8 +243,8 @@ function fixtureMatchesSearch(f: Fixture, queryNorm: string): boolean {
 }
 
 export function Fixtures({
-  pageTitle = "FIXTURES",
-  pageSubtitle = "Pre-match · Live · Finished — updates automatically.",
+  pageTitle = "Matches",
+  pageSubtitle = "Pre-match, live, and finished — updated automatically.",
 }: {
   pageTitle?: string;
   pageSubtitle?: string;
@@ -303,18 +304,15 @@ export function Fixtures({
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <header>
-          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">{pageTitle}</h1>
-          <p className="text-muted-foreground text-sm">{pageSubtitle}</p>
-          <p className="text-xs text-muted-foreground/80 mt-2 max-w-xl">
-            <span className="text-white/70">Tip:</span> Search by team name to find a match, then open it — predictions and analysis are on the match page. Or use{" "}
-            <Link href="/predictions" className="text-primary/80 hover:text-primary underline underline-offset-2">
-              Predictions
-            </Link>{" "}
-            to browse ranked picks.
-          </p>
-        </header>
+      <div className="space-y-8">
+        <PageHeader eyebrow="Browse" title={pageTitle} description={pageSubtitle} icon={CalendarDays} />
+        <p className="text-xs text-muted-foreground -mt-4 max-w-2xl leading-relaxed">
+          <span className="text-foreground/80 font-medium">Tip:</span> Search by team, open the match for full analysis, or use{" "}
+          <Link href="/predictions" className="text-primary hover:text-primary/90 underline underline-offset-2 decoration-primary/35">
+            Predictions
+          </Link>{" "}
+          for ranked picks.
+        </p>
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">
@@ -322,7 +320,7 @@ export function Fixtures({
           </div>
         ) : (
           <>
-            <div className="flex gap-0 border-b border-white/10">
+            <div className="flex gap-0 border-b border-white/[0.08]">
               {TABS.map(({ id, label, Icon }) => {
                 const isActive = activeTab === id;
                 const count = byPhase[id].length;
@@ -344,7 +342,7 @@ export function Fixtures({
                   <button
                     key={id}
                     onClick={() => setActiveTab(id)}
-                    className={`flex items-center gap-2 px-5 py-3 text-sm font-mono font-medium border-b-2 transition-colors ${accentClass}`}
+                    className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${accentClass}`}
                   >
                     {id === "live" && count > 0 ? (
                       <span className="w-2 h-2 rounded-full bg-primary animate-pulse shrink-0" />

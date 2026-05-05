@@ -17,34 +17,35 @@ export default function Login() {
   }, [isSignedIn, isLoading, setLocation]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-[#060a12] text-white">
-      <header className="border-b border-white/10 px-4 py-4">
+    <div className="min-h-screen flex flex-col text-foreground">
+      <header className="border-b border-white/[0.07] px-4 py-4 bg-background/80 backdrop-blur-md sticky top-0 z-10">
         <div className="max-w-md mx-auto flex items-center justify-between">
           <Link href="/">
-            <span className="inline-flex items-center gap-2 text-xs font-mono text-muted-foreground hover:text-white transition-colors cursor-pointer">
+            <span className="inline-flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
               <ArrowLeft className="w-3.5 h-3.5" />
               Back
             </span>
           </Link>
           <Link href="/pricing">
-            <span className="text-xs font-mono text-primary hover:underline cursor-pointer">Pricing</span>
+            <span className="text-xs font-semibold text-primary hover:underline cursor-pointer">Pricing</span>
           </Link>
         </div>
       </header>
 
-      <div className="flex-1 flex items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md space-y-6">
-          <div className="text-center space-y-2">
-            <div className="inline-flex items-center justify-center p-2 rounded-xl bg-white/5 border border-white/10 mx-auto">
-              <img src="/logo.png" alt="Signal Terminal" className="w-10 h-10 object-contain" />
+      <div className="flex-1 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md space-y-8">
+          <div className="text-center space-y-3">
+            <div className="inline-flex items-center justify-center p-3 rounded-2xl glass-card mx-auto ring-1 ring-primary/15">
+              <img src="/logo.png" alt="Signal Terminal" className="w-11 h-11 object-contain" />
             </div>
-            <h1 className="text-2xl font-bold font-mono tracking-tight">Sign in</h1>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/90">Member access</p>
+            <h1 className="text-2xl md:text-3xl font-semibold text-white tracking-tight">Sign in</h1>
             <p className="text-sm text-muted-foreground leading-relaxed max-w-sm mx-auto">
-              After you sign in you land on Today — live games, next kickoffs, and top edges in one calm screen.
+              You will land on Today — live games, next kickoffs, and model edges in one view.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/5 backdrop-blur-md p-6 shadow-xl">
+          <div className="glass-card rounded-2xl p-6 md:p-8">
             <Auth
               supabaseClient={supabase}
               redirectTo={window.location.origin}
@@ -54,8 +55,8 @@ export default function Login() {
                 variables: {
                   default: {
                     colors: {
-                      brand: "#18cfc0",
-                      brandAccent: "#14a89b",
+                      brand: "#d4a843",
+                      brandAccent: "#b8922f",
                     },
                   },
                 },
@@ -63,8 +64,8 @@ export default function Login() {
             />
           </div>
 
-          <p className="text-[11px] text-center text-muted-foreground/60 font-mono leading-relaxed">
-            By continuing you agree to use Signal Terminal as an analytics tool only. We do not provide betting advice.
+          <p className="text-[11px] text-center text-muted-foreground/70 leading-relaxed max-w-sm mx-auto">
+            Signal Terminal is an analytics product only — not betting or financial advice.
           </p>
         </div>
       </div>

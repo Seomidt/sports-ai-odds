@@ -24,6 +24,8 @@ import {
 } from "lucide-react";
 import { dismissOnboarding, isOnboardingDismissed } from "@/lib/onboarding";
 import { useAuth } from "@/hooks/useAuth";
+import { PageHeader } from "@/components/PageHeader";
+import { cn } from "@/lib/utils";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 const POST_STATUSES = new Set(["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"]);
@@ -76,18 +78,18 @@ function SectionCard({
   footer?: ReactNode;
 }) {
   return (
-    <section className="glass-card rounded-xl border border-white/8 overflow-hidden">
-      <div className="px-4 py-3 border-b border-white/6 flex items-start gap-3">
-        <div className={`p-2 rounded-lg bg-white/5 ${iconClass}`}>
+    <section className="glass-card rounded-2xl overflow-hidden">
+      <div className="px-4 py-3.5 border-b border-white/[0.06] flex items-start gap-3 bg-white/[0.02]">
+        <div className={cn("p-2 rounded-xl bg-white/[0.04] ring-1 ring-white/[0.06]", iconClass)}>
           <Icon className="w-4 h-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-mono font-bold text-white tracking-wide uppercase">{title}</h2>
-          {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
+          <h2 className="text-xs font-semibold text-white tracking-[0.12em] uppercase font-sans">{title}</h2>
+          {subtitle && <p className="text-xs text-muted-foreground mt-1 leading-snug">{subtitle}</p>}
         </div>
       </div>
-      <div className="p-3">{children}</div>
-      {footer && <div className="px-3 pb-3">{footer}</div>}
+      <div className="p-4">{children}</div>
+      {footer && <div className="px-4 pb-4">{footer}</div>}
     </section>
   );
 }
@@ -163,34 +165,31 @@ export function Today() {
 
   return (
     <Layout>
-      <div className="space-y-6 max-w-4xl mx-auto">
-        <header className="space-y-2">
-          <div className="flex items-center gap-2 text-primary">
-            <LayoutDashboard className="w-5 h-5" />
-            <span className="text-xs font-mono font-bold uppercase tracking-widest">Today</span>
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white tracking-tight">
-            What matters right now
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-xl">
-            Live games, what kicks off next, and your best model edges — in one place. Use{" "}
-            <Link href="/matches" className="text-primary/80 hover:text-primary underline underline-offset-2">
-              Matches
-            </Link>{" "}
-            for the full fixture list or{" "}
-            <Link href="/predictions" className="text-primary/80 hover:text-primary underline underline-offset-2">
-              Predictions
-            </Link>{" "}
-            for the complete grid.
-          </p>
-        </header>
+      <div className="space-y-8 max-w-3xl mx-auto">
+        <PageHeader
+          eyebrow="Today"
+          title="What matters right now"
+          description={
+            <>
+              Live games, next kickoffs, and model edges in one calm view.{" "}
+              <Link href="/matches" className="text-primary hover:text-primary/85 underline underline-offset-2 decoration-primary/40">
+                Matches
+              </Link>{" "}
+              ·{" "}
+              <Link href="/predictions" className="text-primary hover:text-primary/85 underline underline-offset-2 decoration-primary/40">
+                Predictions
+              </Link>
+            </>
+          }
+          icon={LayoutDashboard}
+        />
 
         {showOnboarding && (
-          <div className="rounded-xl border border-primary/25 bg-primary/5 p-4 flex gap-3">
+          <div className="rounded-2xl border border-primary/20 bg-primary/[0.06] p-4 flex gap-3 shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.05)]">
             <Sparkles className="w-5 h-5 text-primary shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0 space-y-2">
               <p className="text-sm font-medium text-white">Quick start</p>
-              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+              <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside leading-relaxed">
                 <li>Open a match to see pre-match, live, and post analysis in one screen.</li>
                 <li>Star fixtures you care about — they show up under Watchlist.</li>
                 <li>Check Performance when you want proof the model is behaving.</li>
@@ -201,7 +200,7 @@ export function Today() {
                   dismissOnboarding();
                   setShowOnboarding(false);
                 }}
-                className="text-xs font-mono text-primary hover:underline"
+                className="text-xs font-medium text-primary hover:underline"
               >
                 Got it, hide this
               </button>
@@ -220,7 +219,7 @@ export function Today() {
           </div>
         )}
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-5 md:grid-cols-2">
           <SectionCard
             title="Live now"
             subtitle={liveFixtures.length ? `${liveFixtures.length} match${liveFixtures.length === 1 ? "" : "es"} in play` : "Nothing in play at the moment"}
@@ -240,7 +239,7 @@ export function Today() {
                 {liveFixtures.slice(0, 5).map((f) => (
                   <li key={f.fixtureId}>
                     <Link href={`/match/${f.fixtureId}`}>
-                      <div className="flex items-center justify-between gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5 hover:bg-primary/10 transition-colors cursor-pointer">
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-primary/25 bg-primary/[0.07] px-3 py-2.5 hover:bg-primary/[0.11] transition-colors cursor-pointer">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
@@ -249,7 +248,7 @@ export function Today() {
                             </span>
                           </div>
                           {f.leagueName && (
-                            <div className="text-[10px] font-mono text-muted-foreground truncate mt-0.5 pl-3.5">
+                            <div className="text-[10px] text-muted-foreground truncate mt-0.5 pl-3.5 font-medium">
                               {f.leagueName}
                             </div>
                           )}
@@ -262,7 +261,7 @@ export function Today() {
               </ul>
             )}
             <Link href="/matches">
-              <div className="mt-3 flex items-center justify-center gap-1 text-xs font-mono font-semibold text-primary hover:underline cursor-pointer py-2">
+              <div className="mt-2 flex items-center justify-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer py-2">
                 All matches <ArrowRight className="w-3 h-3" />
               </div>
             </Link>
@@ -285,12 +284,12 @@ export function Today() {
                 {upcoming.map((f) => (
                   <li key={f.fixtureId}>
                     <Link href={`/match/${f.fixtureId}`}>
-                      <div className="flex items-center justify-between gap-2 rounded-lg border border-white/8 bg-white/3 px-3 py-2 hover:bg-white/6 transition-colors cursor-pointer">
+                      <div className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2.5 hover:bg-white/[0.06] transition-colors cursor-pointer">
                         <div className="min-w-0">
                           <div className="text-sm text-white truncate">
                             {f.homeTeamName} <span className="text-white/30">vs</span> {f.awayTeamName}
                           </div>
-                          <div className="text-[10px] font-mono text-muted-foreground mt-0.5">
+                          <div className="text-[10px] text-muted-foreground mt-0.5 font-medium">
                             {kickoffShort(f.kickoff)}
                             {f.leagueName ? ` · ${f.leagueName}` : ""}
                           </div>
@@ -312,7 +311,7 @@ export function Today() {
           iconClass="text-teal-400"
           footer={
             <Link href="/predictions">
-              <div className="flex items-center justify-center gap-1 text-xs font-mono font-semibold text-primary hover:underline cursor-pointer py-2 border-t border-white/6 -mb-1">
+              <div className="flex items-center justify-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer py-2.5 border-t border-white/[0.06] -mb-1">
                 See all predictions <ArrowRight className="w-3 h-3" />
               </div>
             </Link>
@@ -329,10 +328,10 @@ export function Today() {
               {topPicks.map((tip, i) => (
                 <li key={tip.fixtureId}>
                   <Link href={`/match/${tip.fixtureId}`}>
-                    <div className="rounded-lg border border-white/8 bg-white/3 px-3 py-3 hover:bg-white/6 transition-colors cursor-pointer">
+                    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-3 hover:bg-white/[0.06] transition-colors cursor-pointer">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <span className="text-[10px] font-mono text-muted-foreground">#{i + 1}</span>
+                          <span className="text-[10px] text-muted-foreground font-medium tabular-nums">#{i + 1}</span>
                           <div className="text-sm font-semibold text-white truncate">{tip.label}</div>
                           <div className="text-xs text-muted-foreground truncate">
                             {tip.homeTeam} vs {tip.awayTeam}
@@ -340,9 +339,9 @@ export function Today() {
                           </div>
                         </div>
                         <div className="text-right shrink-0">
-                          <div className="text-sm font-mono font-bold text-teal-300">{tip.probability}%</div>
+                          <div className="text-sm font-semibold tabular-nums text-emerald-400">{tip.probability}%</div>
                           {tip.confidence && (
-                            <div className="text-[9px] font-mono text-muted-foreground uppercase">{tip.confidence}</div>
+                            <div className="text-[9px] text-muted-foreground uppercase tracking-wide font-medium">{tip.confidence}</div>
                           )}
                         </div>
                       </div>
@@ -355,15 +354,15 @@ export function Today() {
         </SectionCard>
 
         {summary && (
-          <div className="glass-card rounded-xl border border-white/8 p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+          <div className="glass-card rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-muted-foreground" />
-              <span className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-wider">Yesterday</span>
+              <BarChart3 className="w-4 h-4 text-primary/70" />
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.15em]">Yesterday</span>
             </div>
             <div className="flex-1 text-sm text-muted-foreground">
               {yr && yr.total > 0 ? (
                 <>
-                  <span className="text-white font-mono font-semibold">{yrHitRate ?? "—"}%</span> hit rate on value-rated
+                  <span className="text-white font-semibold tabular-nums">{yrHitRate ?? "—"}%</span> hit rate on value-rated
                   tips ({yr.wins}W · {yr.losses}L
                   {yr.pushes > 0 ? ` · ${yr.pushes}P` : ""}
                   {yr.pending > 0 ? ` · ${yr.pending} pending` : ""}).
@@ -373,7 +372,7 @@ export function Today() {
               )}
             </div>
             <Link href="/performance">
-              <div className="inline-flex items-center gap-1 text-xs font-mono font-semibold text-primary hover:underline cursor-pointer shrink-0">
+              <div className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer shrink-0">
                 Full performance <ChevronRight className="w-3 h-3" />
               </div>
             </Link>
@@ -381,48 +380,48 @@ export function Today() {
         )}
 
         <div>
-          <h3 className="text-xs font-mono font-bold text-muted-foreground uppercase tracking-widest mb-3">More</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          <h3 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-[0.18em] mb-3">More</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Link href="/following">
-              <div className="glass-card rounded-lg border border-white/8 p-3 hover:bg-white/5 transition-colors cursor-pointer h-full">
-                <Star className="w-4 h-4 text-secondary mb-2" />
+              <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/15 transition-all cursor-pointer h-full group">
+                <Star className="w-4 h-4 text-secondary mb-2 opacity-90 group-hover:scale-105 transition-transform" />
                 <div className="text-sm font-medium text-white">Watchlist</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">
+                <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
                   {followCount ? `${followCount} saved` : "Follow fixtures"}
                 </div>
               </div>
             </Link>
             <Link href="/signals">
-              <div className="glass-card rounded-lg border border-white/8 p-3 hover:bg-white/5 transition-colors cursor-pointer h-full">
-                <Zap className="w-4 h-4 text-amber-400 mb-2" />
+              <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/15 transition-all cursor-pointer h-full group">
+                <Zap className="w-4 h-4 text-amber-400 mb-2 group-hover:scale-105 transition-transform" />
                 <div className="text-sm font-medium text-white">Signals</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">Alerts & feed</div>
               </div>
             </Link>
             <Link href="/standings">
-              <div className="glass-card rounded-lg border border-white/8 p-3 hover:bg-white/5 transition-colors cursor-pointer h-full">
-                <Trophy className="w-4 h-4 text-violet-400 mb-2" />
+              <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/15 transition-all cursor-pointer h-full group">
+                <Trophy className="w-4 h-4 text-violet-400 mb-2 group-hover:scale-105 transition-transform" />
                 <div className="text-sm font-medium text-white">Standings</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">Tables</div>
               </div>
             </Link>
             <Link href="/news">
-              <div className="glass-card rounded-lg border border-white/8 p-3 hover:bg-white/5 transition-colors cursor-pointer h-full">
-                <Newspaper className="w-4 h-4 text-muted-foreground mb-2" />
+              <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/15 transition-all cursor-pointer h-full group">
+                <Newspaper className="w-4 h-4 text-muted-foreground mb-2 group-hover:scale-105 transition-transform" />
                 <div className="text-sm font-medium text-white">News</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">Headlines</div>
               </div>
             </Link>
             <Link href="/pre-match">
-              <div className="glass-card rounded-lg border border-white/8 p-3 hover:bg-white/5 transition-colors cursor-pointer h-full">
-                <Calendar className="w-4 h-4 text-amber-400/80 mb-2" />
+              <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/15 transition-all cursor-pointer h-full group">
+                <Calendar className="w-4 h-4 text-amber-400/90 mb-2 group-hover:scale-105 transition-transform" />
                 <div className="text-sm font-medium text-white">Pre-match</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">By day</div>
               </div>
             </Link>
             <Link href="/pricing">
-              <div className="glass-card rounded-lg border border-white/8 p-3 hover:bg-white/5 transition-colors cursor-pointer h-full">
-                <Sparkles className="w-4 h-4 text-primary mb-2" />
+              <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/20 transition-all cursor-pointer h-full group border-primary/10">
+                <Sparkles className="w-4 h-4 text-primary mb-2 group-hover:scale-105 transition-transform" />
                 <div className="text-sm font-medium text-white">Plan</div>
                 <div className="text-[11px] text-muted-foreground mt-0.5">Upgrade</div>
               </div>

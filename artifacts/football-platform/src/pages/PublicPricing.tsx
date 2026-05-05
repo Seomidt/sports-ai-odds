@@ -21,11 +21,7 @@ const FAQ = [
   },
 ];
 
-const freeFeatures = [
-  "Delayed low-confidence tips",
-  "Limited signal feed",
-  "Standings and fixtures",
-];
+const freeFeatures = ["Delayed low-confidence tips", "Limited signal feed", "Standings and fixtures"];
 
 const proFeatures = [
   "Full live tips without delay",
@@ -39,23 +35,24 @@ export function PublicPricing() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   return (
-    <div className="min-h-screen w-full text-white">
-      <header className="border-b border-white/10 bg-black/40 backdrop-blur-xl sticky top-0 z-50">
+    <div className="min-h-screen w-full text-foreground">
+      <header className="border-b border-white/[0.07] bg-background/85 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/">
-            <div className="flex items-center gap-2 cursor-pointer">
-              <img src="/logo.png" alt="" className="w-8 h-8 rounded-lg object-contain" />
-              <span className="font-mono font-bold tracking-tight text-sm">Signal Terminal</span>
+            <div className="flex items-center gap-3 cursor-pointer group">
+              <img src="/logo.png" alt="" className="w-8 h-8 rounded-lg object-contain ring-1 ring-white/10" />
+              <div className="leading-tight">
+                <div className="text-sm font-semibold text-white tracking-tight">Signal Terminal</div>
+                <div className="text-[9px] uppercase tracking-[0.18em] text-muted-foreground">Intelligence</div>
+              </div>
             </div>
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Link href="/login">
-              <span className="text-xs font-mono text-muted-foreground hover:text-white transition-colors cursor-pointer">
-                Sign in
-              </span>
+              <span className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors cursor-pointer">Sign in</span>
             </Link>
             <Link href="/login">
-              <span className="text-xs font-mono px-3 py-1.5 rounded-md bg-primary text-primary-foreground font-bold hover:bg-primary/90 cursor-pointer">
+              <span className="text-xs font-semibold px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:opacity-95 cursor-pointer transition-opacity shadow-[0_0_20px_-4px_hsl(43_72%_54%_/_.4)]">
                 Start trial
               </span>
             </Link>
@@ -63,77 +60,78 @@ export function PublicPricing() {
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 py-12 space-y-12">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl md:text-4xl font-mono font-black tracking-tight uppercase text-white">Pricing</h1>
-          <p className="text-sm text-muted-foreground font-mono max-w-lg mx-auto">
-            Simple plans. Upgrade after you sign in — start with a trial from the login page.
+      <main className="max-w-4xl mx-auto px-4 py-14 space-y-14">
+        <div className="text-center space-y-3 max-w-xl mx-auto">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-primary/90">Plans</p>
+          <h1 className="text-3xl md:text-4xl font-semibold text-white tracking-tight">Simple pricing</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Upgrade after you sign in. Start with a trial from the login page.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="rounded-xl border border-white/10 bg-white/3 p-6 space-y-5">
+        <div className="grid md:grid-cols-2 gap-5">
+          <div className="glass-card rounded-2xl p-7 space-y-6">
             <div>
-              <h3 className="text-xl font-mono font-bold text-white mb-1">Free</h3>
-              <div className="text-3xl font-mono font-black text-white">
-                0 kr<span className="text-sm text-white/40 font-normal">/mo</span>
+              <h3 className="text-lg font-semibold text-white mb-1">Free</h3>
+              <div className="text-3xl font-semibold text-white tabular-nums">
+                0 kr<span className="text-sm text-muted-foreground font-normal">/mo</span>
               </div>
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {freeFeatures.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[13px] text-white/70 font-mono">
-                  <Check className="w-4 h-4 text-white/30 mt-0.5 shrink-0" />
+                <li key={f} className="flex items-start gap-2.5 text-sm text-muted-foreground">
+                  <Check className="w-4 h-4 text-white/25 mt-0.5 shrink-0" />
                   <span>{f}</span>
                 </li>
               ))}
             </ul>
             <Link href="/login">
-              <div className="block w-full text-center py-2.5 rounded-md border border-white/15 text-[12px] font-mono font-bold uppercase tracking-wider hover:bg-white/5 cursor-pointer transition-colors">
+              <div className="block w-full text-center py-3 rounded-xl border border-white/12 text-xs font-semibold uppercase tracking-[0.12em] hover:bg-white/[0.04] cursor-pointer transition-colors">
                 Sign in to continue
               </div>
             </Link>
           </div>
 
-          <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 space-y-5 relative">
-            <span className="absolute -top-3 left-6 px-2 py-0.5 rounded bg-primary text-background text-[10px] font-mono font-bold uppercase tracking-wider">
+          <div className="glass-card rounded-2xl p-7 space-y-6 relative ring-1 ring-primary/25 shadow-[0_0_40px_-12px_hsl(43_72%_54%_/_.35)]">
+            <span className="absolute -top-2.5 left-6 px-2.5 py-0.5 rounded-md bg-primary text-primary-foreground text-[10px] font-bold uppercase tracking-wider">
               Recommended
             </span>
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Zap className="w-5 h-5 text-primary" />
-                <h3 className="text-xl font-mono font-bold text-white">Pro</h3>
+                <h3 className="text-lg font-semibold text-white">Pro</h3>
               </div>
-              <div className="text-3xl font-mono font-black text-primary">
-                149 kr<span className="text-sm text-white/40 font-normal">/mo</span>
+              <div className="text-3xl font-semibold text-primary tabular-nums">
+                149 kr<span className="text-sm text-muted-foreground font-normal">/mo</span>
               </div>
             </div>
-            <ul className="space-y-2">
+            <ul className="space-y-3">
               {proFeatures.map((f) => (
-                <li key={f} className="flex items-start gap-2 text-[13px] text-white/85 font-mono">
+                <li key={f} className="flex items-start gap-2.5 text-sm text-foreground/90">
                   <Check className="w-4 h-4 text-primary mt-0.5 shrink-0" />
                   <span>{f}</span>
                 </li>
               ))}
             </ul>
             <Link href="/login">
-              <div className="flex w-full items-center justify-center gap-1.5 px-4 py-2.5 rounded-md bg-primary text-background text-[12px] font-mono font-bold uppercase tracking-wider hover:bg-primary/90 cursor-pointer transition-colors">
-                Sign in to upgrade <ArrowRight className="w-3 h-3" />
+              <div className="flex w-full items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground text-xs font-bold uppercase tracking-[0.12em] hover:opacity-95 cursor-pointer transition-opacity">
+                Sign in to upgrade <ArrowRight className="w-3.5 h-3.5" />
               </div>
             </Link>
           </div>
         </div>
 
-        <div className="space-y-3">
-          <h2 className="text-xs font-mono font-bold text-primary uppercase tracking-widest">FAQ</h2>
-          <div className="rounded-xl border border-white/10 divide-y divide-white/10 overflow-hidden">
+        <div className="space-y-4">
+          <h2 className="text-[11px] font-semibold text-primary uppercase tracking-[0.2em]">FAQ</h2>
+          <div className="glass-card rounded-2xl divide-y divide-white/[0.06] overflow-hidden">
             {FAQ.map((item, i) => {
               const open = openFaq === i;
               return (
-                <div key={item.q} className="bg-white/[0.02]">
+                <div key={item.q}>
                   <button
                     type="button"
                     onClick={() => setOpenFaq(open ? null : i)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/5 transition-colors"
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-white/[0.03] transition-colors"
                   >
                     <span className="text-sm font-medium text-white">{item.q}</span>
                     {open ? (
@@ -143,7 +141,7 @@ export function PublicPricing() {
                     )}
                   </button>
                   {open && (
-                    <div className="px-4 pb-3 text-sm text-muted-foreground leading-relaxed border-t border-white/5">
+                    <div className="px-4 pb-4 text-sm text-muted-foreground leading-relaxed border-t border-white/[0.05] pt-3">
                       {item.a}
                     </div>
                   )}
@@ -153,9 +151,7 @@ export function PublicPricing() {
           </div>
         </div>
 
-        <p className="text-center text-[11px] font-mono text-white/30">
-          Payments processed securely via Stripe when billing is enabled.
-        </p>
+        <p className="text-center text-[11px] text-muted-foreground/60">Payments processed securely via Stripe when billing is enabled.</p>
       </main>
     </div>
   );

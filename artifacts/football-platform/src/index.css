@@ -49,95 +49,87 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/* Premium “Signal Terminal” — deep slate + gold accent */
 :root {
-  --background: 213 53% 11%;
-  --foreground: 210 40% 98%;
+  --background: 222 47% 6%;
+  --foreground: 210 25% 96%;
 
-  --border: 215 30% 20%;
-  --input: 215 30% 20%;
-  --ring: 180 100% 40%;
+  --border: 220 20% 16%;
+  --input: 220 20% 14%;
+  --ring: 43 74% 52%;
 
-  --card: 213 50% 12%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 215 30% 20%;
+  --card: 222 40% 9%;
+  --card-foreground: 210 25% 96%;
+  --card-border: 220 18% 14%;
 
-  --popover: 213 50% 12%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 215 30% 20%;
+  --popover: 222 42% 10%;
+  --popover-foreground: 210 25% 96%;
+  --popover-border: 220 18% 16%;
 
-  --primary: 180 100% 40%;
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 45 100% 50%;
-  --secondary-foreground: 210 40% 98%;
+  --primary: 43 72% 54%;
+  --primary-foreground: 222 47% 8%;
 
-  --muted: 215 30% 20%;
-  --muted-foreground: 215 20% 65%;
+  --secondary: 265 55% 58%;
+  --secondary-foreground: 210 25% 98%;
 
-  --accent: 215 30% 20%;
-  --accent-foreground: 210 40% 98%;
+  --muted: 220 18% 14%;
+  --muted-foreground: 215 14% 58%;
 
-  --destructive: 0 84% 60%;
+  --accent: 220 22% 12%;
+  --accent-foreground: 210 25% 96%;
+
+  --destructive: 0 72% 52%;
   --destructive-foreground: 210 40% 98%;
 
-  --sidebar: 225 50% 8%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 215 30% 20%;
-  --sidebar-primary: 180 100% 40%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 215 30% 20%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 180 100% 40%;
+  --sidebar: 222 44% 7%;
+  --sidebar-foreground: 210 25% 96%;
+  --sidebar-border: 220 18% 12%;
+  --sidebar-primary: 43 72% 54%;
+  --sidebar-primary-foreground: 222 47% 8%;
+  --sidebar-accent: 220 20% 12%;
+  --sidebar-accent-foreground: 210 25% 96%;
+  --sidebar-ring: 43 74% 52%;
 
-  --app-font-sans: 'Inter', sans-serif;
+  --app-font-sans: "DM Sans", system-ui, sans-serif;
   --app-font-serif: Georgia, serif;
-  --app-font-mono: Menlo, monospace;
-  --radius: .5rem; 
+  --app-font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --radius: 0.625rem;
 
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(255,255,255, .03);
-  --elevate-2: rgba(255,255,255, .08);
+  --elevate-1: rgba(255, 255, 255, 0.035);
+  --elevate-2: rgba(255, 255, 255, 0.07);
 }
 
 .dark {
-  --background: 213 53% 11%;
-  --foreground: 210 40% 98%;
-
-  --border: 215 30% 20%;
-  --input: 215 30% 20%;
-  --ring: 180 100% 40%;
-
-  --card: 213 50% 12%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 215 30% 20%;
-
-  --popover: 213 50% 12%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 215 30% 20%;
-
-  --primary: 180 100% 40%;
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 45 100% 50%;
-  --secondary-foreground: 210 40% 98%;
-
-  --muted: 215 30% 20%;
-  --muted-foreground: 215 20% 65%;
-
-  --accent: 215 30% 20%;
-  --accent-foreground: 210 40% 98%;
-
-  --destructive: 0 84% 60%;
+  --background: 222 47% 6%;
+  --foreground: 210 25% 96%;
+  --border: 220 20% 16%;
+  --input: 220 20% 14%;
+  --ring: 43 74% 52%;
+  --card: 222 40% 9%;
+  --card-foreground: 210 25% 96%;
+  --card-border: 220 18% 14%;
+  --popover: 222 42% 10%;
+  --popover-foreground: 210 25% 96%;
+  --popover-border: 220 18% 16%;
+  --primary: 43 72% 54%;
+  --primary-foreground: 222 47% 8%;
+  --secondary: 265 55% 58%;
+  --secondary-foreground: 210 25% 98%;
+  --muted: 220 18% 14%;
+  --muted-foreground: 215 14% 58%;
+  --accent: 220 22% 12%;
+  --accent-foreground: 210 25% 96%;
+  --destructive: 0 72% 52%;
   --destructive-foreground: 210 40% 98%;
-
-  --sidebar: 225 50% 8%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 215 30% 20%;
-  --sidebar-primary: 180 100% 40%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 215 30% 20%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 180 100% 40%;
+  --sidebar: 222 44% 7%;
+  --sidebar-foreground: 210 25% 96%;
+  --sidebar-border: 220 18% 12%;
+  --sidebar-primary: 43 72% 54%;
+  --sidebar-primary-foreground: 222 47% 8%;
+  --sidebar-accent: 220 20% 12%;
+  --sidebar-accent-foreground: 210 25% 96%;
+  --sidebar-ring: 43 74% 52%;
 }
 
 @layer base {
@@ -147,33 +139,47 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
-    background: linear-gradient(to bottom right, #0a0f1e, #0d1a2a, #0a1520);
+    background-color: hsl(222 47% 6%);
+    background-image:
+      radial-gradient(ellipse 120% 80% at 50% -30%, hsl(43 50% 20% / 0.18), transparent 55%),
+      radial-gradient(ellipse 70% 50% at 100% 0%, hsl(265 40% 25% / 0.12), transparent 45%),
+      linear-gradient(180deg, hsl(222 47% 7%) 0%, hsl(222 47% 5%) 100%);
     background-attachment: fixed;
   }
 }
 
+/* Surfaces — subtle lift, no heavy glass blur */
 .glass-card {
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: linear-gradient(145deg, hsl(222 38% 11% / 0.92), hsl(222 40% 8% / 0.88));
+  border: 1px solid hsl(220 16% 18% / 0.95);
+  box-shadow:
+    0 1px 0 0 hsl(0 0% 100% / 0.04) inset,
+    0 12px 40px -20px hsl(0 0% 0% / 0.55);
 }
 
-/* ─── API-Sports Widget: Signal Terminal theme ────────────────────────────── */
+/* Optional: tighter premium panel */
+.surface-panel {
+  background: hsl(222 40% 9% / 0.85);
+  border: 1px solid hsl(220 16% 16%);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 32px -16px hsl(0 0% 0% / 0.5);
+}
+
+/* ─── API-Sports Widget: match app gold accent ───────────────────────────── */
 api-sports-widget[data-theme="SignalTerminal"] {
-  --primary-color: #18cfc0;
-  --success-color: #18cfc0;
+  --primary-color: #d4a843;
+  --success-color: #34d399;
   --warning-color: #f59e0b;
   --danger-color: #ef4444;
-  --light-color: #64748b;
+  --light-color: #94a3b8;
 
   --home-color: var(--primary-color);
-  --away-color: #f59e0b;
+  --away-color: #a78bfa;
 
-  --text-color: #e2e8f0;
+  --text-color: #e8eaef;
   --text-color-info: #94a3b8;
 
-  --background-color: rgba(255, 255, 255, 0.03);
+  --background-color: rgba(255, 255, 255, 0.04);
 
   --primary-font-size: 0.72rem;
   --secondary-font-size: 0.73rem;
@@ -184,7 +190,7 @@ api-sports-widget[data-theme="SignalTerminal"] {
   --button-text-transform: uppercase;
   --title-text-transform: uppercase;
 
-  --border: 1px solid rgba(255, 255, 255, 0.07);
+  --border: 1px solid rgba(255, 255, 255, 0.08);
   --game-height: 2.4rem;
   --league-height: 2.4rem;
 
@@ -192,17 +198,19 @@ api-sports-widget[data-theme="SignalTerminal"] {
   --flag-size: 18px;
   --teams-logo-size: 18px;
   --teams-logo-size-xl: 4rem;
-  --hover: rgba(255, 255, 255, 0.04);
+  --hover: rgba(255, 255, 255, 0.05);
 }
 
-/* Blend widget into our dark glassmorphism background */
 api-sports-widget {
   display: block;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--app-font-sans), system-ui, sans-serif;
 }
 
-/* ─── League ticker scroll animation ─────────────────────────────────────── */
 @keyframes scroll {
-  0%   { transform: translateX(0); }
-  100% { transform: translateX(-50%); }
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
 }

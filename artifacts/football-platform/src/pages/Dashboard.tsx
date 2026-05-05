@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
+import { PageHeader } from "@/components/PageHeader";
 import { PaywallOverlay } from "@/components/PaywallOverlay";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { supabase } from "@/lib/supabase";
@@ -910,40 +911,41 @@ export function Dashboard() {
   return (
     <Layout>
       <div className="space-y-8">
-        <header className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <Target className="w-5 h-5 text-primary" />
-              <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PREDICTIONS</h1>
-            </div>
-            <p className="text-muted-foreground text-sm">
-              Mixed markets (1X2, goals, BTTS, double chance) from API-Football — not only 1X/X2. Open a match for every derived line. For a shorter list, see{" "}
-              <Link href="/today" className="text-primary/80 hover:text-primary underline underline-offset-2 text-xs font-mono">
+        <PageHeader
+          eyebrow="Predictions"
+          title="Full prediction grid"
+          description={
+            <>
+              Mixed markets (1X2, goals, BTTS, double chance) from API-Football. For a shorter list, see{" "}
+              <Link href="/today" className="text-primary hover:text-primary/90 underline underline-offset-2 decoration-primary/35">
                 Today
               </Link>
-              .{" "}
-              <Link href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">
-                Performance →
+              . Track outcomes in{" "}
+              <Link href="/performance" className="text-primary hover:text-primary/90 underline underline-offset-2 decoration-primary/35">
+                Performance
               </Link>
-            </p>
-          </div>
-          <div className="shrink-0 flex items-center gap-4">
+              .
+            </>
+          }
+          icon={Target}
+        >
+          <div className="shrink-0 flex items-center gap-5">
             {accData && accData.reviewed > 0 && (
               <div className="text-right">
-                <div className={`text-lg font-bold font-mono tabular-nums ${(accData.hitRate ?? 0) >= 55 ? 'text-teal-400' : 'text-amber-400'}`}>
-                  {accData.hitRate ?? '—'}%
+                <div className={`text-xl font-semibold tabular-nums ${(accData.hitRate ?? 0) >= 55 ? "text-emerald-400" : "text-amber-400"}`}>
+                  {accData.hitRate ?? "—"}%
                 </div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">hit rate</div>
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-[0.12em]">Hit rate</div>
               </div>
             )}
             {!isLoading && tips.length > 0 && (
-              <div className="text-right">
-                <div className="text-lg font-bold font-mono text-white tabular-nums">{uniqueFixtureCount}</div>
-                <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">fixtures</div>
+              <div className="text-right pl-5 border-l border-white/[0.08]">
+                <div className="text-xl font-semibold text-white tabular-nums">{uniqueFixtureCount}</div>
+                <div className="text-[10px] font-medium text-muted-foreground uppercase tracking-[0.12em]">Fixtures</div>
               </div>
             )}
           </div>
-        </header>
+        </PageHeader>
 
         {/* 90-day performance (Fase 1.7) */}
         <PerformancePanel />
@@ -959,7 +961,7 @@ export function Dashboard() {
             <Activity className="w-8 h-8 text-primary animate-pulse" />
           </div>
         ) : tips.length === 0 ? (
-          <div className="glass-card p-16 text-center rounded-xl flex flex-col items-center">
+          <div className="glass-card p-16 text-center rounded-2xl flex flex-col items-center">
             <Target className="w-12 h-12 text-muted-foreground mb-4 opacity-25" />
             <h3 className="text-lg font-medium text-white mb-1">Ingen predictions tilgængelige</h3>
             <p className="text-muted-foreground text-sm">
@@ -969,9 +971,9 @@ export function Dashboard() {
         ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <Zap className="w-4 h-4 text-teal-400" />
-              <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">Predictions</h2>
-              <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">
+              <Zap className="w-4 h-4 text-emerald-400" />
+              <h2 className="text-xs font-semibold text-emerald-400/95 tracking-[0.15em] uppercase">All picks</h2>
+              <span className="text-[11px] text-muted-foreground/70 ml-auto tabular-nums font-medium">
                 {tips.length} picks · {uniqueFixtureCount} fixtures
               </span>
             </div>

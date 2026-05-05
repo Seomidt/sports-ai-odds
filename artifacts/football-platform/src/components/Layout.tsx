@@ -25,8 +25,11 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { TopSignalBanner } from "./TopSignalBanner";
 import { NotificationBell } from "./NotificationBell";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 const appLogo = "/logo.png";
+const BRAND = "Signal Terminal";
+const BRAND_TAG = "Intelligence";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -64,98 +67,115 @@ export function Layout({ children }: { children: React.ReactNode }) {
     return (
       <Link key={item.href} href={item.href}>
         <div
-          className={`flex items-center px-4 py-3 text-sm font-medium rounded-md cursor-pointer transition-colors ${
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg cursor-pointer transition-all duration-200",
             isActive
-              ? "bg-primary/10 text-primary border border-primary/20"
-              : "text-muted-foreground hover:bg-white/5 hover:text-white"
-          }`}
+              ? "bg-primary/12 text-primary border border-primary/25 shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)]"
+              : "text-muted-foreground border border-transparent hover:bg-white/[0.04] hover:text-foreground",
+          )}
         >
-          <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-          {item.label}
+          <item.icon className={cn("w-[18px] h-[18px] shrink-0", isActive ? "text-primary" : "opacity-70")} />
+          <span className="truncate">{item.label}</span>
         </div>
       </Link>
     );
   };
 
+  const BrandBlock = ({ compact = false }: { compact?: boolean }) => (
+    <Link href="/today">
+      <div
+        className={cn(
+          "flex items-center gap-3 cursor-pointer rounded-lg transition-colors hover:bg-white/[0.03]",
+          compact ? "px-2 py-2" : "px-3 py-2.5 -mx-1",
+        )}
+      >
+        <div className="relative shrink-0">
+          <img src={appLogo} alt="" className={cn("rounded-lg object-contain ring-1 ring-white/10", compact ? "w-7 h-7" : "w-9 h-9")} />
+          <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary shadow-[0_0_8px_hsl(43_72%_54%_/_.5)]" aria-hidden />
+        </div>
+        <div className="min-w-0 text-left">
+          <div className={cn("font-semibold text-white tracking-tight truncate font-sans", compact ? "text-sm" : "text-[15px]")}>
+            {BRAND}
+          </div>
+          <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground font-medium">{BRAND_TAG}</div>
+        </div>
+      </div>
+    </Link>
+  );
+
   return (
     <div className="flex md:h-[100dvh] w-full md:overflow-hidden text-foreground">
+      <aside className="hidden md:flex w-[260px] flex-shrink-0 flex-col border-r border-white/[0.07] bg-[hsl(222_44%_6%_/_.97)] backdrop-blur-xl">
+        <div className="h-[4.5rem] flex items-center px-4 border-b border-white/[0.06]">
+          <BrandBlock />
+        </div>
 
-      <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
-        <Link href="/today">
-          <div className="h-16 flex items-center px-6 border-b border-white/5 hover:bg-white/3 transition-colors cursor-pointer">
-            <img src={appLogo} alt="sports-ai-odds" className="w-8 h-8 mr-3 rounded-lg object-contain" />
-            <span className="font-mono font-bold tracking-tight text-lg">sports-ai-odds</span>
-          </div>
-        </Link>
-
-        <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
+        <nav className="flex-1 py-5 px-3 space-y-6 overflow-y-auto">
           <div className="space-y-1">
-            <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Start here</p>
+            <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/55">Start</p>
             {primaryNav.map(renderNavLink)}
           </div>
           <div className="space-y-1">
-            <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Explore</p>
+            <p className="px-3 mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/55">Explore</p>
             {secondaryNav.map(renderNavLink)}
           </div>
           {adminNav.length > 0 && (
-            <div className="space-y-1 pt-2 border-t border-white/5">
+            <div className="space-y-1 pt-2 border-t border-white/[0.06]">
               {adminNav.map(renderNavLink)}
             </div>
           )}
         </nav>
 
-        <div className="p-4 border-t border-white/5">
-          <div className="flex items-center mb-4 px-2">
-            <div className="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary border border-secondary/30">
-              <User className="w-4 h-4" />
+        <div className="p-3 border-t border-white/[0.06]">
+          <div className="glass-card rounded-lg p-3 mb-2">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary border border-primary/20 shrink-0">
+                <User className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-white truncate">{user?.email}</p>
+                <p className="text-[10px] text-muted-foreground capitalize tracking-wide">{me?.role || "Member"}</p>
+              </div>
+              <NotificationBell />
             </div>
-            <div className="ml-3 overflow-hidden flex-1">
-              <p className="text-sm font-medium text-white truncate">{user?.email}</p>
-              <p className="text-xs text-muted-foreground capitalize">{me?.role || "User"}</p>
-            </div>
-            <NotificationBell />
           </div>
           <button
+            type="button"
             onClick={() => signOut()}
-            className="w-full flex items-center px-4 py-2 text-sm font-medium rounded-md text-muted-foreground hover:bg-white/5 hover:text-white transition-colors"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-xs font-medium rounded-lg text-muted-foreground hover:text-foreground hover:bg-white/[0.04] border border-transparent hover:border-white/10 transition-all"
           >
-            <LogOut className="w-4 h-4 mr-3" />
-            Sign Out
+            <LogOut className="w-3.5 h-3.5" />
+            Sign out
           </button>
         </div>
       </aside>
 
       {mobileMenuOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
-          <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <aside className="relative w-72 bg-[#0a0f1e] border-r border-white/5 flex flex-col z-10">
-            <div className="h-16 flex items-center justify-between px-5 border-b border-white/5">
-              <div className="flex items-center gap-3">
-                <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
-                <span className="font-mono font-bold tracking-tight">sports-ai-odds</span>
-              </div>
-              <button onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-white">
+          <div className="absolute inset-0 bg-black/65 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
+          <aside className="relative w-[min(88vw,300px)] bg-[hsl(222_44%_7%)] border-r border-white/10 flex flex-col z-10 shadow-2xl">
+            <div className="h-14 flex items-center justify-between px-4 border-b border-white/[0.06]">
+              <BrandBlock compact />
+              <button type="button" onClick={() => setMobileMenuOpen(false)} className="text-muted-foreground hover:text-white p-1 rounded-md">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="flex-1 py-4 px-3 space-y-4 overflow-y-auto">
+            <nav className="flex-1 py-4 px-3 space-y-5 overflow-y-auto">
               <div className="space-y-1">
-                <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Start here</p>
+                <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/55">Start</p>
                 {primaryNav.map((item) => {
                   const isActive = location === item.href || location.startsWith(`${item.href}/`);
                   return (
                     <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
                       <div
-                        className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg",
                           isActive
-                            ? "bg-primary/10 text-primary border border-primary/20"
-                            : "text-muted-foreground hover:bg-white/5 hover:text-white"
-                        }`}
+                            ? "bg-primary/12 text-primary border border-primary/25"
+                            : "text-muted-foreground border border-transparent hover:bg-white/[0.04]",
+                        )}
                       >
-                        <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                        <item.icon className="w-5 h-5 shrink-0" />
                         {item.label}
                       </div>
                     </Link>
@@ -163,19 +183,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 })}
               </div>
               <div className="space-y-1">
-                <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Explore</p>
+                <p className="px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted-foreground/55">Explore</p>
                 {secondaryNav.map((item) => {
                   const isActive = location === item.href || location.startsWith(`${item.href}/`);
                   return (
                     <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
                       <div
-                        className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                        className={cn(
+                          "flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg",
                           isActive
-                            ? "bg-primary/10 text-primary border border-primary/20"
-                            : "text-muted-foreground hover:bg-white/5 hover:text-white"
-                        }`}
+                            ? "bg-primary/12 text-primary border border-primary/25"
+                            : "text-muted-foreground border border-transparent hover:bg-white/[0.04]",
+                        )}
                       >
-                        <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                        <item.icon className="w-5 h-5 shrink-0" />
                         {item.label}
                       </div>
                     </Link>
@@ -183,19 +204,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 })}
               </div>
               {adminNav.length > 0 && (
-                <div className="space-y-1 pt-2 border-t border-white/5">
+                <div className="space-y-1 pt-2 border-t border-white/[0.06]">
                   {adminNav.map((item) => {
                     const isActive = location === item.href || location.startsWith(`${item.href}/`);
                     return (
                       <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
                         <div
-                          className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-3 text-sm font-medium rounded-lg",
                             isActive
-                              ? "bg-primary/10 text-primary border border-primary/20"
-                              : "text-muted-foreground hover:bg-white/5 hover:text-white"
-                          }`}
+                              ? "bg-primary/12 text-primary border border-primary/25"
+                              : "text-muted-foreground border border-transparent hover:bg-white/[0.04]",
+                          )}
                         >
-                          <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                          <item.icon className="w-5 h-5 shrink-0" />
                           {item.label}
                         </div>
                       </Link>
@@ -204,22 +226,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </nav>
-            <div className="p-4 border-t border-white/5">
-              <div className="flex items-center mb-4 px-2">
-                <div className="w-9 h-9 rounded-full bg-secondary/20 flex items-center justify-center text-secondary border border-secondary/30">
+            <div className="p-4 border-t border-white/[0.06]">
+              <div className="flex items-center gap-3 mb-3 px-1">
+                <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary border border-primary/20">
                   <User className="w-4 h-4" />
                 </div>
-                <div className="ml-3 overflow-hidden">
-                  <p className="text-sm font-medium text-white truncate">{user?.email}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{me?.role || "User"}</p>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium text-white truncate">{user?.email}</p>
+                  <p className="text-[10px] text-muted-foreground capitalize">{me?.role || "Member"}</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => signOut()}
-                className="w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-lg text-muted-foreground hover:bg-white/5 hover:text-white transition-colors"
+                className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm rounded-lg text-muted-foreground hover:bg-white/[0.04] hover:text-white"
               >
-                <LogOut className="w-4 h-4 mr-3" />
-                Sign Out
+                <LogOut className="w-4 h-4" />
+                Sign out
               </button>
             </div>
           </aside>
@@ -227,19 +250,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}
 
       <div className="flex-1 flex flex-col min-w-0 md:overflow-hidden">
-        <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
-          <Link href="/today">
-            <div className="flex items-center gap-2 cursor-pointer">
-              <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
-              <span className="font-mono font-bold text-sm tracking-tight">sports-ai-odds</span>
-            </div>
-          </Link>
-          <div className="flex items-center gap-2">
+        <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 h-14 border-b border-white/[0.07] bg-[hsl(222_47%_6%_/_.92)] backdrop-blur-xl shrink-0">
+          <BrandBlock compact />
+          <div className="flex items-center gap-1">
             <NotificationBell />
-            <button
-              onClick={() => setMobileMenuOpen(true)}
-              className="text-muted-foreground hover:text-white p-1"
-            >
+            <button type="button" onClick={() => setMobileMenuOpen(true)} className="text-muted-foreground hover:text-white p-2 rounded-lg hover:bg-white/[0.05]">
               <Menu className="w-5 h-5" />
             </button>
           </div>
@@ -247,9 +262,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
         <TopSignalBanner />
         <main className="md:flex-1 md:min-h-0 md:overflow-y-auto">
-          <div className="p-4 md:p-8 max-w-7xl mx-auto pb-16 md:pb-8">
-            {children}
-          </div>
+          <div className="px-4 py-6 md:px-10 md:py-9 max-w-6xl mx-auto pb-24 md:pb-10">{children}</div>
         </main>
       </div>
     </div>

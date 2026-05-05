@@ -113,17 +113,21 @@ export function Match() {
   return (
     <Layout>
       <div className="space-y-6">
-        <div className="flex items-center gap-4 text-sm text-muted-foreground font-mono mb-4">
-          <button onClick={handleBack} className="flex items-center hover:text-white transition-colors cursor-pointer">
-            <ChevronLeft className="w-4 h-4 mr-1" />
-            RETURN
+        <div className="flex items-center gap-3 text-sm text-muted-foreground mb-2">
+          <button
+            type="button"
+            onClick={handleBack}
+            className="flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-primary transition-colors cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back
           </button>
-          <span>/</span>
-          <span>{fixture.leagueName}</span>
+          <span className="text-white/15">·</span>
+          <span className="truncate text-xs font-medium text-muted-foreground/90">{fixture.leagueName}</span>
         </div>
 
         {/* Header Card */}
-        <div className="glass-card rounded-xl p-8 relative overflow-hidden border-t-2 border-t-primary/50">
+        <div className="glass-card rounded-2xl p-6 md:p-8 relative overflow-hidden ring-1 ring-primary/20 shadow-[0_0_0_1px_hsl(43_72%_54%_/_.12)_inset]">
           <div className="absolute top-0 right-0 p-4">
             <button 
               onClick={toggleFollow}
@@ -141,14 +145,14 @@ export function Match() {
                   <span className="text-sm font-bold tracking-widest">LIVE {fixture.statusElapsed}'</span>
                 </div>
               ) : (
-                <div className={`px-3 py-1 rounded border font-mono ${
-                  isPostponed || isCancelled
-                    ? "bg-amber-400/10 border-amber-400/30 text-amber-400"
-                    : "bg-white/5 border-white/10 text-muted-foreground"
-                }`}>
-                  <span className="text-sm font-bold tracking-widest">
-                    {STATUS_LABEL[fixture.statusShort ?? ""] ?? fixture.statusShort ?? "NS"}
-                  </span>
+                <div
+                  className={`px-3 py-1.5 rounded-lg border text-sm font-semibold tracking-wide ${
+                    isPostponed || isCancelled
+                      ? "bg-amber-400/10 border-amber-400/30 text-amber-400"
+                      : "bg-white/[0.04] border-white/10 text-muted-foreground"
+                  }`}
+                >
+                  {STATUS_LABEL[fixture.statusShort ?? ""] ?? fixture.statusShort ?? "NS"}
                 </div>
               )}
               {fixture.weatherDesc ? (
@@ -168,13 +172,13 @@ export function Match() {
               </div>
               
               <div className="flex flex-col items-center justify-center w-1/3">
-                <div className="flex items-center justify-center gap-2 text-5xl md:text-7xl font-mono font-bold text-white tracking-tighter whitespace-nowrap">
+                <div className="flex items-center justify-center gap-2 text-5xl md:text-7xl font-semibold text-white tabular-nums tracking-tight whitespace-nowrap">
                   <span>{fixture.homeGoals ?? '-'}</span>
                   <span className="text-white/20">:</span>
                   <span>{fixture.awayGoals ?? '-'}</span>
                 </div>
                 {fixture.kickoff && !isLive && fixture.statusShort === 'NS' && (
-                  <span className="mt-4 text-muted-foreground font-mono">{format(new Date(fixture.kickoff), 'MMM dd, HH:mm')}</span>
+                  <span className="mt-4 text-muted-foreground text-sm tabular-nums">{format(new Date(fixture.kickoff), "MMM dd, HH:mm")}</span>
                 )}
               </div>
 
@@ -189,13 +193,43 @@ export function Match() {
         {/* Tabs section for Analysis + Odds */}
         <div className="mt-8">
           <Tabs defaultValue={isLive ? "live" : (fixture.statusShort === "FT" || fixture.statusShort === "AET" || fixture.statusShort === "PEN") ? "post" : "pre"} className="w-full">
-            <TabsList className="bg-black/40 border border-white/10 p-1 flex-wrap h-auto gap-1">
-              <TabsTrigger value="pre" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">PRE-MATCH</TabsTrigger>
-              <TabsTrigger value="live" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">IN-PLAY</TabsTrigger>
-              <TabsTrigger value="post" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">POST-MATCH</TabsTrigger>
-              <TabsTrigger value="odds" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">ODDS</TabsTrigger>
-              <TabsTrigger value="h2h" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary font-mono text-xs tracking-wider uppercase">H2H</TabsTrigger>
-              <TabsTrigger value="intel" className="data-[state=active]:bg-violet-400/20 data-[state=active]:text-violet-300 font-mono text-xs tracking-wider uppercase">INTEL</TabsTrigger>
+            <TabsList className="bg-white/[0.03] border border-white/[0.08] p-1.5 flex-wrap h-auto gap-1 rounded-xl">
+              <TabsTrigger
+                value="pre"
+                className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)] text-xs font-semibold tracking-[0.1em] uppercase rounded-lg px-3 py-2"
+              >
+                Pre-match
+              </TabsTrigger>
+              <TabsTrigger
+                value="live"
+                className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)] text-xs font-semibold tracking-[0.1em] uppercase rounded-lg px-3 py-2"
+              >
+                In-play
+              </TabsTrigger>
+              <TabsTrigger
+                value="post"
+                className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)] text-xs font-semibold tracking-[0.1em] uppercase rounded-lg px-3 py-2"
+              >
+                Post-match
+              </TabsTrigger>
+              <TabsTrigger
+                value="odds"
+                className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)] text-xs font-semibold tracking-[0.1em] uppercase rounded-lg px-3 py-2"
+              >
+                Odds
+              </TabsTrigger>
+              <TabsTrigger
+                value="h2h"
+                className="data-[state=active]:bg-primary/15 data-[state=active]:text-primary data-[state=active]:shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)] text-xs font-semibold tracking-[0.1em] uppercase rounded-lg px-3 py-2"
+              >
+                H2H
+              </TabsTrigger>
+              <TabsTrigger
+                value="intel"
+                className="data-[state=active]:bg-secondary/18 data-[state=active]:text-violet-200 data-[state=active]:shadow-[inset_0_1px_0_0_hsl(0_0%_100%_/_.06)] text-xs font-semibold tracking-[0.1em] uppercase rounded-lg px-3 py-2"
+              >
+                Intel
+              </TabsTrigger>
             </TabsList>
             
             <TabsContent value="pre" className="mt-4">

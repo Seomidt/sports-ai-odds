@@ -212,36 +212,37 @@ export function Home() {
               <img src="/logo.png" alt="Signal Terminal" className="w-12 h-12 object-contain" />
             </div>
 
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-primary text-xs font-mono tracking-widest mb-6">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/25 bg-primary/[0.08] text-primary text-[11px] font-semibold uppercase tracking-[0.2em] mb-6">
               <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-              LIVE — {LEAGUES.length} LEAGUES IN PLAY
+              Live · {LEAGUES.length} leagues
             </div>
 
-            <h1 className="text-5xl md:text-6xl font-bold tracking-tighter mb-5 font-mono leading-none">
-              SIGNAL<br /><span className="text-primary">TERMINAL</span>
+            <h1 className="text-5xl md:text-6xl font-semibold tracking-tight mb-5 font-sans leading-[1.05] text-white">
+              Signal<br />
+              <span className="text-primary">Terminal</span>
             </h1>
 
             <p className="text-lg text-muted-foreground mb-3 leading-relaxed max-w-lg">
               Clear daily football intelligence: what is live, what is next, and where the model sees edge — with full transparency on every tip.
             </p>
-            <p className="text-sm text-muted-foreground/50 font-mono mb-10">
+            <p className="text-sm text-muted-foreground/60 mb-10 font-medium tracking-wide">
               27 leagues · 4,197 tips backtested · Live every 15s · Self-grading AI
             </p>
 
             <div className="flex flex-col sm:flex-row flex-wrap gap-3 mb-12">
               <Link href="/login">
-                <div className="h-12 px-7 flex items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold hover:bg-primary/90 transition-colors cursor-pointer font-mono tracking-wider">
-                  TRY FREE 14 DAYS <ArrowRight className="ml-2 w-4 h-4" />
+                <div className="h-12 px-7 flex items-center justify-center rounded-xl bg-primary text-primary-foreground font-semibold hover:opacity-95 transition-opacity cursor-pointer text-sm uppercase tracking-[0.12em] shadow-[0_0_28px_-8px_hsl(43_72%_54%_/_.45)]">
+                  Try free 14 days <ArrowRight className="ml-2 w-4 h-4" />
                 </div>
               </Link>
               <Link href="/login">
-                <div className="h-12 px-7 flex items-center justify-center rounded-lg glass-card text-white font-semibold hover:bg-white/10 transition-colors cursor-pointer font-mono tracking-wider">
-                  SIGN IN
+                <div className="h-12 px-7 flex items-center justify-center rounded-xl glass-card text-white font-semibold hover:bg-white/[0.06] transition-colors cursor-pointer text-sm uppercase tracking-[0.12em]">
+                  Sign in
                 </div>
               </Link>
               <Link href="/pricing">
-                <div className="h-12 px-7 flex items-center justify-center rounded-lg border border-white/15 text-white/90 font-semibold hover:bg-white/5 transition-colors cursor-pointer font-mono tracking-wider text-sm">
-                  PRICING
+                <div className="h-12 px-7 flex items-center justify-center rounded-xl border border-white/12 text-white/90 font-semibold hover:bg-white/[0.04] transition-colors cursor-pointer text-sm uppercase tracking-[0.12em]">
+                  Pricing
                 </div>
               </Link>
             </div>
@@ -253,9 +254,9 @@ export function Home() {
                 { v: "85%", l: "Home win hit rate", c: "text-teal-400" },
                 { v: "4,197", l: "Tips backtested", c: "text-primary" },
               ].map((s) => (
-                <div key={s.l} className="glass-card rounded-xl p-3 text-center border border-white/5">
-                  <div className={`text-xl font-mono font-bold ${s.c}`}>{s.v}</div>
-                  <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mt-0.5">{s.l}</div>
+                <div key={s.l} className="glass-card rounded-xl p-3 text-center">
+                  <div className={`text-xl font-semibold tabular-nums ${s.c}`}>{s.v}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-[0.12em] mt-1 font-medium">{s.l}</div>
                 </div>
               ))}
             </div>
@@ -266,16 +267,16 @@ export function Home() {
             {/* Outer glow */}
             <div className="absolute -inset-4 bg-primary/5 blur-2xl rounded-3xl pointer-events-none" />
 
-            <div className="relative glass-card rounded-2xl border border-white/10 overflow-hidden shadow-2xl">
+            <div className="relative glass-card rounded-2xl overflow-hidden shadow-2xl">
               {/* Header bar */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-white/8 bg-white/3">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.06] bg-white/[0.02]">
                 <div className="flex items-center gap-2">
                   <Activity className="w-3.5 h-3.5 text-primary animate-pulse" />
-                  <span className="text-xs font-mono text-primary uppercase tracking-widest">Value Tips — Today</span>
+                  <span className="text-[11px] font-semibold text-primary uppercase tracking-[0.15em]">Value tips · Today</span>
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-teal-400 animate-pulse" />
-                  <span className="text-[10px] font-mono text-teal-400">LIVE</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[10px] font-semibold text-emerald-400 uppercase tracking-wider">Live</span>
                 </div>
               </div>
 

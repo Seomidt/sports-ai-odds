@@ -193,72 +193,82 @@ router.get("/analysis/window", async (req, res) => {
   }
 });
 
-// ── Value odds — upcoming AI tips sorted by edge/value ───────────────────────
+// ── Value odds — prediction-first: all upcoming fixtures with API-Football predictions ──
 
 router.get("/analysis/value-odds", async (req, res) => {
   try {
-    const { plan } = await getPlanForRequest(req);
-    const result = await getOrFetch("analysis:value-odds", TTL.MIN1, async () => {
+    const result = await getOrFetch("analysis:value-odds-v2", TTL.MIN5, async () => {
       const now = new Date();
-      const rawTips = await db
-        .select()
-        .from(aiBettingTips)
+      const in14d = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      // 1. All upcoming fixtures in tracked leagues that have predictions
+      const rows = await db
+        .select({
+          fixtureId: fixtures.fixtureId,
+          homeTeam: fixtures.homeTeamName,
+          awayTeam: fixtures.awayTeamName,
+          kickoff: fixtures.kickoff,
+          leagueName: fixtures.leagueName,
+          statusShort: fixtures.statusShort,
+          homeWinPercent: predictions.homeWinPercent,
+          drawPercent: predictions.drawPercent,
+          awayWinPercent: predictions.awayWinPercent,
+          goalsHome: predictions.goalsHome,
+          goalsAway: predictions.goalsAway,
+          underOver: predictions.underOver,
+          winOrDraw: predictions.winOrDraw,
+          adviceText: predictions.adviceText,
+          winner: predictions.winner,
+          winnerComment: predictions.winnerComment,
+          comparison: predictions.comparison,
+          last5Home: predictions.last5Home,
+          last5Away: predictions.last5Away,
+        })
+        .from(fixtures)
+        .innerJoin(predictions, eq(fixtures.fixtureId, predictions.fixtureId))
         .where(
           and(
-            gte(aiBettingTips.kickoff, now),
-            isNotNull(aiBettingTips.edge),
-          ),
+            gte(fixtures.kickoff, now),
+            lte(fixtures.kickoff, in14d),
+            inArray(fixtures.leagueId, TRACKED_LEAGUE_IDS),
+          )
         )
-        .orderBy(
-          desc(aiBettingTips.edge),
-          desc(aiBettingTips.trustScore),
-        )
+        .orderBy(asc(fixtures.kickoff))
         .limit(200);
 
-      const tips = filterPublishableTips(
-        rawTips.map((t) => ({
-          ...t,
-          featureSnapshot: (t.featureSnapshot ?? null) as Record<string, unknown> | null,
-        }))
-      ).slice(0, 100);
-
-      // Fetch prediction data for these fixtures
-      const fixtureIds = [...new Set(tips.map((t) => t.fixtureId).filter(Boolean))] as number[];
-      const predRows = fixtureIds.length > 0
-        ? await db.select({
-            fixtureId: predictions.fixtureId,
-            winnerComment: predictions.winnerComment,
-            underOver: predictions.underOver,
-            winOrDraw: predictions.winOrDraw,
-            comparison: predictions.comparison,
-          }).from(predictions).where(inArray(predictions.fixtureId, fixtureIds))
+      // 2. Get best trust score per fixture from aiBettingTips (for trust display)
+      const fIds = rows.map((r) => r.fixtureId);
+      const trustRows = fIds.length > 0
+        ? await db
+            .select({
+              fixtureId: aiBettingTips.fixtureId,
+              trustScore: aiBettingTips.trustScore,
+              confidence: aiBettingTips.confidence,
+              marketOdds: aiBettingTips.marketOdds,
+            })
+            .from(aiBettingTips)
+            .where(and(inArray(aiBettingTips.fixtureId, fIds), gte(aiBettingTips.kickoff, now)))
+            .orderBy(desc(aiBettingTips.trustScore))
         : [];
-      const predMap = new Map(predRows.map((p) => [p.fixtureId, p]));
 
-      // Add computed fields + prediction data for frontend
-      const enriched = tips.map((t) => {
-        const pred = predMap.get(t.fixtureId ?? -1) ?? null;
-        const valueScore =
-          t.valueRating === "strong_value" ? 4
-          : t.valueRating === "value" ? 3
-          : t.valueRating === "fair" ? 2
-          : 1;
-        const combinedScore = (t.edge ?? 0) * 10 + (t.trustScore ?? 0) / 10;
-        return {
-          ...t,
-          valueScore,
-          combinedScore,
-          winnerComment: pred?.winnerComment ?? null,
-          underOver: pred?.underOver ?? null,
-          winOrDraw: pred?.winOrDraw ?? null,
-          comparison: pred?.comparison ?? null,
-        };
-      });
+      // Keep only best trust per fixture
+      const trustMap = new Map<number, { trustScore: number; confidence: string | null; marketOdds: number | null }>();
+      for (const t of trustRows) {
+        if (!trustMap.has(t.fixtureId!) || (t.trustScore ?? 0) > (trustMap.get(t.fixtureId!)!.trustScore ?? 0)) {
+          trustMap.set(t.fixtureId!, { trustScore: t.trustScore ?? 5, confidence: t.confidence, marketOdds: t.marketOdds });
+        }
+      }
 
-      return { tips: enriched };
+      const tips = rows.map((r) => {
+        const trust = trustMap.get(r.fixtureId) ?? { trustScore: 5, confidence: null, marketOdds: null };
+        // Sort key: use highest win probability as the primary signal
+        const maxPct = Math.max(r.homeWinPercent ?? 0, r.drawPercent ?? 0, r.awayWinPercent ?? 0);
+        return { ...r, trustScore: trust.trustScore, confidence: trust.confidence, marketOdds: trust.marketOdds, maxPct };
+      }).sort((a, b) => b.maxPct - a.maxPct);
+
+      return { tips };
     });
-    const filtered = plan === "pro" ? result.tips : applyFreePlanGate(result.tips);
-    return res.json({ ...result, tips: filtered, plan });
+    return res.json(result);
   } catch (error) {
     console.error("[routes:analysis.valueOdds]", error);
     return res.status(500).json({ error: "Failed to load value odds" });

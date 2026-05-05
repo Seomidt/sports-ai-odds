@@ -20,32 +20,33 @@ async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, { ...init, headers });
 }
 
+// Prediction-first: built directly from API-Football predictions joined with fixtures
 interface ValueTip {
-  id: number;
   fixtureId: number;
   homeTeam: string | null;
   awayTeam: string | null;
   kickoff: string | null;
   leagueName: string | null;
-  recommendation: string;
-  betType: string;
-  betSide: string | null;
-  trustScore: number;
-  aiProbability: number | null;
-  impliedProbability: number | null;
-  confidence: "high" | "medium" | "low" | null;
-  edge: number | null;
-  reasoning: string;
-  marketOdds: number | null;
-  valueRating: string | null;
-  valueScore: number;
-  combinedScore: number;
-  createdAt: string;
+  statusShort: string | null;
   // API-Football prediction fields
-  winnerComment: string | null;
+  homeWinPercent: number | null;
+  drawPercent: number | null;
+  awayWinPercent: number | null;
+  goalsHome: number | null;
+  goalsAway: number | null;
   underOver: string | null;
   winOrDraw: boolean | null;
+  adviceText: string | null;
+  winner: string | null;
+  winnerComment: string | null;
   comparison: Record<string, { home: string; away: string }> | null;
+  last5Home: unknown;
+  last5Away: unknown;
+  // From aiBettingTips (best match, optional)
+  trustScore: number;
+  confidence: "high" | "medium" | "low" | null;
+  marketOdds: number | null;
+  maxPct: number;
 }
 
 interface TipSummary {
@@ -519,106 +520,149 @@ function TrustBadge({ score, confidence }: { score: number | null; confidence?: 
   );
 }
 
-function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
-  const isTopValue = tip.valueRating === 'strong_value' || tip.valueRating === 'value';
-  const borderClass = isTopValue
-    ? 'border-teal-400/30 shadow-[0_0_20px_rgba(0,255,200,0.06)]'
-    : 'border-white/8';
-  const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
+function ComparisonBars({ comparison }: { comparison: Record<string, { home: string; away: string }> | null }) {
+  if (!comparison) return null;
+  const metrics = [
+    { key: 'form', label: 'Form' }, { key: 'att', label: 'Angreb' },
+    { key: 'def', label: 'Forsvar' }, { key: 'h2h', label: 'H2H' },
+  ];
+  const items = metrics.map(({ key, label }) => {
+    const m = comparison[key];
+    if (!m) return null;
+    const h = parseFloat(m.home);
+    const a = parseFloat(m.away);
+    const total = h + a;
+    const hPct = total > 0 ? Math.round((h / total) * 100) : 50;
+    return { key, label, hPct };
+  }).filter(Boolean) as { key: string; label: string; hPct: number }[];
+  if (items.length === 0) return null;
+  return (
+    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
+      {items.map(({ key, label, hPct }) => (
+        <div key={key}>
+          <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 mb-0.5">
+            <span>{label}</span>
+            <span className="text-white/40 tabular-nums">{hPct}% / {100 - hPct}%</span>
+          </div>
+          <div className="flex h-1 rounded-full overflow-hidden bg-white/5">
+            <div className="bg-teal-400/60 h-full" style={{ width: `${hPct}%` }} />
+            <div className="bg-violet-400/40 h-full" style={{ width: `${100 - hPct}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
-  const impliedFromOdds = tip.marketOdds != null && tip.marketOdds > 1 ? 1 / tip.marketOdds : null;
-  const impliedProb = tip.impliedProbability ?? impliedFromOdds;
-  const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
+function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
+  // Determine strongest outcome
+  const probs = [
+    { label: tip.homeTeam ?? 'Hjemme', pct: tip.homeWinPercent ?? 0 },
+    { label: 'Uafgjort', pct: tip.drawPercent ?? 0 },
+    { label: tip.awayTeam ?? 'Ude', pct: tip.awayWinPercent ?? 0 },
+  ];
+  const best = probs.reduce((a, b) => b.pct > a.pct ? b : a);
+  const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
+  const bestPct = Math.round(best.pct);
+  const barColor = bestPct >= 60 ? 'bg-teal-400' : bestPct >= 45 ? 'bg-violet-400' : 'bg-amber-400';
+  const textColor = bestPct >= 60 ? 'text-teal-300' : bestPct >= 45 ? 'text-violet-300' : 'text-amber-400';
 
   return (
-    <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden`}>
-      {/* ── Clickable main area ── */}
-      <div className="w-full text-left p-5">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-xs font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
-            <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider">{betTypeLabel(tip.betType)}</span>
-            <ValueBadge rating={tip.valueRating} />
+    <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+              <span className={`text-[10px] font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
+              {tip.leagueName && (
+                <span className="text-[10px] font-mono text-muted-foreground/50 truncate">{tip.leagueName}</span>
+              )}
+              {tip.kickoff && (
+                <span className="text-[10px] font-mono text-muted-foreground/40 ml-auto shrink-0">
+                  {format(new Date(tip.kickoff), 'EEE d MMM, HH:mm')}
+                </span>
+              )}
+            </div>
+            <div className="text-base font-bold text-white leading-tight">
+              {tip.homeTeam} <span className="text-white/25 font-normal">vs</span> {tip.awayTeam}
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <TrustBadge score={tip.trustScore} confidence={tip.confidence} />
-            {tip.marketOdds != null && (
-              <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
-            )}
-          </div>
+          <TrustBadge score={tip.trustScore} confidence={tip.confidence} />
         </div>
 
-        <div className="mb-3">
-          <div className="text-lg font-bold text-white leading-tight mb-1">{tip.recommendation}</div>
-          <div className="flex flex-wrap items-center gap-2 mt-1">
-            {implPct != null && (
-              <span className="text-[11px] font-mono text-muted-foreground">
-                Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span>
-              </span>
-            )}
-            {tip.underOver && (
-              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${
-                tip.underOver.startsWith('+') ? 'text-teal-300 bg-teal-400/10 border-teal-400/25' : 'text-violet-300 bg-violet-400/10 border-violet-400/25'
-              }`}>
-                {tip.underOver.startsWith('+') ? 'Over' : 'Under'} {tip.underOver.replace(/[+-]/, '')}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 mb-2 text-sm text-white/60">
-          <span className="font-medium">{tip.homeTeam}</span>
-          <span className="text-white/20">vs</span>
-          <span className="font-medium">{tip.awayTeam}</span>
-        </div>
-
-        {tip.winnerComment && (
-          <div className="text-xs text-teal-300/70 font-mono italic mb-2 leading-snug">
-            "{tip.winnerComment}"
+        {/* Advice / winner comment */}
+        {(tip.adviceText || tip.winnerComment) && (
+          <div className={`text-sm font-semibold ${textColor} mb-3 leading-snug`}>
+            {tip.adviceText || tip.winnerComment}
           </div>
         )}
+        {tip.winnerComment && tip.adviceText && (
+          <div className="text-xs text-white/40 font-mono italic mb-3">"{tip.winnerComment}"</div>
+        )}
 
-        <p className="text-xs text-white/50 leading-relaxed">
-          {tip.reasoning}
-        </p>
+        {/* Win probabilities */}
+        <div className="grid grid-cols-3 gap-2 mb-3">
+          {probs.map(({ label, pct }) => {
+            const p = Math.round(pct);
+            const isMax = label === best.label;
+            return (
+              <div key={label} className={`rounded-lg px-2 py-2 text-center ${isMax ? 'bg-white/8 border border-white/15' : 'bg-white/3'}`}>
+                <div className={`text-lg font-bold font-mono tabular-nums ${isMax ? textColor : 'text-white/50'}`}>{p}%</div>
+                <div className="text-[10px] font-mono text-muted-foreground/50 truncate mt-0.5">{label}</div>
+              </div>
+            );
+          })}
+        </div>
 
-        {tip.comparison && (() => {
-          const metrics = ['form', 'att', 'def', 'h2h'] as const;
-          const labels: Record<string, string> = { form: 'Form', att: 'Angreb', def: 'Forsvar', h2h: 'H2H' };
-          const items = metrics.map(k => {
-            const m = (tip.comparison as Record<string, { home: string; away: string }>)[k];
-            if (!m) return null;
-            const h = parseFloat(m.home);
-            const a = parseFloat(m.away);
-            const total = h + a;
-            const hPct = total > 0 ? Math.round((h / total) * 100) : 50;
-            return { key: k, label: labels[k], hPct };
-          }).filter(Boolean) as { key: string; label: string; hPct: number }[];
-          if (items.length === 0) return null;
-          return (
-            <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-2 gap-x-4 gap-y-1.5">
-              {items.map(({ key, label, hPct }) => (
-                <div key={key}>
-                  <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 mb-0.5">
-                    <span>{label}</span>
-                    <span className="text-white/40">{hPct}% / {100 - hPct}%</span>
-                  </div>
-                  <div className="flex h-1 rounded-full overflow-hidden bg-white/5">
-                    <div className="bg-teal-400/60 h-full" style={{ width: `${hPct}%` }} />
-                    <div className="bg-violet-400/40 h-full" style={{ width: `${100 - hPct}%` }} />
-                  </div>
-                </div>
-              ))}
+        {/* Probability bar */}
+        <div className="flex h-1.5 rounded-full overflow-hidden bg-white/5 mb-3">
+          <div className="bg-teal-400/70 h-full" style={{ width: `${Math.round(tip.homeWinPercent ?? 0)}%` }} />
+          <div className="bg-white/20 h-full" style={{ width: `${Math.round(tip.drawPercent ?? 0)}%` }} />
+          <div className="bg-violet-400/60 h-full" style={{ width: `${Math.round(tip.awayWinPercent ?? 0)}%` }} />
+        </div>
+
+        {/* Goals + under/over */}
+        <div className="flex items-center gap-3 mb-3 flex-wrap">
+          {(tip.goalsHome != null || tip.goalsAway != null) && (
+            <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
+              <span className="text-white/40">Mål:</span>
+              <span className="text-white/70 font-bold tabular-nums">
+                {(tip.goalsHome ?? 0).toFixed(1)} – {(tip.goalsAway ?? 0).toFixed(1)}
+              </span>
             </div>
-          );
-        })()}
+          )}
+          {tip.underOver && (
+            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${
+              tip.underOver.startsWith('+') ? 'text-teal-300 bg-teal-400/10 border-teal-400/25'
+              : 'text-violet-300 bg-violet-400/10 border-violet-400/25'
+            }`}>
+              {tip.underOver.startsWith('+') ? 'Over' : 'Under'} {tip.underOver.replace(/[+-]/, '')}
+            </span>
+          )}
+          {tip.winOrDraw && (
+            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border text-amber-300 bg-amber-400/8 border-amber-400/25 uppercase">
+              Win or Draw
+            </span>
+          )}
+          {tip.marketOdds != null && (
+            <span className="ml-auto font-mono text-base font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
+          )}
+        </div>
+
+        {/* Comparison bars */}
+        {tip.comparison && (
+          <div className="pt-3 border-t border-white/5">
+            <ComparisonBars comparison={tip.comparison as Record<string, { home: string; away: string }>} />
+          </div>
+        )}
       </div>
 
-      {/* ── Always-visible match link ── */}
+      {/* Match link */}
       <div className="border-t border-white/6 px-5 py-3 bg-white/2">
         <Link href={`/match/${tip.fixtureId}`}>
-          <div className="flex items-center justify-center py-2.5 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
-            <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">View Full Match Analysis</span>
+          <div className="flex items-center justify-center py-2 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
+            <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">Se kampanalyse →</span>
           </div>
         </Link>
       </div>
@@ -793,11 +837,7 @@ export function Dashboard() {
   });
 
   const tips = data?.tips ?? [];
-  const uniqueFixtures = new Set(tips.map(t => t.fixtureId)).size;
-  const valueTips = tips.filter(t => t.valueRating === 'strong_value' || t.valueRating === 'value');
-  const fairTips  = tips.filter(t => t.valueRating === 'fair');
-  const otherTips = tips.filter(t => t.valueRating !== 'strong_value' && t.valueRating !== 'value' && t.valueRating !== 'fair');
-
+  const uniqueFixtures = tips.length;
   let globalRank = 0;
 
   return (
@@ -807,11 +847,11 @@ export function Dashboard() {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <Target className="w-5 h-5 text-primary" />
-              <h1 className="text-3xl font-bold font-mono tracking-tight text-white">VALUE ODDS</h1>
+              <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PREDICTIONS</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              Algorithm tips — Match Result (draw/home/away), BTTS &amp; Asian Handicap. Form signals, odds filters &amp; stats gates applied.{" "}
-              <a href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">View backtest →</a>
+              API-Football predictions — kampe de næste 14 dage sorteret efter stærkeste forudsigelse.{" "}
+              <a href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">Se historik →</a>
             </p>
           </div>
           <div className="shrink-0 flex items-center gap-4">
@@ -848,56 +888,21 @@ export function Dashboard() {
         ) : tips.length === 0 ? (
           <div className="glass-card p-16 text-center rounded-xl flex flex-col items-center">
             <Target className="w-12 h-12 text-muted-foreground mb-4 opacity-25" />
-            <h3 className="text-lg font-medium text-white mb-1">No value odds available</h3>
+            <h3 className="text-lg font-medium text-white mb-1">Ingen predictions tilgængelige</h3>
             <p className="text-muted-foreground text-sm">
-              AI tips will appear here once upcoming fixtures have odds and signal data.
+              Predictions vises her når kommende kampe har API-Football data.
             </p>
           </div>
         ) : (
-          <div className="space-y-10">
-            {valueTips.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Zap className="w-4 h-4 text-teal-400" />
-                  <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">Best Value Picks</h2>
-                  <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{valueTips.length} tips</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {valueTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
-                </div>
-              </div>
-            )}
-
-            {fairTips.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <TrendingUp className="w-4 h-4 text-violet-400" />
-                  <h2 className="text-sm font-mono font-bold text-violet-400 tracking-widest uppercase">Fair Price</h2>
-                  <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{fairTips.length} tips</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {fairTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
-                </div>
-              </div>
-            )}
-
-            {otherTips.length > 0 && (
-              <div className="space-y-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex-1">
-                    <h2 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase">
-                      Other Markets — {otherTips.length}
-                    </h2>
-                    <p className="text-[11px] text-muted-foreground/50 mt-1 font-mono">
-                      Active markets: <span className="text-white/50">Match Result</span>, <span className="text-white/50">BTTS</span>, <span className="text-white/50">Asian Handicap</span>. Over/Under, Double Chance &amp; Corners are disabled — all backtested as unprofitable. Tips here are outside primary filters — use with extra caution.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {otherTips.map(t => { globalRank++; return <ValueOddsCard key={t.id} tip={t} rank={globalRank} />; })}
-                </div>
-              </div>
-            )}
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Zap className="w-4 h-4 text-teal-400" />
+              <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">Predictions</h2>
+              <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{tips.length} kampe</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {tips.map(t => { globalRank++; return <ValueOddsCard key={t.fixtureId} tip={t} rank={globalRank} />; })}
+            </div>
           </div>
         )}
       </div>

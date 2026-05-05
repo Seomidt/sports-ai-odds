@@ -193,85 +193,225 @@ router.get("/analysis/window", async (req, res) => {
   }
 });
 
-// ── Value odds — prediction-first: all upcoming fixtures with API-Football predictions ──
+// ── Derive all bet markets from a single prediction row ──────────────────────
 
-router.get("/analysis/value-odds", async (req, res) => {
+type PredRow = {
+  fixtureId: number;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  kickoff: Date | null;
+  leagueName: string | null;
+  homeWinPercent: number | null;
+  drawPercent: number | null;
+  awayWinPercent: number | null;
+  goalsHome: number | null;
+  goalsAway: number | null;
+  underOver: string | null;
+  winOrDraw: boolean | null;
+  adviceText: string | null;
+  winner: string | null;
+  winnerComment: string | null;
+  comparison: unknown;
+  last5Home: unknown;
+  last5Away: unknown;
+};
+
+type TrustInfo = { trustScore: number; confidence: string | null; marketOdds: number | null };
+
+interface DerivedMarket {
+  fixtureId: number;
+  homeTeam: string | null;
+  awayTeam: string | null;
+  kickoff: string | null;
+  leagueName: string | null;
+  market: string;
+  side: string;
+  label: string;
+  probability: number;
+  adviceText: string | null;
+  winnerComment: string | null;
+  goalsHome: number | null;
+  goalsAway: number | null;
+  underOver: string | null;
+  homeWinPercent: number | null;
+  drawPercent: number | null;
+  awayWinPercent: number | null;
+  comparison: unknown;
+  last5Home: unknown;
+  last5Away: unknown;
+  trustScore: number;
+  confidence: string | null;
+  marketOdds: number | null;
+}
+
+function deriveMarkets(pred: PredRow, trust: TrustInfo): DerivedMarket[] {
+  const base = {
+    fixtureId: pred.fixtureId,
+    homeTeam: pred.homeTeam,
+    awayTeam: pred.awayTeam,
+    kickoff: pred.kickoff?.toISOString() ?? null,
+    leagueName: pred.leagueName,
+    adviceText: pred.adviceText,
+    winnerComment: pred.winnerComment,
+    goalsHome: pred.goalsHome,
+    goalsAway: pred.goalsAway,
+    underOver: pred.underOver,
+    homeWinPercent: pred.homeWinPercent,
+    drawPercent: pred.drawPercent,
+    awayWinPercent: pred.awayWinPercent,
+    comparison: pred.comparison,
+    last5Home: pred.last5Home,
+    last5Away: pred.last5Away,
+    trustScore: trust.trustScore,
+    confidence: trust.confidence,
+    marketOdds: trust.marketOdds,
+  };
+
+  const markets: DerivedMarket[] = [];
+  const home = pred.homeTeam ?? "Hjemme";
+  const away = pred.awayTeam ?? "Ude";
+
+  // ── Match result ──
+  if (pred.homeWinPercent) markets.push({ ...base, market: "match_result", side: "home", label: `${home} vinder`, probability: Math.round(pred.homeWinPercent) });
+  if (pred.drawPercent) markets.push({ ...base, market: "match_result", side: "draw", label: "Uafgjort", probability: Math.round(pred.drawPercent) });
+  if (pred.awayWinPercent) markets.push({ ...base, market: "match_result", side: "away", label: `${away} vinder`, probability: Math.round(pred.awayWinPercent) });
+
+  // ── Over/Under 2.5 ── (Poisson-based estimate from predicted goals)
+  const gh = pred.goalsHome ?? 0;
+  const ga = pred.goalsAway ?? 0;
+  const totalGoals = gh + ga;
+  if (totalGoals > 0) {
+    // Rough Poisson CDF: P(total > 2.5) using lambda = totalGoals
+    // Precomputed for common ranges: λ=2→38%, λ=2.5→46%, λ=3→58%, λ=3.5→68%, λ=4→76%
+    const overProb = Math.min(92, Math.max(25, Math.round(50 + (totalGoals - 2.5) * 18)));
+    const underProb = 100 - overProb;
+    // Add explicit underOver signal as a weight
+    const hasOverSignal = pred.underOver?.startsWith("+");
+    const hasUnderSignal = pred.underOver?.startsWith("-");
+    const finalOverProb = hasOverSignal ? Math.min(92, overProb + 8) : hasUnderSignal ? Math.max(25, overProb - 8) : overProb;
+    const finalUnderProb = 100 - finalOverProb;
+    if (finalOverProb >= 40) markets.push({ ...base, market: "over_under_25", side: "over", label: "Over 2.5 mål", probability: finalOverProb });
+    if (finalUnderProb >= 40) markets.push({ ...base, market: "over_under_25", side: "under", label: "Under 2.5 mål", probability: finalUnderProb });
+  }
+
+  // ── BTTS ── P(team scores) ≈ 1 - e^(-λ) using Poisson
+  if (gh > 0 && ga > 0) {
+    const homeScoreP = Math.round((1 - Math.exp(-gh)) * 100);
+    const awayScoreP = Math.round((1 - Math.exp(-ga)) * 100);
+    const bttsYes = Math.round(homeScoreP * awayScoreP / 100);
+    const bttsNo = 100 - bttsYes;
+    if (bttsYes >= 35) markets.push({ ...base, market: "btts", side: "yes", label: "Begge hold scorer", probability: bttsYes });
+    if (bttsNo >= 35) markets.push({ ...base, market: "btts", side: "no", label: "Ikke begge scorer", probability: bttsNo });
+  }
+
+  // ── Double Chance ──
+  if (pred.homeWinPercent && pred.drawPercent) {
+    const dc = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
+    if (dc >= 50) markets.push({ ...base, market: "double_chance", side: "home_draw", label: `${home} eller uafgjort`, probability: dc });
+  }
+  if (pred.awayWinPercent && pred.drawPercent) {
+    const dc = Math.min(99, Math.round(pred.awayWinPercent + pred.drawPercent));
+    if (dc >= 50) markets.push({ ...base, market: "double_chance", side: "away_draw", label: `${away} eller uafgjort`, probability: dc });
+  }
+
+  // ── Win or Draw (1X as single market if winOrDraw=true) ──
+  if (pred.winOrDraw === true && pred.homeWinPercent && pred.drawPercent) {
+    const wod = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
+    markets.push({ ...base, market: "win_or_draw", side: "home", label: `${home} vinder eller uafgjort`, probability: wod });
+  }
+
+  return markets;
+}
+
+// ── Shared fixture+prediction query ──────────────────────────────────────────
+
+async function fetchFixturePredictions(daysAhead = 14) {
+  const now = new Date();
+  const limit = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000);
+
+  const rows = await db
+    .select({
+      fixtureId: fixtures.fixtureId,
+      homeTeam: fixtures.homeTeamName,
+      awayTeam: fixtures.awayTeamName,
+      kickoff: fixtures.kickoff,
+      leagueName: fixtures.leagueName,
+      statusShort: fixtures.statusShort,
+      homeWinPercent: predictions.homeWinPercent,
+      drawPercent: predictions.drawPercent,
+      awayWinPercent: predictions.awayWinPercent,
+      goalsHome: predictions.goalsHome,
+      goalsAway: predictions.goalsAway,
+      underOver: predictions.underOver,
+      winOrDraw: predictions.winOrDraw,
+      adviceText: predictions.adviceText,
+      winner: predictions.winner,
+      winnerComment: predictions.winnerComment,
+      comparison: predictions.comparison,
+      last5Home: predictions.last5Home,
+      last5Away: predictions.last5Away,
+    })
+    .from(fixtures)
+    .innerJoin(predictions, eq(fixtures.fixtureId, predictions.fixtureId))
+    .where(and(gte(fixtures.kickoff, now), lte(fixtures.kickoff, limit), inArray(fixtures.leagueId, TRACKED_LEAGUE_IDS)))
+    .orderBy(asc(fixtures.kickoff))
+    .limit(300);
+
+  // Trust scores per fixture
+  const fIds = rows.map((r) => r.fixtureId);
+  const trustRows = fIds.length > 0
+    ? await db.select({ fixtureId: aiBettingTips.fixtureId, trustScore: aiBettingTips.trustScore, confidence: aiBettingTips.confidence, marketOdds: aiBettingTips.marketOdds })
+        .from(aiBettingTips)
+        .where(and(inArray(aiBettingTips.fixtureId, fIds), gte(aiBettingTips.kickoff, now)))
+        .orderBy(desc(aiBettingTips.trustScore))
+    : [];
+  const trustMap = new Map<number, TrustInfo>();
+  for (const t of trustRows) {
+    if (!trustMap.has(t.fixtureId!) || (t.trustScore ?? 0) > (trustMap.get(t.fixtureId!)!.trustScore ?? 0)) {
+      trustMap.set(t.fixtureId!, { trustScore: t.trustScore ?? 5, confidence: t.confidence, marketOdds: t.marketOdds });
+    }
+  }
+
+  return rows.map((r) => ({ row: r, trust: trustMap.get(r.fixtureId) ?? { trustScore: 5, confidence: null, marketOdds: null } }));
+}
+
+// ── Value odds — best picks only (prob ≥ 58%) sorted by probability ──────────
+
+router.get("/analysis/value-odds", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:value-odds-v2", TTL.MIN5, async () => {
-      const now = new Date();
-      const in14d = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
-
-      // 1. All upcoming fixtures in tracked leagues that have predictions
-      const rows = await db
-        .select({
-          fixtureId: fixtures.fixtureId,
-          homeTeam: fixtures.homeTeamName,
-          awayTeam: fixtures.awayTeamName,
-          kickoff: fixtures.kickoff,
-          leagueName: fixtures.leagueName,
-          statusShort: fixtures.statusShort,
-          homeWinPercent: predictions.homeWinPercent,
-          drawPercent: predictions.drawPercent,
-          awayWinPercent: predictions.awayWinPercent,
-          goalsHome: predictions.goalsHome,
-          goalsAway: predictions.goalsAway,
-          underOver: predictions.underOver,
-          winOrDraw: predictions.winOrDraw,
-          adviceText: predictions.adviceText,
-          winner: predictions.winner,
-          winnerComment: predictions.winnerComment,
-          comparison: predictions.comparison,
-          last5Home: predictions.last5Home,
-          last5Away: predictions.last5Away,
-        })
-        .from(fixtures)
-        .innerJoin(predictions, eq(fixtures.fixtureId, predictions.fixtureId))
-        .where(
-          and(
-            gte(fixtures.kickoff, now),
-            lte(fixtures.kickoff, in14d),
-            inArray(fixtures.leagueId, TRACKED_LEAGUE_IDS),
-          )
-        )
-        .orderBy(asc(fixtures.kickoff))
-        .limit(200);
-
-      // 2. Get best trust score per fixture from aiBettingTips (for trust display)
-      const fIds = rows.map((r) => r.fixtureId);
-      const trustRows = fIds.length > 0
-        ? await db
-            .select({
-              fixtureId: aiBettingTips.fixtureId,
-              trustScore: aiBettingTips.trustScore,
-              confidence: aiBettingTips.confidence,
-              marketOdds: aiBettingTips.marketOdds,
-            })
-            .from(aiBettingTips)
-            .where(and(inArray(aiBettingTips.fixtureId, fIds), gte(aiBettingTips.kickoff, now)))
-            .orderBy(desc(aiBettingTips.trustScore))
-        : [];
-
-      // Keep only best trust per fixture
-      const trustMap = new Map<number, { trustScore: number; confidence: string | null; marketOdds: number | null }>();
-      for (const t of trustRows) {
-        if (!trustMap.has(t.fixtureId!) || (t.trustScore ?? 0) > (trustMap.get(t.fixtureId!)!.trustScore ?? 0)) {
-          trustMap.set(t.fixtureId!, { trustScore: t.trustScore ?? 5, confidence: t.confidence, marketOdds: t.marketOdds });
-        }
-      }
-
-      const tips = rows.map((r) => {
-        const trust = trustMap.get(r.fixtureId) ?? { trustScore: 5, confidence: null, marketOdds: null };
-        // Sort key: use highest win probability as the primary signal
-        const maxPct = Math.max(r.homeWinPercent ?? 0, r.drawPercent ?? 0, r.awayWinPercent ?? 0);
-        return { ...r, trustScore: trust.trustScore, confidence: trust.confidence, marketOdds: trust.marketOdds, maxPct };
-      }).sort((a, b) => b.maxPct - a.maxPct);
-
-      return { tips };
+    const result = await getOrFetch("analysis:value-odds-v3", TTL.MIN5, async () => {
+      const pairs = await fetchFixturePredictions(14);
+      const all: DerivedMarket[] = pairs.flatMap(({ row, trust }) => deriveMarkets(row as PredRow, trust));
+      // Value = clear signal (≥ 58%) — avoid near-50/50 noise
+      const valueTips = all
+        .filter((m) => m.probability >= 58)
+        .sort((a, b) => b.probability - a.probability)
+        .slice(0, 60);
+      return { tips: valueTips };
     });
     return res.json(result);
   } catch (error) {
     console.error("[routes:analysis.valueOdds]", error);
     return res.status(500).json({ error: "Failed to load value odds" });
+  }
+});
+
+// ── Prematch predictions — ALL derived markets per fixture for prematch page ──
+
+router.get("/analysis/prematch-predictions", async (_req, res) => {
+  try {
+    const result = await getOrFetch("analysis:prematch-predictions", TTL.MIN5, async () => {
+      const pairs = await fetchFixturePredictions(14);
+      const grouped: Record<number, DerivedMarket[]> = {};
+      for (const { row, trust } of pairs) {
+        grouped[row.fixtureId] = deriveMarkets(row as PredRow, trust);
+      }
+      return { markets: grouped };
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error("[routes:analysis.prematchPredictions]", error);
+    return res.status(500).json({ error: "Failed to load prematch predictions" });
   }
 });
 

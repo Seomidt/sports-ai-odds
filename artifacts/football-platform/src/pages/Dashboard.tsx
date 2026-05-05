@@ -20,33 +20,32 @@ async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, { ...init, headers });
 }
 
-// Prediction-first: built directly from API-Football predictions joined with fixtures
+// Derived market — one bet per card, derived from API-Football predictions
 interface ValueTip {
   fixtureId: number;
   homeTeam: string | null;
   awayTeam: string | null;
   kickoff: string | null;
   leagueName: string | null;
-  statusShort: string | null;
-  // API-Football prediction fields
-  homeWinPercent: number | null;
-  drawPercent: number | null;
-  awayWinPercent: number | null;
+  // The derived bet
+  market: string;   // 'match_result' | 'btts' | 'over_under_25' | 'double_chance' | 'win_or_draw'
+  side: string;     // 'home' | 'draw' | 'away' | 'yes' | 'no' | 'over' | 'under' | 'home_draw' | 'away_draw'
+  label: string;    // e.g. "Manchester City vinder"
+  probability: number; // 0-100
+  // Supporting prediction context
+  adviceText: string | null;
+  winnerComment: string | null;
   goalsHome: number | null;
   goalsAway: number | null;
   underOver: string | null;
-  winOrDraw: boolean | null;
-  adviceText: string | null;
-  winner: string | null;
-  winnerComment: string | null;
+  homeWinPercent: number | null;
+  drawPercent: number | null;
+  awayWinPercent: number | null;
   comparison: Record<string, { home: string; away: string }> | null;
-  last5Home: unknown;
-  last5Away: unknown;
-  // From aiBettingTips (best match, optional)
+  // Trust
   trustScore: number;
   confidence: "high" | "medium" | "low" | null;
   marketOdds: number | null;
-  maxPct: number;
 }
 
 interface TipSummary {
@@ -520,146 +519,86 @@ function TrustBadge({ score, confidence }: { score: number | null; confidence?: 
   );
 }
 
-function ComparisonBars({ comparison }: { comparison: Record<string, { home: string; away: string }> | null }) {
-  if (!comparison) return null;
-  const metrics = [
-    { key: 'form', label: 'Form' }, { key: 'att', label: 'Angreb' },
-    { key: 'def', label: 'Forsvar' }, { key: 'h2h', label: 'H2H' },
-  ];
-  const items = metrics.map(({ key, label }) => {
-    const m = comparison[key];
-    if (!m) return null;
-    const h = parseFloat(m.home);
-    const a = parseFloat(m.away);
-    const total = h + a;
-    const hPct = total > 0 ? Math.round((h / total) * 100) : 50;
-    return { key, label, hPct };
-  }).filter(Boolean) as { key: string; label: string; hPct: number }[];
-  if (items.length === 0) return null;
-  return (
-    <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-      {items.map(({ key, label, hPct }) => (
-        <div key={key}>
-          <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 mb-0.5">
-            <span>{label}</span>
-            <span className="text-white/40 tabular-nums">{hPct}% / {100 - hPct}%</span>
-          </div>
-          <div className="flex h-1 rounded-full overflow-hidden bg-white/5">
-            <div className="bg-teal-400/60 h-full" style={{ width: `${hPct}%` }} />
-            <div className="bg-violet-400/40 h-full" style={{ width: `${100 - hPct}%` }} />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
+const MARKET_LABEL: Record<string, string> = {
+  match_result: 'Kampresultat', btts: 'Begge scorer', over_under_25: 'Over/Under 2.5',
+  double_chance: 'Double Chance', win_or_draw: 'Win or Draw',
+};
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
-  // Determine strongest outcome
-  const probs = [
-    { label: tip.homeTeam ?? 'Hjemme', pct: tip.homeWinPercent ?? 0 },
-    { label: 'Uafgjort', pct: tip.drawPercent ?? 0 },
-    { label: tip.awayTeam ?? 'Ude', pct: tip.awayWinPercent ?? 0 },
-  ];
-  const best = probs.reduce((a, b) => b.pct > a.pct ? b : a);
+  const prob = tip.probability;
+  const textColor = prob >= 72 ? 'text-teal-300' : prob >= 60 ? 'text-violet-300' : 'text-amber-400';
+  const barColor = prob >= 72 ? 'bg-teal-400' : prob >= 60 ? 'bg-violet-400' : 'bg-amber-400';
+  const borderClass = prob >= 72 ? 'border-teal-400/25' : prob >= 60 ? 'border-violet-400/20' : 'border-white/8';
   const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
-  const bestPct = Math.round(best.pct);
-  const barColor = bestPct >= 60 ? 'bg-teal-400' : bestPct >= 45 ? 'bg-violet-400' : 'bg-amber-400';
-  const textColor = bestPct >= 60 ? 'text-teal-300' : bestPct >= 45 ? 'text-violet-300' : 'text-amber-400';
 
   return (
-    <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
-      <div className="p-5">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-              <span className={`text-[10px] font-mono font-bold ${rankColor} opacity-50`}>#{rank}</span>
-              {tip.leagueName && (
-                <span className="text-[10px] font-mono text-muted-foreground/50 truncate">{tip.leagueName}</span>
-              )}
+    <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden flex flex-col`}>
+      <div className="p-5 flex flex-col flex-1">
+
+        {/* Header: match + trust */}
+        <div className="flex items-start justify-between gap-3 mb-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+              <span className={`text-[10px] font-mono font-bold ${rankColor} opacity-60`}>#{rank}</span>
+              <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">{MARKET_LABEL[tip.market] ?? tip.market}</span>
               {tip.kickoff && (
-                <span className="text-[10px] font-mono text-muted-foreground/40 ml-auto shrink-0">
+                <span className="text-[10px] font-mono text-muted-foreground/35 ml-auto shrink-0">
                   {format(new Date(tip.kickoff), 'EEE d MMM, HH:mm')}
                 </span>
               )}
             </div>
-            <div className="text-base font-bold text-white leading-tight">
+            <div className="text-sm font-semibold text-white/70 leading-tight truncate">
               {tip.homeTeam} <span className="text-white/25 font-normal">vs</span> {tip.awayTeam}
             </div>
+            {tip.leagueName && (
+              <div className="text-[10px] font-mono text-muted-foreground/35 truncate mt-0.5">{tip.leagueName}</div>
+            )}
           </div>
           <TrustBadge score={tip.trustScore} confidence={tip.confidence} />
         </div>
 
-        {/* Advice / winner comment */}
-        {(tip.adviceText || tip.winnerComment) && (
-          <div className={`text-sm font-semibold ${textColor} mb-3 leading-snug`}>
-            {tip.adviceText || tip.winnerComment}
-          </div>
-        )}
-        {tip.winnerComment && tip.adviceText && (
-          <div className="text-xs text-white/40 font-mono italic mb-3">"{tip.winnerComment}"</div>
-        )}
-
-        {/* Win probabilities */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          {probs.map(({ label, pct }) => {
-            const p = Math.round(pct);
-            const isMax = label === best.label;
-            return (
-              <div key={label} className={`rounded-lg px-2 py-2 text-center ${isMax ? 'bg-white/8 border border-white/15' : 'bg-white/3'}`}>
-                <div className={`text-lg font-bold font-mono tabular-nums ${isMax ? textColor : 'text-white/50'}`}>{p}%</div>
-                <div className="text-[10px] font-mono text-muted-foreground/50 truncate mt-0.5">{label}</div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Probability bar */}
-        <div className="flex h-1.5 rounded-full overflow-hidden bg-white/5 mb-3">
-          <div className="bg-teal-400/70 h-full" style={{ width: `${Math.round(tip.homeWinPercent ?? 0)}%` }} />
-          <div className="bg-white/20 h-full" style={{ width: `${Math.round(tip.drawPercent ?? 0)}%` }} />
-          <div className="bg-violet-400/60 h-full" style={{ width: `${Math.round(tip.awayWinPercent ?? 0)}%` }} />
-        </div>
-
-        {/* Goals + under/over */}
-        <div className="flex items-center gap-3 mb-3 flex-wrap">
-          {(tip.goalsHome != null || tip.goalsAway != null) && (
-            <div className="flex items-center gap-1.5 text-xs font-mono text-muted-foreground">
-              <span className="text-white/40">Mål:</span>
-              <span className="text-white/70 font-bold tabular-nums">
-                {(tip.goalsHome ?? 0).toFixed(1)} – {(tip.goalsAway ?? 0).toFixed(1)}
-              </span>
+        {/* The pick */}
+        <div className="mb-4">
+          <div className={`text-xl font-bold leading-tight mb-2 ${textColor}`}>{tip.label}</div>
+          {/* Probability bar */}
+          <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
+              <div className={`h-full rounded-full ${barColor}/70`} style={{ width: `${prob}%` }} />
             </div>
-          )}
-          {tip.underOver && (
-            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${
-              tip.underOver.startsWith('+') ? 'text-teal-300 bg-teal-400/10 border-teal-400/25'
-              : 'text-violet-300 bg-violet-400/10 border-violet-400/25'
-            }`}>
-              {tip.underOver.startsWith('+') ? 'Over' : 'Under'} {tip.underOver.replace(/[+-]/, '')}
-            </span>
-          )}
-          {tip.winOrDraw && (
-            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border text-amber-300 bg-amber-400/8 border-amber-400/25 uppercase">
-              Win or Draw
-            </span>
-          )}
-          {tip.marketOdds != null && (
-            <span className="ml-auto font-mono text-base font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
-          )}
+            <span className={`text-sm font-bold font-mono tabular-nums ${textColor}`}>{prob}%</span>
+          </div>
         </div>
 
-        {/* Comparison bars */}
-        {tip.comparison && (
-          <div className="pt-3 border-t border-white/5">
-            <ComparisonBars comparison={tip.comparison as Record<string, { home: string; away: string }>} />
+        {/* Context: advice + goals */}
+        <div className="flex-1 space-y-2">
+          {tip.adviceText && (
+            <p className="text-xs text-white/50 leading-relaxed">{tip.adviceText}</p>
+          )}
+          {tip.winnerComment && tip.winnerComment !== tip.adviceText && (
+            <p className="text-[11px] text-teal-300/50 font-mono italic">"{tip.winnerComment}"</p>
+          )}
+          <div className="flex items-center gap-2 flex-wrap">
+            {tip.goalsHome != null && tip.goalsAway != null && (
+              <span className="text-[10px] font-mono text-muted-foreground/50">
+                Mål <span className="text-white/50">{tip.goalsHome.toFixed(1)}–{tip.goalsAway.toFixed(1)}</span>
+              </span>
+            )}
+            {/* Match result split as mini pills */}
+            {tip.homeWinPercent != null && (
+              <>
+                <span className="text-[10px] font-mono text-white/25 tabular-nums">1 {Math.round(tip.homeWinPercent)}%</span>
+                <span className="text-[10px] font-mono text-white/15">·</span>
+                <span className="text-[10px] font-mono text-white/25 tabular-nums">X {Math.round(tip.drawPercent ?? 0)}%</span>
+                <span className="text-[10px] font-mono text-white/15">·</span>
+                <span className="text-[10px] font-mono text-white/25 tabular-nums">2 {Math.round(tip.awayWinPercent ?? 0)}%</span>
+              </>
+            )}
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Match link */}
-      <div className="border-t border-white/6 px-5 py-3 bg-white/2">
+      {/* Match link — always at bottom */}
+      <div className="border-t border-white/6 px-5 py-3 bg-white/2 mt-auto">
         <Link href={`/match/${tip.fixtureId}`}>
           <div className="flex items-center justify-center py-2 px-3 rounded-lg bg-primary/8 border border-primary/20 hover:bg-primary/15 transition-colors cursor-pointer">
             <span className="text-xs font-mono text-primary font-semibold uppercase tracking-wider">Se kampanalyse →</span>

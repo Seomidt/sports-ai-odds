@@ -3,7 +3,7 @@ import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { format, isToday, isTomorrow } from "date-fns";
 import { Layout } from "@/components/Layout";
-import { Activity, Clock, Zap, TrendingUp, Target, CloudRain, AlertTriangle } from "lucide-react";
+import { Activity, Clock, Zap, TrendingUp, CloudRain, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
@@ -55,38 +55,6 @@ interface LeagueSection {
   fixtures: Fixture[];
 }
 
-type StoredTip = {
-  id: number;
-  fixtureId: number;
-  betType: string;
-  betSide: string | null;
-  recommendation: string;
-  trustScore: number;
-  aiProbability: number | null;
-  impliedProbability: number | null;
-  confidence: "high" | "medium" | "low" | null;
-  edge: number | null;
-  marketOdds: number | null;
-  valueRating: string | null;
-};
-
-function ConfidenceBadge({ confidence }: { confidence: "high" | "medium" | "low" | null }) {
-  if (!confidence) return null;
-  const styles: Record<string, string> = {
-    high: "text-teal-300 bg-teal-400/10 border-teal-400/30",
-    medium: "text-violet-300 bg-violet-400/10 border-violet-400/25",
-    low: "text-amber-400 bg-amber-400/10 border-amber-400/25",
-  };
-  const labels: Record<string, string> = { high: "High", medium: "Medium", low: "Low" };
-  return (
-    <span
-      className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${styles[confidence]}`}
-      title="Data-derived confidence (edge realism, data completeness, odds stability, league accuracy)"
-    >
-      {labels[confidence]}
-    </span>
-  );
-}
 
 function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: string; wind: number | null; icon: string | null }) {
   const isAdverse = (wind ?? 0) > 10 ||
@@ -113,79 +81,54 @@ function WeatherMini({ temp, desc, wind, icon }: { temp: number | null; desc: st
   );
 }
 
-function ValueBadge({ rating }: { rating: string | null }) {
-  if (!rating || rating === "overpriced") return null;
-  const styles: Record<string, string> = {
-    strong_value: "text-primary bg-primary/10 border border-primary/20",
-    value: "text-teal-400 bg-teal-400/10 border border-teal-400/20",
-    fair: "text-violet-400 bg-violet-400/10 border border-violet-400/20",
-  };
-  const labels: Record<string, string> = {
-    strong_value: "Strong Value",
-    value: "Value",
-    fair: "Fair",
-  };
-  const cls = styles[rating];
-  if (!cls) return null;
-  return (
-    <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${cls}`}>
-      {labels[rating]}
-    </span>
-  );
+
+interface DerivedMarket {
+  market: string;
+  side: string;
+  label: string;
+  probability: number;
 }
 
-function TipPreview({ fixtureId, allTips }: { fixtureId: number; allTips: Record<number, StoredTip[]> | undefined }) {
-  const tips = allTips?.[fixtureId] ?? [];
-  const matchTip = tips.find((t) => t.betType === "match_result") ?? tips[0];
-  if (!matchTip) return null;
+const MARKET_ORDER = ['match_result', 'over_under_25', 'btts', 'double_chance', 'win_or_draw'];
 
-  const aiPct = matchTip.aiProbability != null ? Math.round(matchTip.aiProbability * 100) : null;
-  const impliedFromOdds = matchTip.marketOdds != null && matchTip.marketOdds > 1 ? 1 / matchTip.marketOdds : null;
-  const impliedProb = matchTip.impliedProbability ?? impliedFromOdds;
-  const implPct = impliedProb != null ? Math.round(impliedProb * 100) : null;
-  const edgePp = matchTip.aiProbability != null && impliedProb != null
-    ? (matchTip.aiProbability - impliedProb) * 100
-    : null;
+function PredictionPreview({ fixtureId, allMarkets }: { fixtureId: number; allMarkets: Record<number, DerivedMarket[]> | undefined }) {
+  const markets = allMarkets?.[fixtureId] ?? [];
+  if (markets.length === 0) return null;
+
+  // One row per market type, pick strongest side per type
+  const byMarket: Record<string, DerivedMarket> = {};
+  for (const m of markets) {
+    if (!byMarket[m.market] || m.probability > byMarket[m.market].probability) {
+      byMarket[m.market] = m;
+    }
+  }
+  const rows = MARKET_ORDER.map(k => byMarket[k]).filter(Boolean);
+  if (rows.length === 0) return null;
 
   return (
-    <div className="border-t border-white/5 pt-2.5 mt-1 space-y-1.5">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <Target className="w-3 h-3 text-primary shrink-0" />
-          <span className="text-[11px] font-mono font-semibold text-white/80 truncate">
-            {matchTip.recommendation}
-            {matchTip.marketOdds ? ` · ${matchTip.marketOdds.toFixed(2)}` : ""}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {edgePp != null ? (
-            <span
-              className={`text-[10px] font-mono font-bold tabular-nums ${
-                edgePp >= 15 ? "text-teal-300" :
-                edgePp >= 5 ? "text-teal-400" :
-                edgePp >= -5 ? "text-violet-400" :
-                "text-amber-400"
-              }`}
-              title="Edge in percentage points (model probability − implied probability)"
-            >
-              {edgePp >= 0 ? "+" : ""}{edgePp.toFixed(1)}pp
-            </span>
-          ) : null}
-          <ConfidenceBadge confidence={matchTip.confidence} />
-          <ValueBadge rating={matchTip.valueRating} />
-        </div>
-      </div>
-      {(aiPct != null || implPct != null) && (
-        <div className="flex items-center gap-3 text-[10px] font-mono text-muted-foreground pl-5">
-          {aiPct != null && <span>AI <span className="text-white/80 tabular-nums">{aiPct}%</span></span>}
-          {implPct != null && <span>Market <span className="text-white/60 tabular-nums">{implPct}%</span></span>}
-        </div>
-      )}
+    <div className="border-t border-white/5 pt-2.5 mt-1 space-y-1">
+      {rows.map((m) => {
+        const col = m.probability >= 72 ? 'text-teal-300' : m.probability >= 60 ? 'text-violet-300' : 'text-white/60';
+        const barCol = m.probability >= 72 ? 'bg-teal-400/60' : m.probability >= 60 ? 'bg-violet-400/60' : 'bg-white/20';
+        return (
+          <div key={m.market} className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <span className={`text-[11px] font-mono font-semibold truncate ${col}`}>{m.label}</span>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <div className="w-12 h-1 bg-white/8 rounded-full overflow-hidden">
+                <div className={`h-full rounded-full ${barCol}`} style={{ width: `${m.probability}%` }} />
+              </div>
+              <span className={`text-[10px] font-mono font-bold tabular-nums w-7 text-right ${col}`}>{m.probability}%</span>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<number, StoredTip[]> | undefined }) {
+function PreMatchCard({ fixture, allMarkets }: { fixture: Fixture; allMarkets: Record<number, DerivedMarket[]> | undefined }) {
   const { data: signalData } = useGetFixtureSignals(
     fixture.fixtureId,
     { phase: "pre" },
@@ -193,12 +136,12 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
   );
   const signals = signalData?.signals ?? [];
 
-  const hasTip = !!(allTips?.[fixture.fixtureId]?.length);
+  const hasMarkets = !!(allMarkets?.[fixture.fixtureId]?.length);
   const borderClass = signals.length >= 4
     ? "border-primary/40 shadow-[0_0_20px_rgba(0,255,200,0.06)]"
     : signals.length >= 2
     ? "border-amber-400/25"
-    : hasTip
+    : hasMarkets
     ? "border-violet-400/20"
     : "border-white/6";
 
@@ -256,7 +199,7 @@ function PreMatchCard({ fixture, allTips }: { fixture: Fixture; allTips: Record<
           </div>
         </div>
 
-        <TipPreview fixtureId={fixture.fixtureId} allTips={allTips} />
+        <PredictionPreview fixtureId={fixture.fixtureId} allMarkets={allMarkets} />
 
         {signals.length > 0 && (
           <div className="border-t border-white/5 pt-3 mt-2.5 space-y-1">
@@ -286,11 +229,11 @@ export function PreMatch() {
     query: { queryKey: getGetTodayFixturesQueryKey(), staleTime: 60_000, gcTime: 5 * 60_000, refetchInterval: 3 * 60_000 },
   });
 
-  const { data: tipsData } = useQuery<{ tips: Record<number, StoredTip[]> }>({
-    queryKey: ["analysis", "prematch-tips"],
+  const { data: predMarketsData } = useQuery<{ markets: Record<number, DerivedMarket[]> }>({
+    queryKey: ["analysis", "prematch-predictions"],
     queryFn: async () => {
-      const res = await fetch("/api/analysis/prematch-tips");
-      if (!res.ok) throw new Error("Failed to fetch tips");
+      const res = await fetch("/api/analysis/prematch-predictions");
+      if (!res.ok) throw new Error("Failed to fetch predictions");
       return res.json();
     },
     staleTime: 5 * 60_000,
@@ -450,7 +393,7 @@ export function PreMatch() {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {league.fixtures.map((fixture) => (
-                    <PreMatchCard key={fixture.fixtureId} fixture={fixture} allTips={tipsData?.tips} />
+                    <PreMatchCard key={fixture.fixtureId} fixture={fixture} allMarkets={predMarketsData?.markets} />
                   ))}
                 </div>
               </div>

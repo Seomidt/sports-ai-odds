@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { format } from "date-fns";
@@ -524,44 +524,65 @@ function TrustBadge({ score, confidence }: { score: number | null; confidence?: 
 }
 
 const MARKET_LABEL: Record<string, string> = {
-  match_result: 'Kampresultat', btts: 'Begge scorer', over_under_25: 'Over/Under 2.5',
-  double_chance: 'Double Chance', win_or_draw: 'Win or Draw',
+  match_result: '1X2', btts: 'BTTS', over_under_25: 'Goals 2.5',
+  double_chance: '1X / X2', win_or_draw: 'Win or draw',
 };
+
+function marketCardAccent(market: string): { bar: string; chip: string; chipText: string } {
+  switch (market) {
+    case "match_result":
+      return { bar: "bg-teal-400", chip: "bg-teal-400/15 border-teal-400/35 text-teal-300", chipText: "1X2" };
+    case "over_under_25":
+      return { bar: "bg-violet-400", chip: "bg-violet-400/15 border-violet-400/35 text-violet-200", chipText: "O/U 2.5" };
+    case "btts":
+      return { bar: "bg-amber-400", chip: "bg-amber-400/15 border-amber-400/35 text-amber-200", chipText: "BTTS" };
+    default:
+      return { bar: "bg-white/30", chip: "bg-white/8 border-white/15 text-muted-foreground", chipText: "Combo" };
+  }
+}
 
 function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
   const prob = tip.probability;
+  const isPrimary = tip.market === "match_result" || tip.market === "over_under_25" || tip.market === "btts";
   const textColor = prob >= 72 ? 'text-teal-300' : prob >= 60 ? 'text-violet-300' : 'text-amber-400';
   const barColor = prob >= 72 ? 'bg-teal-400' : prob >= 60 ? 'bg-violet-400' : 'bg-amber-400';
-  const borderClass = prob >= 72 ? 'border-teal-400/25' : prob >= 60 ? 'border-violet-400/20' : 'border-white/8';
+  const borderClass = isPrimary
+    ? (prob >= 72 ? 'border-teal-400/30' : prob >= 60 ? 'border-violet-400/25' : 'border-white/10')
+    : 'border-white/6';
   const rankColor = rank <= 3 ? 'text-teal-400' : rank <= 6 ? 'text-amber-400' : 'text-violet-400';
+  const accent = marketCardAccent(tip.market);
+  const pickSize = isPrimary ? 'text-xl md:text-2xl' : 'text-lg';
 
   return (
-    <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden flex flex-col`}>
-      <div className="p-5 flex flex-col flex-1">
+    <div className={`glass-card rounded-xl border ${borderClass} overflow-hidden flex flex-col relative`}>
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${accent.bar} opacity-80`} aria-hidden />
+      <div className="p-5 flex flex-col flex-1 pl-6">
 
         {/* Header: match + trust */}
         <div className="flex items-start justify-between gap-3 mb-4">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
               <span className={`text-[10px] font-mono font-bold ${rankColor} opacity-60`}>#{rank}</span>
-              <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">{MARKET_LABEL[tip.market] ?? tip.market}</span>
+              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${accent.chip}`}>
+                {MARKET_LABEL[tip.market] ?? tip.market}
+              </span>
               {tip.kickoff && (
                 <span className="text-[10px] font-mono text-muted-foreground/35 ml-auto shrink-0">
                   {format(new Date(tip.kickoff), 'EEE d MMM, HH:mm')}
                 </span>
               )}
             </div>
-            <div className="text-sm font-semibold text-white/70 leading-tight truncate">
+            <div className="text-sm font-semibold text-white/90 leading-tight truncate">
               {tip.homeTeam} <span className="text-white/25 font-normal">vs</span> {tip.awayTeam}
             </div>
             {tip.leagueName && (
               <div className="text-[10px] font-mono text-muted-foreground/35 truncate mt-0.5">{tip.leagueName}</div>
             )}
             {/* Predicted winner badge */}
-            {tip.winner && (
+            {tip.winner && isPrimary && (
               <div className="mt-1.5">
                 <span className="inline-flex items-center gap-1 text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border text-amber-300/80 bg-amber-400/8 border-amber-400/20 uppercase tracking-wider">
-                  ⚡ {tip.winner}
+                  Model: {tip.winner}
                 </span>
               </div>
             )}
@@ -571,7 +592,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
 
         {/* The pick */}
         <div className="mb-4">
-          <div className={`text-xl font-bold leading-tight mb-2 ${textColor}`}>{tip.label}</div>
+          <div className={`font-bold leading-tight mb-2 ${pickSize} ${isPrimary ? textColor : 'text-white/85'}`}>{tip.label}</div>
           {/* Probability bar */}
           <div className="flex items-center gap-2">
             <div className="flex-1 h-1.5 bg-white/8 rounded-full overflow-hidden">
@@ -616,8 +637,8 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             </div>
           )}
 
-          {/* Team comparison bars */}
-          {tip.comparison && (() => {
+          {/* Team comparison bars — skip for double chance to reduce noise */}
+          {isPrimary && tip.comparison && (() => {
             const comp = tip.comparison as Record<string, { home: string; away: string }>;
             const rows = [
               { key: 'total', label: 'Overall' },
@@ -672,7 +693,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           )}
 
           {/* Last 5 form */}
-          {(tip.last5Home || tip.last5Away) && (
+          {isPrimary && (tip.last5Home || tip.last5Away) && (
             <div className="grid grid-cols-2 gap-2 pt-1">
               {([
                 { label: tip.homeTeam, data: tip.last5Home, color: 'teal' },
@@ -883,7 +904,7 @@ export function Dashboard() {
   });
 
   const tips = data?.tips ?? [];
-  const uniqueFixtures = tips.length;
+  const uniqueFixtureCount = useMemo(() => new Set(tips.map((t) => t.fixtureId)).size, [tips]);
   let globalRank = 0;
 
   return (
@@ -896,7 +917,7 @@ export function Dashboard() {
               <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PREDICTIONS</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              Full grid — API-Football predictions for the next 14 days, strongest first. For a calmer daily view, start on{" "}
+              Mixed markets (1X2, goals, BTTS, double chance) from API-Football — not only 1X/X2. Open a match for every derived line. For a shorter list, see{" "}
               <Link href="/today" className="text-primary/80 hover:text-primary underline underline-offset-2 text-xs font-mono">
                 Today
               </Link>
@@ -915,9 +936,9 @@ export function Dashboard() {
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">hit rate</div>
               </div>
             )}
-            {!isLoading && uniqueFixtures > 0 && (
+            {!isLoading && tips.length > 0 && (
               <div className="text-right">
-                <div className="text-lg font-bold font-mono text-white tabular-nums">{uniqueFixtures}</div>
+                <div className="text-lg font-bold font-mono text-white tabular-nums">{uniqueFixtureCount}</div>
                 <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">fixtures</div>
               </div>
             )}
@@ -950,10 +971,21 @@ export function Dashboard() {
             <div className="flex items-center gap-3">
               <Zap className="w-4 h-4 text-teal-400" />
               <h2 className="text-sm font-mono font-bold text-teal-400 tracking-widest uppercase">Predictions</h2>
-              <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">{tips.length} kampe</span>
+              <span className="text-[11px] font-mono text-muted-foreground/50 ml-auto">
+                {tips.length} picks · {uniqueFixtureCount} fixtures
+              </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {tips.map(t => { globalRank++; return <ValueOddsCard key={t.fixtureId} tip={t} rank={globalRank} />; })}
+              {tips.map((t) => {
+                globalRank++;
+                return (
+                  <ValueOddsCard
+                    key={`${t.fixtureId}-${t.market}-${t.side}`}
+                    tip={t}
+                    rank={globalRank}
+                  />
+                );
+              })}
             </div>
           </div>
         )}

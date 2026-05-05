@@ -305,21 +305,17 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo): DerivedMarket[] {
     if (bttsNo >= 35) markets.push({ ...base, market: "btts", side: "no", label: "Ikke begge scorer", probability: bttsNo });
   }
 
-  // ── Double Chance ──
+  // ── Double Chance (only when very lopsided — sums are always high for 1X/X2, so avoid flooding lists)
   if (pred.homeWinPercent && pred.drawPercent) {
     const dc = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
-    if (dc >= 50) markets.push({ ...base, market: "double_chance", side: "home_draw", label: `${home} eller uafgjort`, probability: dc });
+    if (dc >= 72) markets.push({ ...base, market: "double_chance", side: "home_draw", label: `${home} eller uafgjort`, probability: dc });
   }
   if (pred.awayWinPercent && pred.drawPercent) {
     const dc = Math.min(99, Math.round(pred.awayWinPercent + pred.drawPercent));
-    if (dc >= 50) markets.push({ ...base, market: "double_chance", side: "away_draw", label: `${away} eller uafgjort`, probability: dc });
+    if (dc >= 72) markets.push({ ...base, market: "double_chance", side: "away_draw", label: `${away} eller uafgjort`, probability: dc });
   }
 
-  // ── Win or Draw (1X as single market if winOrDraw=true) ──
-  if (pred.winOrDraw === true && pred.homeWinPercent && pred.drawPercent) {
-    const wod = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
-    markets.push({ ...base, market: "win_or_draw", side: "home", label: `${home} vinder eller uafgjort`, probability: wod });
-  }
+  // win_or_draw from API duplicates home_draw double chance — omit to avoid two identical cards
 
   return markets;
 }
@@ -378,16 +374,68 @@ async function fetchFixturePredictions(daysAhead = 14) {
 
 // ── Value odds — best picks only (prob ≥ 58%) sorted by probability ──────────
 
+/** Picks a diverse prediction set so the grid is not 20× double chance (1X/X2 dominate raw probability sorts). */
+function pickDiverseValueTips(all: DerivedMarket[], maxTotal = 28): DerivedMarket[] {
+  const MIN_PRIMARY = 58; // 1X2, O/U, BTTS — API % can sit in high-50s for value sides
+  const MIN_DOUBLE_CHANCE = 78; // require stronger edge before showing safe combos in the headline grid
+
+  let eligible = all.filter((m) => {
+    if (m.market === "double_chance") return m.probability >= MIN_DOUBLE_CHANCE;
+    return m.probability >= MIN_PRIMARY;
+  });
+  if (eligible.length === 0) {
+    eligible = all.filter((m) => m.probability >= 55);
+  }
+
+  const rankScore = (m: DerivedMarket) => {
+    // Slight boost so primary markets surface before yet another 1X
+    const typeBoost =
+      m.market === "match_result" ? 4 : m.market === "over_under_25" ? 3 : m.market === "btts" ? 2 : 0;
+    return m.probability + typeBoost;
+  };
+
+  const sorted = [...eligible].sort((a, b) => rankScore(b) - rankScore(a));
+
+  const out: DerivedMarket[] = [];
+  const countByFixture = new Map<number, number>();
+  const countByMarket = new Map<string, number>();
+  const MAX_PER_FIXTURE = 2;
+  const CAP_BY_MARKET: Record<string, number> = {
+    match_result: 12,
+    over_under_25: 10,
+    btts: 10,
+    double_chance: 6,
+  };
+
+  for (const m of sorted) {
+    if (out.length >= maxTotal) break;
+    const fc = countByFixture.get(m.fixtureId) ?? 0;
+    if (fc >= MAX_PER_FIXTURE) continue;
+    const mc = countByMarket.get(m.market) ?? 0;
+    if (mc >= (CAP_BY_MARKET[m.market] ?? 8)) continue;
+    out.push(m);
+    countByFixture.set(m.fixtureId, fc + 1);
+    countByMarket.set(m.market, mc + 1);
+  }
+
+  // Back-fill if we were too strict (e.g. tiny fixture set)
+  if (out.length < 12) {
+    for (const m of sorted) {
+      if (out.length >= maxTotal) break;
+      if (out.some((x) => x.fixtureId === m.fixtureId && x.market === m.market && x.side === m.side)) continue;
+      out.push(m);
+    }
+  }
+
+  return out.slice(0, maxTotal);
+}
+
 router.get("/analysis/value-odds", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:value-odds-v4", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:value-odds-v5", TTL.MIN5, async () => {
       const pairs = await fetchFixturePredictions(14);
       const all: DerivedMarket[] = pairs.flatMap(({ row, trust }) => deriveMarkets(row as PredRow, trust));
-      // Value = strong signal only (≥ 68%) — avoid near-50/50 noise, keep only best picks
-      const valueTips = all
-        .filter((m) => m.probability >= 68)
-        .sort((a, b) => b.probability - a.probability)
-        .slice(0, 20);
+      const valueTips = pickDiverseValueTips(all, 28);
       return { tips: valueTips };
     });
     return res.json(result);

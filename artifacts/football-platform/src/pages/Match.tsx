@@ -41,7 +41,7 @@ export function Match() {
     if (window.history.length > 1) {
       window.history.back();
     } else {
-      navigate("/dashboard");
+      navigate("/today");
     }
   }, [navigate]);
 

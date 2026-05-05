@@ -896,8 +896,14 @@ export function Dashboard() {
               <h1 className="text-3xl font-bold font-mono tracking-tight text-white">PREDICTIONS</h1>
             </div>
             <p className="text-muted-foreground text-sm">
-              API-Football predictions — kampe de næste 14 dage sorteret efter stærkeste forudsigelse.{" "}
-              <a href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">Se historik →</a>
+              Full grid — API-Football predictions for the next 14 days, strongest first. For a calmer daily view, start on{" "}
+              <Link href="/today" className="text-primary/80 hover:text-primary underline underline-offset-2 text-xs font-mono">
+                Today
+              </Link>
+              .{" "}
+              <Link href="/performance" className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors text-xs font-mono">
+                Performance →
+              </Link>
             </p>
           </div>
           <div className="shrink-0 flex items-center gap-4">

@@ -8,6 +8,8 @@ import { useGetMe, setAuthTokenGetter, setTokenGetter } from "@workspace/api-cli
 import { SessionProvider } from "./lib/session";
 import { Home } from "./pages/Home";
 import { Dashboard } from "./pages/Dashboard";
+import { Today } from "./pages/Today";
+import { Matches } from "./pages/Matches";
 import { Live } from "./pages/Live";
 import { PreMatch } from "./pages/PreMatch";
 import { PostMatch } from "./pages/PostMatch";
@@ -18,7 +20,7 @@ import { News } from "./pages/News";
 import { Admin } from "./pages/Admin";
 import { Signals } from "./pages/Signals";
 import { Performance } from "./pages/Performance";
-import { Pricing } from "./pages/Pricing";
+import { PricingGate } from "./pages/PricingGate";
 import NotFound from "./pages/not-found";
 import Login from "./pages/Login";
 import { useAuth } from "./hooks/useAuth";
@@ -141,7 +143,7 @@ function HomeRedirect() {
   }
 
   if (isSignedIn) {
-    return <Redirect to="/dashboard" />;
+    return <Redirect to="/today" />;
   }
 
   return <Home />;
@@ -158,7 +160,10 @@ function AppRoutes() {
           <Route path="/" component={HomeRedirect} />
           <Route path="/login" component={Login} />
 
-          <Route path="/dashboard"><ProtectedRoute component={Dashboard} /></Route>
+          <Route path="/dashboard"><Redirect to="/today" /></Route>
+          <Route path="/today"><ProtectedRoute component={Today} /></Route>
+          <Route path="/predictions"><ProtectedRoute component={Dashboard} /></Route>
+          <Route path="/matches"><ProtectedRoute component={Matches} /></Route>
           <Route path="/live"><ProtectedRoute component={Live} /></Route>
           <Route path="/pre-match"><ProtectedRoute component={PreMatch} /></Route>
           <Route path="/post-match"><ProtectedRoute component={PostMatch} /></Route>
@@ -168,7 +173,7 @@ function AppRoutes() {
           <Route path="/following"><ProtectedRoute component={Following} /></Route>
           <Route path="/news"><ProtectedRoute component={News} /></Route>
           <Route path="/admin"><ProtectedRoute component={Admin} /></Route>
-          <Route path="/pricing"><ProtectedRoute component={Pricing} /></Route>
+          <Route path="/pricing" component={PricingGate} />
           <Route path="/performance"><ProtectedRoute component={Performance} /></Route>
 
           <Route component={NotFound} />

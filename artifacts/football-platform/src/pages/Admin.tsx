@@ -1371,7 +1371,7 @@ function AdminContent() {
   }
 
   if (me.role !== "admin") {
-    return <Redirect to="/dashboard" />;
+    return <Redirect to="/today" />;
   }
 
   const handleAddUser = async () => {

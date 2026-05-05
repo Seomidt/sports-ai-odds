@@ -198,7 +198,13 @@ function EmptyState({ phase }: { phase: Tab }) {
   );
 }
 
-export function Fixtures() {
+export function Fixtures({
+  pageTitle = "FIXTURES",
+  pageSubtitle = "Pre-match · Live · Finished — updates automatically.",
+}: {
+  pageTitle?: string;
+  pageSubtitle?: string;
+} = {}) {
   const { data, isLoading } = useGetTodayFixtures({
     staleTime: 15_000,
     gcTime: 5 * 60_000,
@@ -209,7 +215,7 @@ export function Fixtures() {
     },
     refetchIntervalInBackground: true,
   });
-  const [activeTab, setActiveTab] = useState<Tab>("live");
+  const [activeTab, setActiveTab] = useState<Tab>("prematch");
   const [liveLeagueFilter, setLiveLeagueFilter] = useState<string>("all");
 
   const allFixtures: Fixture[] = (data?.leagues ?? []).flatMap((league) => league.fixtures);
@@ -242,8 +248,8 @@ export function Fixtures() {
     <Layout>
       <div className="space-y-6">
         <header>
-          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">FIXTURES</h1>
-          <p className="text-muted-foreground text-sm">Pre-match · Live · Finished — updates automatically.</p>
+          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-1">{pageTitle}</h1>
+          <p className="text-muted-foreground text-sm">{pageSubtitle}</p>
         </header>
 
         {isLoading ? (

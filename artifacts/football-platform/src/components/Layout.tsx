@@ -1,5 +1,24 @@
 import { Link, useLocation } from "wouter";
-import { ListOrdered, ShieldAlert, Star, LogOut, User, Menu, X, Radio, Clock, CheckCircle2, Target, Newspaper, Zap, BarChart3 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ListOrdered,
+  ShieldAlert,
+  Star,
+  LogOut,
+  User,
+  Menu,
+  X,
+  Radio,
+  Clock,
+  CheckCircle2,
+  Target,
+  Newspaper,
+  Zap,
+  BarChart3,
+  LayoutDashboard,
+  CalendarDays,
+  CreditCard,
+} from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useGetMe } from "@workspace/api-client-react";
 import { keepPreviousData } from "@tanstack/react-query";
@@ -20,51 +39,69 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const navItems = [
-    { href: "/dashboard", label: "Value Odds", icon: Target },
+  const primaryNav = [
+    { href: "/today", label: "Today", icon: LayoutDashboard },
+    { href: "/matches", label: "Matches", icon: CalendarDays },
+    { href: "/predictions", label: "Predictions", icon: Target },
+  ];
+
+  const secondaryNav = [
     { href: "/live", label: "Live", icon: Radio },
     { href: "/pre-match", label: "Pre-Match", icon: Clock },
     { href: "/post-match", label: "Post-Match", icon: CheckCircle2 },
     { href: "/signals", label: "Signals", icon: Zap },
+    { href: "/following", label: "Watchlist", icon: Star },
     { href: "/standings", label: "Standings", icon: ListOrdered },
     { href: "/news", label: "News", icon: Newspaper },
-    { href: "/following", label: "Following", icon: Star },
     { href: "/performance", label: "Performance", icon: BarChart3 },
+    { href: "/pricing", label: "Plan", icon: CreditCard },
   ];
 
-  if (me?.role === "admin") {
-    navItems.push({ href: "/admin", label: "Admin", icon: ShieldAlert });
-  }
+  const adminNav = me?.role === "admin" ? [{ href: "/admin", label: "Admin", icon: ShieldAlert }] : [];
+
+  const renderNavLink = (item: { href: string; label: string; icon: LucideIcon }) => {
+    const isActive = location === item.href || location.startsWith(`${item.href}/`);
+    return (
+      <Link key={item.href} href={item.href}>
+        <div
+          className={`flex items-center px-4 py-3 text-sm font-medium rounded-md cursor-pointer transition-colors ${
+            isActive
+              ? "bg-primary/10 text-primary border border-primary/20"
+              : "text-muted-foreground hover:bg-white/5 hover:text-white"
+          }`}
+        >
+          <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+          {item.label}
+        </div>
+      </Link>
+    );
+  };
 
   return (
     <div className="flex md:h-[100dvh] w-full md:overflow-hidden text-foreground">
 
       <aside className="hidden md:flex w-64 flex-shrink-0 border-r border-white/5 bg-black/20 backdrop-blur-xl flex-col">
-        <Link href="/dashboard">
+        <Link href="/today">
           <div className="h-16 flex items-center px-6 border-b border-white/5 hover:bg-white/3 transition-colors cursor-pointer">
             <img src={appLogo} alt="sports-ai-odds" className="w-8 h-8 mr-3 rounded-lg object-contain" />
             <span className="font-mono font-bold tracking-tight text-lg">sports-ai-odds</span>
           </div>
         </Link>
 
-        <nav className="flex-1 py-6 px-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            const isActive = location === item.href || location.startsWith(`${item.href}/`);
-            return (
-              <Link key={item.href} href={item.href}>
-                <div
-                  className={`flex items-center px-4 py-3 text-sm font-medium rounded-md cursor-pointer transition-colors ${
-                    isActive
-                      ? "bg-primary/10 text-primary border border-primary/20"
-                      : "text-muted-foreground hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                  {item.label}
-                </div>
-              </Link>
-            );
-          })}
+        <nav className="flex-1 py-6 px-4 space-y-4 overflow-y-auto">
+          <div className="space-y-1">
+            <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Start here</p>
+            {primaryNav.map(renderNavLink)}
+          </div>
+          <div className="space-y-1">
+            <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Explore</p>
+            {secondaryNav.map(renderNavLink)}
+          </div>
+          {adminNav.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-white/5">
+              {adminNav.map(renderNavLink)}
+            </div>
+          )}
         </nav>
 
         <div className="p-4 border-t border-white/5">
@@ -104,28 +141,68 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <nav className="flex-1 py-4 px-3 space-y-1">
-              {navItems.map((item) => {
-                const isActive = location === item.href || location.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    <div
-                      className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
-                        isActive
-                          ? "bg-primary/10 text-primary border border-primary/20"
-                          : "text-muted-foreground hover:bg-white/5 hover:text-white"
-                      }`}
-                    >
-                      <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
-                      {item.label}
-                    </div>
-                  </Link>
-                );
-              })}
+            <nav className="flex-1 py-4 px-3 space-y-4 overflow-y-auto">
+              <div className="space-y-1">
+                <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Start here</p>
+                {primaryNav.map((item) => {
+                  const isActive = location === item.href || location.startsWith(`${item.href}/`);
+                  return (
+                    <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
+                      <div
+                        className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                          isActive
+                            ? "bg-primary/10 text-primary border border-primary/20"
+                            : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                        {item.label}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              <div className="space-y-1">
+                <p className="px-4 text-[10px] font-mono font-bold text-muted-foreground/50 uppercase tracking-widest">Explore</p>
+                {secondaryNav.map((item) => {
+                  const isActive = location === item.href || location.startsWith(`${item.href}/`);
+                  return (
+                    <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
+                      <div
+                        className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                          isActive
+                            ? "bg-primary/10 text-primary border border-primary/20"
+                            : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                        }`}
+                      >
+                        <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                        {item.label}
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+              {adminNav.length > 0 && (
+                <div className="space-y-1 pt-2 border-t border-white/5">
+                  {adminNav.map((item) => {
+                    const isActive = location === item.href || location.startsWith(`${item.href}/`);
+                    return (
+                      <Link key={item.href} href={item.href} onClick={() => setMobileMenuOpen(false)}>
+                        <div
+                          className={`flex items-center px-4 py-3.5 text-sm font-medium rounded-lg cursor-pointer transition-colors ${
+                            isActive
+                              ? "bg-primary/10 text-primary border border-primary/20"
+                              : "text-muted-foreground hover:bg-white/5 hover:text-white"
+                          }`}
+                        >
+                          <item.icon className={`w-5 h-5 mr-3 ${isActive ? "text-primary" : "text-muted-foreground"}`} />
+                          {item.label}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </nav>
             <div className="p-4 border-t border-white/5">
               <div className="flex items-center mb-4 px-2">
@@ -151,7 +228,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       <div className="flex-1 flex flex-col min-w-0 md:overflow-hidden">
         <header className="md:hidden sticky top-0 z-40 flex items-center justify-between px-4 h-14 border-b border-white/5 bg-black/30 backdrop-blur-xl shrink-0">
-          <Link href="/dashboard">
+          <Link href="/today">
             <div className="flex items-center gap-2 cursor-pointer">
               <img src={appLogo} alt="sports-ai-odds" className="w-6 h-6 rounded-md object-contain" />
               <span className="font-mono font-bold text-sm tracking-tight">sports-ai-odds</span>

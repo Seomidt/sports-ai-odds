@@ -2,7 +2,7 @@ import { Router } from "express";
 import { and, asc, desc, eq, gte, inArray, isNotNull, lt, lte, or, sql } from "drizzle-orm";
 
 import { db } from "@workspace/db";
-import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles, predictionReviews } from "@workspace/db/schema";
+import { aiBettingTips, fixtures, prematchSyntheses, standings, newsArticles, predictionReviews, predictions } from "@workspace/db/schema";
 import { getOrFetch, TTL } from "../lib/routeCache.js";
 import { generateLeagueNews, getLiveAnalysis } from "../ai/analysisLayer.js";
 import { filterPublishableTips } from "../ai/publishFilter.js";
@@ -222,15 +222,37 @@ router.get("/analysis/value-odds", async (req, res) => {
         }))
       ).slice(0, 100);
 
-      // Add computed fields for frontend sorting/display
+      // Fetch prediction data for these fixtures
+      const fixtureIds = [...new Set(tips.map((t) => t.fixtureId).filter(Boolean))] as number[];
+      const predRows = fixtureIds.length > 0
+        ? await db.select({
+            fixtureId: predictions.fixtureId,
+            winnerComment: predictions.winnerComment,
+            underOver: predictions.underOver,
+            winOrDraw: predictions.winOrDraw,
+            comparison: predictions.comparison,
+          }).from(predictions).where(inArray(predictions.fixtureId, fixtureIds))
+        : [];
+      const predMap = new Map(predRows.map((p) => [p.fixtureId, p]));
+
+      // Add computed fields + prediction data for frontend
       const enriched = tips.map((t) => {
+        const pred = predMap.get(t.fixtureId ?? -1) ?? null;
         const valueScore =
           t.valueRating === "strong_value" ? 4
           : t.valueRating === "value" ? 3
           : t.valueRating === "fair" ? 2
           : 1;
         const combinedScore = (t.edge ?? 0) * 10 + (t.trustScore ?? 0) / 10;
-        return { ...t, valueScore, combinedScore };
+        return {
+          ...t,
+          valueScore,
+          combinedScore,
+          winnerComment: pred?.winnerComment ?? null,
+          underOver: pred?.underOver ?? null,
+          winOrDraw: pred?.winOrDraw ?? null,
+          comparison: pred?.comparison ?? null,
+        };
       });
 
       return { tips: enriched };
@@ -370,7 +392,23 @@ router.get("/analysis/daily-summary", async (_req, res) => {
             featureSnapshot: (r.featureSnapshot ?? null) as Record<string, unknown> | null,
           })),
         );
-      const todayPicks = toPublishable(todayPicksRaw);
+      const todayPicksFiltered = toPublishable(todayPicksRaw);
+
+      // Enrich today's picks with prediction data
+      const todayFixtureIds = [...new Set(todayPicksFiltered.map((t) => t.fixtureId).filter(Boolean))] as number[];
+      const todayPredRows = todayFixtureIds.length > 0
+        ? await db.select({
+            fixtureId: predictions.fixtureId,
+            winnerComment: predictions.winnerComment,
+            underOver: predictions.underOver,
+            comparison: predictions.comparison,
+          }).from(predictions).where(inArray(predictions.fixtureId, todayFixtureIds))
+        : [];
+      const todayPredMap = new Map(todayPredRows.map((p) => [p.fixtureId, p]));
+      const todayPicks = todayPicksFiltered.map((t) => {
+        const pred = todayPredMap.get(t.fixtureId ?? -1) ?? null;
+        return { ...t, winnerComment: pred?.winnerComment ?? null, underOver: pred?.underOver ?? null };
+      });
 
       // Yesterday + allReviewed: only count tips where we had genuine edge (value+).
       // This ensures hit rate and ROI reflect actual "played" picks, not all generated tips.

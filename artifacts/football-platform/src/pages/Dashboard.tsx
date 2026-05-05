@@ -41,6 +41,11 @@ interface ValueTip {
   valueScore: number;
   combinedScore: number;
   createdAt: string;
+  // API-Football prediction fields
+  winnerComment: string | null;
+  underOver: string | null;
+  winOrDraw: boolean | null;
+  comparison: Record<string, { home: string; away: string }> | null;
 }
 
 interface TipSummary {
@@ -59,6 +64,8 @@ interface TipSummary {
   aiProbability: number | null;
   impliedProbability: number | null;
   confidence: "high" | "medium" | "low" | null;
+  winnerComment: string | null;
+  underOver: string | null;
 }
 
 interface YesterdayTip extends TipSummary {
@@ -299,6 +306,11 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                         <ValueBadge rating={tip.valueRating} />
                       </div>
                       <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
+                      {tip.winnerComment && (
+                        <div className="text-[10px] text-teal-300/60 font-mono italic truncate mt-0.5">
+                          {tip.winnerComment}
+                        </div>
+                      )}
                       <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
                         {tip.homeTeam} vs {tip.awayTeam}
                         {tip.kickoff && (
@@ -448,25 +460,32 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
   );
 }
 
-function SignalSummaryPreview() {
+function OddsAendringPreview() {
   return (
     <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
       <div className="p-4 border-b border-white/5 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Zap className="w-3.5 h-3.5 text-teal-400" />
-          <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-widest">Top Signals</span>
+          <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest">Odds Ændring</span>
         </div>
-        <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">Live odds aware</span>
+        <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">Live bevægelser</span>
       </div>
       <div className="p-3 space-y-2">
+        <p className="text-[11px] text-muted-foreground/50 font-mono px-1">
+          Odds-bevægelser vises live under den kamp du kigger på — gå ind på en kamp for at se ændringer i realtid.
+        </p>
         {[
-          "Odds dropping fast on one match",
-          "One strong value edge per fixture",
-          "Injuries / lineup changes merged into one signal",
-        ].map((t, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs text-white/70 bg-white/3 rounded-lg px-3 py-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-teal-400 shrink-0" />
-            <span>{t}</span>
+          { label: "Hjemme vinder", from: "2.10", to: "1.85", dir: "down" },
+          { label: "Uafgjort", from: "3.40", to: "3.60", dir: "up" },
+          { label: "Ude vinder", from: "3.80", to: "4.20", dir: "up" },
+        ].map((item, i) => (
+          <div key={i} className="flex items-center gap-2 text-xs bg-white/3 rounded-lg px-3 py-2">
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.dir === 'down' ? 'bg-teal-400' : 'bg-amber-400'}`} />
+            <span className="text-white/50 flex-1">{item.label}</span>
+            <span className="font-mono text-muted-foreground/40 line-through text-[10px]">{item.from}</span>
+            <span className={`font-mono font-bold text-[11px] ${item.dir === 'down' ? 'text-teal-400' : 'text-amber-400'}`}>
+              {item.dir === 'down' ? '▼' : '▲'} {item.to}
+            </span>
           </div>
         ))}
       </div>
@@ -531,11 +550,20 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
 
         <div className="mb-3">
           <div className="text-lg font-bold text-white leading-tight mb-1">{tip.recommendation}</div>
-          {implPct != null && (
-            <div className="text-[11px] font-mono text-muted-foreground">
-              Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span>
-            </div>
-          )}
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+            {implPct != null && (
+              <span className="text-[11px] font-mono text-muted-foreground">
+                Market <span className="text-white/60 tabular-nums font-bold">{implPct}%</span>
+              </span>
+            )}
+            {tip.underOver && (
+              <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border uppercase ${
+                tip.underOver.startsWith('+') ? 'text-teal-300 bg-teal-400/10 border-teal-400/25' : 'text-violet-300 bg-violet-400/10 border-violet-400/25'
+              }`}>
+                {tip.underOver.startsWith('+') ? 'Over' : 'Under'} {tip.underOver.replace(/[+-]/, '')}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 mb-2 text-sm text-white/60">
@@ -544,9 +572,46 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           <span className="font-medium">{tip.awayTeam}</span>
         </div>
 
+        {tip.winnerComment && (
+          <div className="text-xs text-teal-300/70 font-mono italic mb-2 leading-snug">
+            "{tip.winnerComment}"
+          </div>
+        )}
+
         <p className="text-xs text-white/50 leading-relaxed">
           {tip.reasoning}
         </p>
+
+        {tip.comparison && (() => {
+          const metrics = ['form', 'att', 'def', 'h2h'] as const;
+          const labels: Record<string, string> = { form: 'Form', att: 'Angreb', def: 'Forsvar', h2h: 'H2H' };
+          const items = metrics.map(k => {
+            const m = (tip.comparison as Record<string, { home: string; away: string }>)[k];
+            if (!m) return null;
+            const h = parseFloat(m.home);
+            const a = parseFloat(m.away);
+            const total = h + a;
+            const hPct = total > 0 ? Math.round((h / total) * 100) : 50;
+            return { key: k, label: labels[k], hPct };
+          }).filter(Boolean) as { key: string; label: string; hPct: number }[];
+          if (items.length === 0) return null;
+          return (
+            <div className="mt-3 pt-3 border-t border-white/5 grid grid-cols-2 gap-x-4 gap-y-1.5">
+              {items.map(({ key, label, hPct }) => (
+                <div key={key}>
+                  <div className="flex justify-between text-[10px] font-mono text-muted-foreground/60 mb-0.5">
+                    <span>{label}</span>
+                    <span className="text-white/40">{hPct}% / {100 - hPct}%</span>
+                  </div>
+                  <div className="flex h-1 rounded-full overflow-hidden bg-white/5">
+                    <div className="bg-teal-400/60 h-full" style={{ width: `${hPct}%` }} />
+                    <div className="bg-violet-400/40 h-full" style={{ width: `${100 - hPct}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Always-visible match link ── */}
@@ -772,6 +837,9 @@ export function Dashboard() {
 
         {/* Daily Loop — Today / Yesterday / Streak & ROI */}
         {summary && <DailyLoopBar summary={summary} />}
+
+        {/* Odds Ændring teaser */}
+        <OddsAendringPreview />
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">

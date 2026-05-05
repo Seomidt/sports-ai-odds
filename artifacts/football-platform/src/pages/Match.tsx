@@ -224,7 +224,11 @@ export function Match() {
               )}
             </TabsContent>
             <TabsContent value="live" className="mt-4">
-              <LiveAnalysisTab fixtureId={id} />
+              <LiveAnalysisTab
+                fixtureId={id}
+                homeTeam={fixture.homeTeamName ?? "Hjemme"}
+                awayTeam={fixture.awayTeamName ?? "Ude"}
+              />
             </TabsContent>
             <TabsContent value="post" className="mt-4">
               <PostReviewTab
@@ -855,7 +859,28 @@ interface LiveAnalysis {
   cachedAt?: string;
 }
 
-function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
+interface LiveSignal {
+  id: number;
+  fixtureId: number;
+  phase: string;
+  signalKey: string;
+  signalLabel: string;
+  signalValue: number | null;
+  signalBool: boolean | null;
+  triggeredAt: string;
+}
+
+const SIGNAL_CONFIG: Record<string, { icon: string; color: string }> = {
+  momentum_shift:           { icon: '↗', color: 'text-violet-300 border-violet-400/25 bg-violet-400/8' },
+  home_pressure_rising:     { icon: '⬆', color: 'text-teal-300 border-teal-400/25 bg-teal-400/8' },
+  away_over_expected_tempo: { icon: '↗', color: 'text-teal-300 border-teal-400/25 bg-teal-400/8' },
+  red_card_changed_balance: { icon: '■', color: 'text-red-400 border-red-400/30 bg-red-400/8' },
+  upset_risk:               { icon: '⚠', color: 'text-amber-400 border-amber-400/30 bg-amber-400/8' },
+  live_edge:                { icon: '◆', color: 'text-teal-300 border-teal-400/30 bg-teal-400/10' },
+  live_value:               { icon: '◆', color: 'text-teal-300 border-teal-400/30 bg-teal-400/10' },
+};
+
+function LiveAnalysisTab({ fixtureId, homeTeam, awayTeam }: { fixtureId: number; homeTeam: string; awayTeam: string }) {
   const { data: liveAnalysis, isLoading } = useQuery<LiveAnalysis | null>({
     queryKey: ['liveAnalysis', fixtureId],
     queryFn: async () => {
@@ -869,53 +894,150 @@ function LiveAnalysisTab({ fixtureId }: { fixtureId: number }) {
     refetchInterval: 30_000,
   });
 
+  const { data: signalsData } = useGetFixtureSignals(
+    fixtureId,
+    { phase: 'live' },
+    { query: { queryKey: ['signals', fixtureId, 'live'], staleTime: 15_000, refetchInterval: 15_000 } }
+  );
+  const liveSignals: LiveSignal[] = (signalsData?.signals ?? []) as LiveSignal[];
+  const activeSignals = liveSignals.filter(s => s.signalBool);
+
+  const { data: liveOddsData } = useGetFixtureLiveOdds(
+    fixtureId,
+    { query: { queryKey: getGetFixtureLiveOddsQueryKey(fixtureId), staleTime: 15_000, refetchInterval: 15_000 } }
+  );
+  const snapshots = liveOddsData?.liveOdds ?? [];
+  const latest = snapshots[0] ?? null;
+  const earliest = snapshots.length > 1 ? snapshots[snapshots.length - 1] : null;
+
+  type OddsField = 'homeWin' | 'draw' | 'awayWin';
+  const oddsChange = (field: OddsField) => {
+    if (!latest || !earliest) return null;
+    const cur = (latest as Record<string, number | null>)[field] ?? null;
+    const old = (earliest as Record<string, number | null>)[field] ?? null;
+    if (!cur || !old) return { cur, old: null, diff: null };
+    return { cur, old, diff: parseFloat((cur - old).toFixed(2)) };
+  };
+
+  const oddsItems: { label: string; field: OddsField }[] = [
+    { label: homeTeam, field: 'homeWin' },
+    { label: 'Uafgjort', field: 'draw' },
+    { label: awayTeam, field: 'awayWin' },
+  ];
+
   return (
-    <div className="glass-card p-6 rounded-xl min-h-[280px]">
-      <h3 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase mb-5 flex items-center">
-        <Activity className="w-4 h-4 mr-2 text-primary" />
-        LIVE ANALYSIS
-      </h3>
-      {isLoading ? (
-        <div className="flex items-center justify-center py-16">
-          <Activity className="w-6 h-6 text-primary animate-pulse" />
-        </div>
-      ) : liveAnalysis ? (
-        <div className="space-y-4">
-          {liveAnalysis.headline ? (
-            <p className="text-xl font-bold text-white leading-snug">{liveAnalysis.headline}</p>
-          ) : (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Activity className="w-4 h-4 animate-pulse text-primary" />
-              <span className="text-sm italic">Generating live analysis…</span>
-            </div>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {liveAnalysis.momentum_verdict && (
-              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-violet-400 bg-violet-400/10 border-violet-400/20 uppercase">
-                {liveAnalysis.momentum_verdict}
-              </span>
+    <div className="space-y-4">
+
+      {/* ── AI live analysis ── */}
+      <div className="glass-card p-6 rounded-xl min-h-[180px]">
+        <h3 className="text-sm font-mono font-bold text-muted-foreground tracking-widest uppercase mb-5 flex items-center">
+          <Activity className="w-4 h-4 mr-2 text-primary" />
+          LIVE ANALYSE
+        </h3>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-10">
+            <Activity className="w-6 h-6 text-primary animate-pulse" />
+          </div>
+        ) : liveAnalysis ? (
+          <div className="space-y-4">
+            {liveAnalysis.headline ? (
+              <p className="text-xl font-bold text-white leading-snug">{liveAnalysis.headline}</p>
+            ) : (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Activity className="w-4 h-4 animate-pulse text-primary" />
+                <span className="text-sm italic">Genererer live analyse…</span>
+              </div>
             )}
-            {liveAnalysis.alert_worthy && (
-              <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-amber-400 bg-amber-400/10 border-amber-400/20 uppercase flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                Alert-worthy
-              </span>
+            <div className="flex flex-wrap gap-2">
+              {liveAnalysis.momentum_verdict && (
+                <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-violet-400 bg-violet-400/10 border-violet-400/20 uppercase">
+                  {liveAnalysis.momentum_verdict}
+                </span>
+              )}
+              {liveAnalysis.alert_worthy && (
+                <span className="text-xs font-mono font-bold px-3 py-1 rounded-full border text-amber-400 bg-amber-400/10 border-amber-400/20 uppercase flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  Bemærkelsesværdig
+                </span>
+              )}
+            </div>
+            {liveAnalysis.narrative && (
+              <p className="text-muted-foreground leading-relaxed">{liveAnalysis.narrative}</p>
+            )}
+            {liveAnalysis.key_factors && liveAnalysis.key_factors.length > 0 && (
+              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+                {liveAnalysis.key_factors.map((f: string, i: number) => (
+                  <span key={i} className="text-xs font-mono text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded">{f}</span>
+                ))}
+              </div>
             )}
           </div>
-          {liveAnalysis.narrative && (
-            <p className="text-muted-foreground leading-relaxed">{liveAnalysis.narrative}</p>
-          )}
-          {liveAnalysis.key_factors && liveAnalysis.key_factors.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
-              {liveAnalysis.key_factors.map((f: string, i: number) => (
-                <span key={i} className="text-xs font-mono text-primary bg-primary/10 border border-primary/20 px-2.5 py-1 rounded">{f}</span>
-              ))}
-            </div>
-          )}
+        ) : (
+          <p className="text-muted-foreground italic py-8 text-center">Live analyse afventer — venter på kampdata.</p>
+        )}
+      </div>
+
+      {/* ── Odds Ændring ── */}
+      {latest && (
+        <div className="glass-card rounded-xl border border-amber-400/15 overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest">Odds Ændring</span>
+            {snapshots.length > 1 && (
+              <span className="ml-auto text-[9px] font-mono text-muted-foreground/40">{snapshots.length} snapshots</span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 divide-x divide-white/5">
+            {oddsItems.map(({ label, field }) => {
+              const ch = oddsChange(field);
+              if (!ch) return null;
+              const isDown = ch.diff != null && ch.diff < 0;
+              const isUp = ch.diff != null && ch.diff > 0;
+              return (
+                <div key={field} className="px-3 py-4 text-center">
+                  <div className="text-[10px] font-mono text-muted-foreground/50 mb-1 truncate">{label}</div>
+                  <div className={`text-xl font-bold font-mono tabular-nums ${isDown ? 'text-teal-400' : isUp ? 'text-amber-400' : 'text-white'}`}>
+                    {ch.cur?.toFixed(2) ?? '—'}
+                  </div>
+                  {ch.old != null && ch.diff != null && ch.diff !== 0 && (
+                    <div className={`text-[10px] font-mono mt-1 flex items-center justify-center gap-0.5 ${isDown ? 'text-teal-400' : 'text-amber-400'}`}>
+                      <span>{isDown ? '▼' : '▲'}</span>
+                      <span>{Math.abs(ch.diff).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {ch.old != null && ch.diff === 0 && (
+                    <div className="text-[10px] font-mono text-white/20 mt-1">–</div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </div>
-      ) : (
-        <p className="text-muted-foreground italic py-8 text-center">Live analysis pending — waiting for in-play signal data.</p>
       )}
+
+      {/* ── Live signaler ── */}
+      {activeSignals.length > 0 && (
+        <div className="space-y-2">
+          <h3 className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest px-1">Live Signaler</h3>
+          {activeSignals.map((s) => {
+            const cfg = SIGNAL_CONFIG[s.signalKey] ?? { icon: '·', color: 'text-white/60 border-white/10 bg-white/5' };
+            return (
+              <div key={s.id} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${cfg.color}`}>
+                <span className="text-base font-mono leading-none mt-0.5 shrink-0">{cfg.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white/80 leading-snug">{s.signalLabel}</p>
+                  {s.signalValue != null && (
+                    <p className="text-[10px] font-mono text-muted-foreground/50 mt-0.5">
+                      Styrke: {typeof s.signalValue === 'number' ? s.signalValue.toFixed(2) : s.signalValue}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
     </div>
   );
 }

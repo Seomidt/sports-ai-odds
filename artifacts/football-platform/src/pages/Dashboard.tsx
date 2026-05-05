@@ -476,17 +476,26 @@ function SignalSummaryPreview() {
 
 // ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
-// Trust score badge: shows 1-9 scale as filled dots (easy to read at a glance)
-function TrustBadge({ score }: { score: number | null }) {
+// Trust score: 0-100 scale with progress bar and trend arrow
+function TrustBadge({ score, confidence }: { score: number | null; confidence?: "high" | "medium" | "low" | null }) {
   if (score == null) return null;
   const clamped = Math.max(1, Math.min(9, Math.round(score)));
-  const color = clamped >= 8 ? 'text-teal-300 border-teal-400/40 bg-teal-400/10'
-    : clamped >= 6 ? 'text-violet-300 border-violet-400/30 bg-violet-400/10'
-    : 'text-amber-400 border-amber-400/30 bg-amber-400/10';
+  const pct = Math.round((clamped / 9) * 100);
+  const color = pct >= 70 ? 'text-teal-300' : pct >= 50 ? 'text-violet-300' : 'text-amber-400';
+  const barColor = pct >= 70 ? 'bg-teal-400/70' : pct >= 50 ? 'bg-violet-400/70' : 'bg-amber-400/70';
+  const trend = confidence === 'high' ? { icon: '▲', cls: 'text-teal-400' }
+    : confidence === 'low' ? { icon: '▼', cls: 'text-amber-400' }
+    : null;
   return (
-    <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded border text-xs font-mono font-bold ${color}`} title="Trust score: 1–9 based on probability strength, data quality, and odds stability">
-      <span className="tabular-nums">{clamped}</span>
-      <span className="opacity-40">/9</span>
+    <div className="flex flex-col items-end gap-1.5" title="Trust score 0–100 baseret på sandsynlighedsstyrke og datakvalitet">
+      <div className="flex items-baseline gap-1.5">
+        <span className={`text-2xl font-bold font-mono tabular-nums leading-none ${color}`}>{pct}</span>
+        <span className="text-[10px] font-mono text-white/30">trust</span>
+        {trend && <span className={`text-[10px] font-bold ${trend.cls}`}>{trend.icon}</span>}
+      </div>
+      <div className="w-14 h-1 bg-white/10 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -513,7 +522,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             <ValueBadge rating={tip.valueRating} />
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <TrustBadge score={tip.trustScore} />
+            <TrustBadge score={tip.trustScore} confidence={tip.confidence} />
             {tip.marketOdds != null && (
               <span className="font-mono text-lg font-bold text-teal-400 tabular-nums">{tip.marketOdds.toFixed(2)}</span>
             )}

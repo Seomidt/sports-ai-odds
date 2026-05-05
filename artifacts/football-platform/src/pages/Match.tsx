@@ -375,20 +375,26 @@ function oddsFromSnap(snap: { homeWin?: number | null; draw?: number | null; awa
   return null;
 }
 
-// Trust score badge (shared between TipCard and other places in Match.tsx)
-function TrustBadge({ score }: { score: number | null }) {
+// Trust score: 0-100 scale with progress bar and trend arrow
+function TrustBadge({ score, confidence }: { score: number | null; confidence?: "high" | "medium" | "low" | null }) {
   if (score == null) return null;
   const clamped = Math.max(1, Math.min(9, Math.round(score)));
-  const color = clamped >= 8 ? 'text-teal-300 border-teal-400/40 bg-teal-400/10'
-    : clamped >= 6 ? 'text-violet-300 border-violet-400/30 bg-violet-400/10'
-    : 'text-amber-400 border-amber-400/30 bg-amber-400/10';
+  const pct = Math.round((clamped / 9) * 100);
+  const color = pct >= 70 ? 'text-teal-300' : pct >= 50 ? 'text-violet-300' : 'text-amber-400';
+  const barColor = pct >= 70 ? 'bg-teal-400/70' : pct >= 50 ? 'bg-violet-400/70' : 'bg-amber-400/70';
+  const trend = confidence === 'high' ? { icon: '▲', cls: 'text-teal-400' }
+    : confidence === 'low' ? { icon: '▼', cls: 'text-amber-400' }
+    : null;
   return (
-    <div
-      className={`flex items-center gap-1 px-2.5 py-1 rounded border text-sm font-mono font-bold ${color}`}
-      title="Trust score: 1–9 — baseret på sandsynlighedsstyrke, datakvalitet og odds-stabilitet"
-    >
-      <span className="tabular-nums">{clamped}</span>
-      <span className="opacity-40 text-xs">/9</span>
+    <div className="flex flex-col items-end gap-1.5" title="Trust score 0–100 baseret på sandsynlighedsstyrke og datakvalitet">
+      <div className="flex items-baseline gap-1.5">
+        <span className={`text-2xl font-bold font-mono tabular-nums leading-none ${color}`}>{pct}</span>
+        <span className="text-[10px] font-mono text-white/30">trust</span>
+        {trend && <span className={`text-[10px] font-bold ${trend.cls}`}>{trend.icon}</span>}
+      </div>
+      <div className="w-14 h-1 bg-white/10 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
     </div>
   );
 }
@@ -432,7 +438,7 @@ function TipCard({ tip, betTypeLabel, bookmaker, snap }: { tip: BettingTip; betT
           )}
         </div>
         <div className="shrink-0 flex flex-col items-end gap-1.5">
-          <TrustBadge score={tip.trustScore} />
+          <TrustBadge score={tip.trustScore} confidence={tip.confidence} />
         </div>
       </div>
 

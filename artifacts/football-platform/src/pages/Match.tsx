@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
+import { LiveSignalFeed, type LiveSignalItem } from "@/components/LiveSignalFeed";
 import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -1230,27 +1231,6 @@ interface LiveAnalysis {
   cachedAt?: string;
 }
 
-interface LiveSignal {
-  id: number;
-  fixtureId: number;
-  phase: string;
-  signalKey: string;
-  signalLabel: string;
-  signalValue: number | null;
-  signalBool: boolean | null;
-  triggeredAt: string;
-}
-
-const SIGNAL_CONFIG: Record<string, { icon: string; color: string }> = {
-  momentum_shift:           { icon: '↗', color: 'text-violet-300 border-violet-400/25 bg-violet-400/8' },
-  home_pressure_rising:     { icon: '⬆', color: 'text-teal-300 border-teal-400/25 bg-teal-400/8' },
-  away_over_expected_tempo: { icon: '↗', color: 'text-teal-300 border-teal-400/25 bg-teal-400/8' },
-  red_card_changed_balance: { icon: '■', color: 'text-red-400 border-red-400/30 bg-red-400/8' },
-  upset_risk:               { icon: '⚠', color: 'text-amber-400 border-amber-400/30 bg-amber-400/8' },
-  live_edge:                { icon: '◆', color: 'text-teal-300 border-teal-400/30 bg-teal-400/10' },
-  live_value:               { icon: '◆', color: 'text-teal-300 border-teal-400/30 bg-teal-400/10' },
-};
-
 function LiveAnalysisTab({ fixtureId, homeTeam, awayTeam }: { fixtureId: number; homeTeam: string; awayTeam: string }) {
   const { data: liveAnalysis, isLoading } = useQuery<LiveAnalysis | null>({
     queryKey: ['liveAnalysis', fixtureId],
@@ -1270,8 +1250,7 @@ function LiveAnalysisTab({ fixtureId, homeTeam, awayTeam }: { fixtureId: number;
     { phase: 'live' },
     { query: { queryKey: ['signals', fixtureId, 'live'], staleTime: 15_000, refetchInterval: 15_000 } }
   );
-  const liveSignals: LiveSignal[] = (signalsData?.signals ?? []) as LiveSignal[];
-  const activeSignals = liveSignals.filter(s => s.signalBool);
+  const liveSignals: LiveSignalItem[] = (signalsData?.signals ?? []) as LiveSignalItem[];
 
   const { data: liveOddsData } = useGetFixtureLiveOdds(
     fixtureId,
@@ -1348,6 +1327,16 @@ function LiveAnalysisTab({ fixtureId, homeTeam, awayTeam }: { fixtureId: number;
         )}
       </div>
 
+      {/* ── Live signaler (kun denne kamp) ── */}
+      <div className="glass-card rounded-xl border border-primary/20 overflow-hidden p-5 sm:p-6">
+        <LiveSignalFeed
+          variant="full"
+          signals={liveSignals}
+          homeTeam={homeTeam}
+          awayTeam={awayTeam}
+        />
+      </div>
+
       {/* ── Odds Ændring ── */}
       {latest && (
         <div className="glass-card rounded-xl border border-amber-400/15 overflow-hidden">
@@ -1383,29 +1372,6 @@ function LiveAnalysisTab({ fixtureId, homeTeam, awayTeam }: { fixtureId: number;
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* ── Live signaler ── */}
-      {activeSignals.length > 0 && (
-        <div className="space-y-2">
-          <h3 className="text-[10px] font-mono font-bold text-muted-foreground uppercase tracking-widest px-1">Live Signaler</h3>
-          {activeSignals.map((s) => {
-            const cfg = SIGNAL_CONFIG[s.signalKey] ?? { icon: '·', color: 'text-white/60 border-white/10 bg-white/5' };
-            return (
-              <div key={s.id} className={`flex items-start gap-3 px-4 py-3 rounded-xl border ${cfg.color}`}>
-                <span className="text-base font-mono leading-none mt-0.5 shrink-0">{cfg.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white/80 leading-snug">{s.signalLabel}</p>
-                  {s.signalValue != null && (
-                    <p className="text-[10px] font-mono text-muted-foreground/50 mt-0.5">
-                      Styrke: {typeof s.signalValue === 'number' ? s.signalValue.toFixed(2) : s.signalValue}
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
         </div>
       )}
 

@@ -8,7 +8,7 @@ import { PaywallOverlay } from "@/components/PaywallOverlay";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { supabase } from "@/lib/supabase";
 import {
-  Activity, TrendingUp, Zap, ChevronRight, ChevronDown,
+  Activity, Zap, ChevronRight, ChevronDown,
   Target, Flame, Trophy, TrendingDown, BarChart3, CalendarCheck, Star,
   CheckCircle2, XCircle, MinusCircle, HelpCircle
 } from "lucide-react";
@@ -465,39 +465,6 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
   );
 }
 
-function OddsAendringPreview() {
-  return (
-    <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
-      <div className="p-4 border-b border-white/5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
-          <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-widest">Odds Ændring</span>
-        </div>
-        <span className="text-[10px] font-mono text-muted-foreground/40 uppercase tracking-wider">Live bevægelser</span>
-      </div>
-      <div className="p-3 space-y-2">
-        <p className="text-[11px] text-muted-foreground/50 font-mono px-1">
-          Odds-bevægelser vises live under den kamp du kigger på — gå ind på en kamp for at se ændringer i realtid.
-        </p>
-        {[
-          { label: "Hjemme vinder", from: "2.10", to: "1.85", dir: "down" },
-          { label: "Uafgjort", from: "3.40", to: "3.60", dir: "up" },
-          { label: "Ude vinder", from: "3.80", to: "4.20", dir: "up" },
-        ].map((item, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs bg-white/3 rounded-lg px-3 py-2">
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${item.dir === 'down' ? 'bg-teal-400' : 'bg-amber-400'}`} />
-            <span className="text-white/50 flex-1">{item.label}</span>
-            <span className="font-mono text-muted-foreground/40 line-through text-[10px]">{item.from}</span>
-            <span className={`font-mono font-bold text-[11px] ${item.dir === 'down' ? 'text-teal-400' : 'text-amber-400'}`}>
-              {item.dir === 'down' ? '▼' : '▲'} {item.to}
-            </span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 // ─── ValueOddsCard ────────────────────────────────────────────────────────────
 
 // Trust score: 0-100 scale with progress bar and trend arrow
@@ -867,9 +834,6 @@ export function Dashboard() {
 
         {/* Daily Loop — Today / Yesterday / Streak & ROI */}
         {summary && <DailyLoopBar summary={summary} />}
-
-        {/* Odds Ændring teaser */}
-        <OddsAendringPreview />
 
         {isLoading ? (
           <div className="flex items-center justify-center h-64">

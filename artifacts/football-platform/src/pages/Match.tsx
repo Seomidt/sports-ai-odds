@@ -25,7 +25,7 @@ import { useSession } from "@/lib/session";
 import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { useState, Component, useCallback, useEffect, useRef } from "react";
+import { useState, Component, useCallback, useEffect, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -599,6 +599,72 @@ function deriveMarketsClient(pred: IntelPrediction, homeTeam: string, awayTeam: 
   return markets.sort((x, y) => y.probability - x.probability);
 }
 
+type OddsSnapLite = {
+  homeWin?: number | null;
+  draw?: number | null;
+  awayWin?: number | null;
+  btts?: number | null;
+  overUnder25?: number | null;
+  bookmaker?: string | null;
+};
+
+function impliedPctFromDecimal(odd: number | null | undefined): number | null {
+  if (odd == null || !Number.isFinite(odd) || odd <= 1) return null;
+  return Math.round((1 / odd) * 1000) / 10;
+}
+
+/** Match API-Football derived lines to our odds snapshot; edge = model% − implied% (before margin removal — indicative only). */
+function buildPredictionValueRows(
+  markets: { market: string; label: string; probability: number }[],
+  snap: OddsSnapLite | null | undefined,
+  homeTeam: string,
+  awayTeam: string,
+): Array<{
+  label: string;
+  marketKey: string;
+  modelPct: number;
+  decimalOdds: number;
+  impliedPct: number;
+  edgePp: number;
+}> {
+  if (!snap) return [];
+  const rows: Array<{
+    label: string;
+    marketKey: string;
+    modelPct: number;
+    decimalOdds: number;
+    impliedPct: number;
+    edgePp: number;
+  }> = [];
+
+  for (const m of markets) {
+    let odd: number | null | undefined;
+    if (m.market === "match_result") {
+      if (m.label === `${homeTeam} vinder`) odd = snap.homeWin;
+      else if (m.label === "Uafgjort") odd = snap.draw;
+      else if (m.label === `${awayTeam} vinder`) odd = snap.awayWin;
+    } else if (m.market === "over_under_25" && m.label.startsWith("Over")) {
+      odd = snap.overUnder25;
+    } else if (m.market === "btts" && m.label.includes("Begge hold")) {
+      odd = snap.btts;
+    }
+    if (odd == null || !Number.isFinite(odd) || odd <= 1) continue;
+    const implied = impliedPctFromDecimal(odd);
+    if (implied == null) continue;
+    const edgeRaw = m.probability - implied;
+    const edgePp = Math.round(edgeRaw * 10) / 10;
+    rows.push({
+      label: m.label,
+      marketKey: m.market,
+      modelPct: m.probability,
+      decimalOdds: odd,
+      impliedPct: implied,
+      edgePp,
+    });
+  }
+  return rows.sort((a, b) => b.edgePp - a.edgePp);
+}
+
 function BettingIntelTab({
   fixtureId,
   homeTeamId,
@@ -718,6 +784,22 @@ function BettingIntelTab({
   const awaySidelined = intelData?.awaySidelined ?? [];
   const homeTopScorer = intelData?.topScorers?.find(p => p.teamId === homeTeamId);
   const awayTopScorer = intelData?.topScorers?.find(p => p.teamId === awayTeamId);
+
+  const derivedMarkets = useMemo(() => {
+    if (!pred) return [];
+    return deriveMarketsClient(pred, homeTeam, awayTeam);
+  }, [pred, homeTeam, awayTeam]);
+
+  const valueVsOddsRows = useMemo(() => {
+    if (!pred || derivedMarkets.length === 0) return [];
+    return buildPredictionValueRows(derivedMarkets, oddsData?.odds ?? null, homeTeam, awayTeam);
+  }, [pred, derivedMarkets, oddsData?.odds, homeTeam, awayTeam]);
+
+  const bestValueHighlight = useMemo(() => {
+    const positive = valueVsOddsRows.filter((r) => r.edgePp >= 3);
+    if (positive.length === 0) return null;
+    return positive[0];
+  }, [valueVsOddsRows]);
 
   const showEmptyPreMatch =
     !isIntelLoading &&
@@ -987,42 +1069,103 @@ function BettingIntelTab({
           )}
 
           {/* ── All Derived Market Predictions ── */}
-          {pred && (() => {
-            const markets = deriveMarketsClient(pred, homeTeam, awayTeam);
-            if (markets.length === 0) return null;
-            return (
-              <div className="glass-card rounded-xl overflow-hidden border border-teal-400/10">
-                <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
-                  <Target className="w-3.5 h-3.5 text-teal-400/70" />
-                  <span className="text-xs font-mono text-teal-400/80 uppercase tracking-widest">Alle Predictions</span>
-                </div>
-                <div className="divide-y divide-white/5">
-                  {markets.map((m, i) => {
-                    const col = m.probability >= 72 ? 'text-teal-300' : m.probability >= 60 ? 'text-violet-300' : 'text-white/50';
-                    const barCol = m.probability >= 72 ? 'bg-teal-400/60' : m.probability >= 60 ? 'bg-violet-400/60' : 'bg-white/15';
-                    return (
-                      <div key={i} className="flex items-center gap-3 px-4 py-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[9px] font-mono text-muted-foreground/35 uppercase tracking-wider mb-0.5">
-                            {MARKET_LABEL_MAP[m.market] ?? m.market}
-                          </div>
-                          <div className={`text-sm font-semibold ${col}`}>{m.label}</div>
+          {pred && derivedMarkets.length > 0 && (
+            <div className="glass-card rounded-xl overflow-hidden border border-teal-400/10">
+              <div className="px-5 py-3 border-b border-white/6 flex items-center gap-2">
+                <Target className="w-3.5 h-3.5 text-teal-400/70" />
+                <span className="text-xs font-mono text-teal-400/80 uppercase tracking-widest">Alle Predictions</span>
+              </div>
+              <div className="divide-y divide-white/5">
+                {derivedMarkets.map((m, i) => {
+                  const col = m.probability >= 72 ? 'text-teal-300' : m.probability >= 60 ? 'text-violet-300' : 'text-white/50';
+                  const barCol = m.probability >= 72 ? 'bg-teal-400/60' : m.probability >= 60 ? 'bg-violet-400/60' : 'bg-white/15';
+                  return (
+                    <div key={i} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[9px] font-mono text-muted-foreground/35 uppercase tracking-wider mb-0.5">
+                          {MARKET_LABEL_MAP[m.market] ?? m.market}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="w-16 h-1.5 bg-white/8 rounded-full overflow-hidden">
-                            <div className={`h-full rounded-full ${barCol}`} style={{ width: `${m.probability}%` }} />
-                          </div>
-                          <span className={`text-sm font-bold font-mono tabular-nums ${col} w-10 text-right`}>
-                            {m.probability}%
-                          </span>
-                        </div>
+                        <div className={`text-sm font-semibold ${col}`}>{m.label}</div>
                       </div>
-                    );
-                  })}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-16 h-1.5 bg-white/8 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${barCol}`} style={{ width: `${m.probability}%` }} />
+                        </div>
+                        <span className={`text-sm font-bold font-mono tabular-nums ${col} w-10 text-right`}>
+                          {m.probability}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Model vs odds: indicative edge (usable signal) ── */}
+          {pred && valueVsOddsRows.length > 0 && (
+            <div className="glass-card rounded-xl overflow-hidden border border-primary/20">
+              <div className="px-5 py-3 border-b border-white/6 flex items-start gap-2 flex-wrap">
+                <TrendingUp className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <span className="text-xs font-mono text-primary uppercase tracking-widest">Model vs odds</span>
+                  <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
+                    Sammenligner API-Football sandsynlighed med det seneste odds-snapshot (1X2, over 2.5, BTTS).{" "}
+                    <span className="text-white/70">Edge</span> = model % minus markedets simple implied % (før margen-fjernelse) — til overblik, ikke som garanti.
+                    {oddsData?.odds?.bookmaker && (
+                      <span className="block mt-1 text-muted-foreground/80">Bookmaker: {oddsData.odds.bookmaker}</span>
+                    )}
+                  </p>
                 </div>
               </div>
-            );
-          })()}
+              {bestValueHighlight && (
+                <div className="mx-4 mt-3 mb-1 rounded-lg border border-teal-400/25 bg-teal-400/5 px-3 py-2 text-xs text-teal-200/90">
+                  <span className="font-semibold text-teal-300">Stærkest signal: </span>
+                  {bestValueHighlight.label}
+                  <span className="text-muted-foreground"> · </span>
+                  model {bestValueHighlight.modelPct}% vs marked ~{bestValueHighlight.impliedPct}%
+                  <span className="font-mono font-bold text-teal-300"> ({bestValueHighlight.edgePp >= 0 ? "+" : ""}
+                  {bestValueHighlight.edgePp} pp)</span>
+                </div>
+              )}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-white/8 text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+                      <th className="px-4 py-2 font-medium">Udfald</th>
+                      <th className="px-3 py-2 font-medium text-right">Model</th>
+                      <th className="px-3 py-2 font-medium text-right">Odds</th>
+                      <th className="px-3 py-2 font-medium text-right">Marked ~</th>
+                      <th className="px-4 py-2 font-medium text-right">Edge</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {valueVsOddsRows.map((r) => {
+                      const edgeColor =
+                        r.edgePp >= 5 ? "text-teal-300" : r.edgePp >= 2 ? "text-emerald-400/90" : r.edgePp <= -5 ? "text-red-400/80" : "text-muted-foreground";
+                      return (
+                        <tr key={`${r.marketKey}-${r.label}`} className="border-b border-white/5 last:border-0">
+                          <td className="px-4 py-2.5 text-white/90 max-w-[200px]">
+                            <div className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mb-0.5">
+                              {MARKET_LABEL_MAP[r.marketKey] ?? r.marketKey}
+                            </div>
+                            <div className="font-medium leading-snug">{r.label}</div>
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-white/90">{r.modelPct}%</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-primary">{r.decimalOdds.toFixed(2)}</td>
+                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground">{r.impliedPct}%</td>
+                          <td className={`px-4 py-2.5 text-right font-mono font-semibold tabular-nums ${edgeColor}`}>
+                            {r.edgePp >= 0 ? "+" : ""}
+                            {r.edgePp} pp
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
           {/* ── Tip Cards ── */}
           {tips.length > 0 ? (

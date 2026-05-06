@@ -613,7 +613,33 @@ function impliedPctFromDecimal(odd: number | null | undefined): number | null {
   return Math.round((1 / odd) * 1000) / 10;
 }
 
-/** Match API-Football derived lines to our odds snapshot; edge = model% − implied% (before margin removal — indicative only). */
+/**
+ * Enkel 0–100 score: 50 ≈ model og marked matcher; højere = modellen ligger over det simple odds-implied;
+ * lavere = under. (Indikativ — uden margen-justering.)
+ */
+function modelVsMarketScore(modelPct: number, impliedPct: number): number {
+  const edge = modelPct - impliedPct;
+  const raw = 50 + edge * 3;
+  return Math.round(Math.max(5, Math.min(95, raw)));
+}
+
+function scoreHueClass(score: number): string {
+  if (score >= 72) return "text-teal-300";
+  if (score >= 58) return "text-emerald-400";
+  if (score >= 45) return "text-muted-foreground";
+  if (score >= 32) return "text-amber-400/90";
+  return "text-red-400/85";
+}
+
+function scoreBarClass(score: number): string {
+  if (score >= 72) return "bg-teal-400/80";
+  if (score >= 58) return "bg-emerald-400/70";
+  if (score >= 45) return "bg-white/25";
+  if (score >= 32) return "bg-amber-500/60";
+  return "bg-red-400/70";
+}
+
+/** Match API-Football derived lines to odds snapshot; each row får en hurtig score (ikke pp). */
 function buildPredictionValueRows(
   markets: { market: string; label: string; probability: number }[],
   snap: OddsSnapLite | null | undefined,
@@ -624,8 +650,7 @@ function buildPredictionValueRows(
   marketKey: string;
   modelPct: number;
   decimalOdds: number;
-  impliedPct: number;
-  edgePp: number;
+  score: number;
 }> {
   if (!snap) return [];
   const rows: Array<{
@@ -633,8 +658,7 @@ function buildPredictionValueRows(
     marketKey: string;
     modelPct: number;
     decimalOdds: number;
-    impliedPct: number;
-    edgePp: number;
+    score: number;
   }> = [];
 
   for (const m of markets) {
@@ -651,18 +675,16 @@ function buildPredictionValueRows(
     if (odd == null || !Number.isFinite(odd) || odd <= 1) continue;
     const implied = impliedPctFromDecimal(odd);
     if (implied == null) continue;
-    const edgeRaw = m.probability - implied;
-    const edgePp = Math.round(edgeRaw * 10) / 10;
+    const score = modelVsMarketScore(m.probability, implied);
     rows.push({
       label: m.label,
       marketKey: m.market,
       modelPct: m.probability,
       decimalOdds: odd,
-      impliedPct: implied,
-      edgePp,
+      score,
     });
   }
-  return rows.sort((a, b) => b.edgePp - a.edgePp);
+  return rows.sort((a, b) => b.score - a.score);
 }
 
 function BettingIntelTab({
@@ -796,9 +818,9 @@ function BettingIntelTab({
   }, [pred, derivedMarkets, oddsData?.odds, homeTeam, awayTeam]);
 
   const bestValueHighlight = useMemo(() => {
-    const positive = valueVsOddsRows.filter((r) => r.edgePp >= 3);
-    if (positive.length === 0) return null;
-    return positive[0];
+    const strong = valueVsOddsRows.filter((r) => r.score >= 62);
+    if (strong.length === 0) return null;
+    return strong[0];
   }, [valueVsOddsRows]);
 
   const showEmptyPreMatch =
@@ -1102,7 +1124,7 @@ function BettingIntelTab({
             </div>
           )}
 
-          {/* ── Model vs odds: indicative edge (usable signal) ── */}
+          {/* ── Model vs odds: quick score (no pp) ── */}
           {pred && valueVsOddsRows.length > 0 && (
             <div className="glass-card rounded-xl overflow-hidden border border-primary/20">
               <div className="px-5 py-3 border-b border-white/6 flex items-start gap-2 flex-wrap">
@@ -1110,8 +1132,9 @@ function BettingIntelTab({
                 <div className="min-w-0 flex-1">
                   <span className="text-xs font-mono text-primary uppercase tracking-widest">Model vs odds</span>
                   <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                    Sammenligner API-Football sandsynlighed med det seneste odds-snapshot (1X2, over 2.5, BTTS).{" "}
-                    <span className="text-white/70">Edge</span> = model % minus markedets simple implied % (før margen-fjernelse) — til overblik, ikke som garanti.
+                    <span className="text-white/80">Score</span> fra ca. <span className="text-white/70">5–95</span>:{" "}
+                    <span className="text-white/70">50</span> betyder model og marked cirka enige; højere tal = modellen er mere positiv ift. oddset, lavere = mere negativ.
+                    Kun 1X2, over 2.5 og BTTS ja hvor vi har odds i snapshot.
                     {oddsData?.odds?.bookmaker && (
                       <span className="block mt-1 text-muted-foreground/80">Bookmaker: {oddsData.odds.bookmaker}</span>
                     )}
@@ -1119,13 +1142,11 @@ function BettingIntelTab({
                 </div>
               </div>
               {bestValueHighlight && (
-                <div className="mx-4 mt-3 mb-1 rounded-lg border border-teal-400/25 bg-teal-400/5 px-3 py-2 text-xs text-teal-200/90">
-                  <span className="font-semibold text-teal-300">Stærkest signal: </span>
-                  {bestValueHighlight.label}
-                  <span className="text-muted-foreground"> · </span>
-                  model {bestValueHighlight.modelPct}% vs marked ~{bestValueHighlight.impliedPct}%
-                  <span className="font-mono font-bold text-teal-300"> ({bestValueHighlight.edgePp >= 0 ? "+" : ""}
-                  {bestValueHighlight.edgePp} pp)</span>
+                <div className="mx-4 mt-3 mb-1 rounded-lg border border-teal-400/25 bg-teal-400/5 px-3 py-2 text-xs text-teal-200/90 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="font-semibold text-teal-300">Stærkest signal:</span>
+                  <span>{bestValueHighlight.label}</span>
+                  <span className="font-mono font-bold text-teal-300 tabular-nums text-sm">score {bestValueHighlight.score}</span>
+                  <span className="text-muted-foreground">· model {bestValueHighlight.modelPct}% · odds {bestValueHighlight.decimalOdds.toFixed(2)}</span>
                 </div>
               )}
               <div className="overflow-x-auto">
@@ -1135,14 +1156,13 @@ function BettingIntelTab({
                       <th className="px-4 py-2 font-medium">Udfald</th>
                       <th className="px-3 py-2 font-medium text-right">Model</th>
                       <th className="px-3 py-2 font-medium text-right">Odds</th>
-                      <th className="px-3 py-2 font-medium text-right">Marked ~</th>
-                      <th className="px-4 py-2 font-medium text-right">Edge</th>
+                      <th className="px-4 py-2 font-medium text-right w-[7rem]">Score</th>
                     </tr>
                   </thead>
                   <tbody>
                     {valueVsOddsRows.map((r) => {
-                      const edgeColor =
-                        r.edgePp >= 5 ? "text-teal-300" : r.edgePp >= 2 ? "text-emerald-400/90" : r.edgePp <= -5 ? "text-red-400/80" : "text-muted-foreground";
+                      const sc = scoreHueClass(r.score);
+                      const bc = scoreBarClass(r.score);
                       return (
                         <tr key={`${r.marketKey}-${r.label}`} className="border-b border-white/5 last:border-0">
                           <td className="px-4 py-2.5 text-white/90 max-w-[200px]">
@@ -1153,10 +1173,11 @@ function BettingIntelTab({
                           </td>
                           <td className="px-3 py-2.5 text-right font-mono tabular-nums text-white/90">{r.modelPct}%</td>
                           <td className="px-3 py-2.5 text-right font-mono tabular-nums text-primary">{r.decimalOdds.toFixed(2)}</td>
-                          <td className="px-3 py-2.5 text-right font-mono tabular-nums text-muted-foreground">{r.impliedPct}%</td>
-                          <td className={`px-4 py-2.5 text-right font-mono font-semibold tabular-nums ${edgeColor}`}>
-                            {r.edgePp >= 0 ? "+" : ""}
-                            {r.edgePp} pp
+                          <td className="px-4 py-2.5 text-right">
+                            <div className={`text-base font-bold font-mono tabular-nums ${sc}`}>{r.score}</div>
+                            <div className="mt-1 h-1 rounded-full bg-white/10 overflow-hidden max-w-[4.5rem] ml-auto">
+                              <div className={`h-full rounded-full ${bc}`} style={{ width: `${r.score}%` }} />
+                            </div>
                           </td>
                         </tr>
                       );

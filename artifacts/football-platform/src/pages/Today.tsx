@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useGetTodayFixtures } from "@workspace/api-client-react";
 import type { Fixture } from "@workspace/api-client-react";
 import { Layout } from "@/components/Layout";
+import { LeagueMark } from "@/components/LeagueMark";
 import {
   Activity,
   ArrowRight,
@@ -248,8 +249,9 @@ export function Today() {
                             </span>
                           </div>
                           {f.leagueName && (
-                            <div className="text-[10px] text-muted-foreground truncate mt-0.5 pl-3.5 font-medium">
-                              {f.leagueName}
+                            <div className="text-[10px] text-muted-foreground truncate mt-0.5 pl-3.5 font-medium flex items-center gap-1.5 min-w-0">
+                              <LeagueMark leagueId={f.leagueId} leagueLogo={f.leagueLogo} size="xs" />
+                              <span className="truncate">{f.leagueName}</span>
                             </div>
                           )}
                         </div>
@@ -289,9 +291,15 @@ export function Today() {
                           <div className="text-sm text-white truncate">
                             {f.homeTeamName} <span className="text-white/30">vs</span> {f.awayTeamName}
                           </div>
-                          <div className="text-[10px] text-muted-foreground mt-0.5 font-medium">
-                            {kickoffShort(f.kickoff)}
-                            {f.leagueName ? ` · ${f.leagueName}` : ""}
+                          <div className="text-[10px] text-muted-foreground mt-0.5 font-medium flex items-center gap-1.5 min-w-0 flex-wrap">
+                            <span className="tabular-nums shrink-0">{kickoffShort(f.kickoff)}</span>
+                            {f.leagueName ? (
+                              <>
+                                <span className="text-white/20 shrink-0">·</span>
+                                <LeagueMark leagueId={f.leagueId} leagueLogo={f.leagueLogo} size="xs" />
+                                <span className="truncate">{f.leagueName}</span>
+                              </>
+                            ) : null}
                           </div>
                         </div>
                         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />

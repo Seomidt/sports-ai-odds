@@ -6,11 +6,9 @@ import { Activity, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { HelpTooltip } from "@/components/HelpTooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getLeagueLogo } from "@/lib/leagues";
+import { LeagueMark } from "@/components/LeagueMark";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
-const LEAGUE_LOGO = (id: number) => `https://media.api-sports.io/football/leagues/${id}.png`;
 
 interface LeagueEntry {
   leagueId: number;
@@ -227,12 +225,12 @@ export function Standings() {
             <SelectTrigger className="flex-1 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg py-2.5 focus:ring-primary/50 disabled:opacity-50" disabled={leaguesLoading || activeLeagueId === null}>
               <SelectValue placeholder={leaguesLoading ? "Loading leagues..." : "Select league"} />
             </SelectTrigger>
-            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
+            <SelectContent className="font-mono">
               {leagues.map(l => (
-                <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                  <span className="inline-flex items-center gap-2">
-                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                    {l.leagueName}
+                <SelectItem key={l.leagueId} value={String(l.leagueId)}>
+                  <span className="inline-flex items-center gap-2 min-w-0">
+                    <LeagueMark leagueId={l.leagueId} size="xs" />
+                    <span className="truncate">{l.leagueName}</span>
                   </span>
                 </SelectItem>
               ))}
@@ -244,12 +242,7 @@ export function Standings() {
         {activeLeagueId !== null && (
           <div className="glass-card rounded-xl overflow-hidden">
             <div className="flex items-center gap-3 px-4 py-3 border-b border-white/6">
-              <img
-                src={LEAGUE_LOGO(activeLeagueId)}
-                alt=""
-                className="w-6 h-6 object-contain bg-white/90 rounded p-0.5"
-                onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-              />
+              <LeagueMark leagueId={activeLeagueId} size="md" />
               <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">
                 {activeLeagueName || "Standings"}
               </h2>

@@ -7,7 +7,7 @@ import { useState } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getLeagueLogo } from "@/lib/leagues";
+import { LeagueMark } from "@/components/LeagueMark";
 
 type PostMatchTip = {
   id: number;
@@ -114,18 +114,20 @@ export function PostMatch() {
             <SelectTrigger className="w-auto min-w-[200px] bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono">
-              <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
-                🌍 All Leagues ({leagues.length})
+            <SelectContent className="font-mono">
+              <SelectItem value="all">
+                All leagues ({leagues.length})
               </SelectItem>
               {leagues
                 .slice()
                 .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""))
                 .map((l) => (
-                  <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                    <span className="inline-flex items-center gap-2">
-                      <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                      {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                  <SelectItem key={l.leagueId} value={String(l.leagueId)}>
+                    <span className="inline-flex items-center gap-2 min-w-0">
+                      <LeagueMark leagueId={l.leagueId} leagueLogo={l.leagueLogo} size="xs" />
+                      <span className="truncate">
+                        {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                      </span>
                     </span>
                   </SelectItem>
                 ))}
@@ -159,9 +161,7 @@ export function PostMatch() {
             {visibleLeagues.map((league) => (
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/10">
-                  {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
-                  )}
+                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="md" />
                   <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
                     {league.leagueName ?? `League ${league.leagueId}`}
                   </span>

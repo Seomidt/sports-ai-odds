@@ -8,7 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getLeagueLogo } from "@/lib/leagues";
+import { LeagueMark } from "@/components/LeagueMark";
 import { cn } from "@/lib/utils";
 
 function dayKey(date: Date): string {
@@ -171,9 +171,12 @@ function CompactPreRow({
         )}
       >
         <div className="flex items-center gap-2 min-h-[2.25rem]">
-          <div className="flex items-center gap-1.5 shrink-0 w-[3.25rem]">
-            <Clock className="w-3 h-3 text-amber-400/80 shrink-0" />
-            <span className="text-[11px] font-mono font-semibold text-white tabular-nums">{kickoffShort(fixture.kickoff)}</span>
+          <div className="flex items-center gap-1 shrink-0">
+            <LeagueMark leagueId={fixture.leagueId} leagueLogo={fixture.leagueLogo} size="xs" showEmoji={false} />
+            <div className="flex items-center gap-1 shrink-0 w-[3rem]">
+              <Clock className="w-3 h-3 text-amber-400/80 shrink-0" />
+              <span className="text-[11px] font-mono font-semibold text-white tabular-nums">{kickoffShort(fixture.kickoff)}</span>
+            </div>
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 min-w-0">
@@ -373,25 +376,20 @@ export function PreMatch() {
                 <SelectTrigger className="h-9 w-full sm:w-[220px] bg-white/5 border-white/10 text-white text-xs font-mono rounded-md">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[min(70vh,420px)]">
-                  <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
+                <SelectContent className="font-mono">
+                  <SelectItem value="all">
                     All leagues ({leagues.length})
                   </SelectItem>
                   {leagues
                     .slice()
                     .sort((a, b) => (a.leagueName ?? "").localeCompare(b.leagueName ?? ""))
                     .map((l) => (
-                      <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                        <span className="inline-flex items-center gap-2">
-                          <img
-                            src={getLeagueLogo(l.leagueId)}
-                            alt=""
-                            className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).style.display = "none";
-                            }}
-                          />
-                          {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                      <SelectItem key={l.leagueId} value={String(l.leagueId)}>
+                        <span className="inline-flex items-center gap-2 min-w-0">
+                          <LeagueMark leagueId={l.leagueId} leagueLogo={l.leagueLogo} size="xs" />
+                          <span className="truncate">
+                            {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length})
+                          </span>
                         </span>
                       </SelectItem>
                     ))}
@@ -418,9 +416,7 @@ export function PreMatch() {
             {visibleLeagues.map((league) => (
               <div key={league.leagueId}>
                 <div className="flex items-center gap-2 mb-2 pb-1 border-b border-white/8">
-                  {league.leagueLogo && (
-                    <img src={league.leagueLogo} alt="" className="w-4 h-4 object-contain bg-white/90 rounded-sm p-0.5" />
-                  )}
+                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="sm" />
                   <span className="text-xs font-mono font-bold text-white/90 uppercase tracking-wide truncate">
                     {league.leagueName ?? `League ${league.leagueId}`}
                   </span>

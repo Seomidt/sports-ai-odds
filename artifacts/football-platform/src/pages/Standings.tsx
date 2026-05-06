@@ -229,7 +229,7 @@ export function Standings() {
               {leagues.map(l => (
                 <SelectItem key={l.leagueId} value={String(l.leagueId)}>
                   <span className="inline-flex items-center gap-2 min-w-0">
-                    <LeagueMark leagueId={l.leagueId} size="xs" />
+                    <LeagueMark leagueId={l.leagueId} size="xs" flagOnly />
                     <span className="truncate">{l.leagueName}</span>
                   </span>
                 </SelectItem>

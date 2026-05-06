@@ -155,7 +155,7 @@ export function News() {
             {LEAGUES.map((league) => (
               <SelectItem key={league.id} value={String(league.id)}>
                 <span className="inline-flex items-center gap-2 min-w-0">
-                  <LeagueMark leagueId={league.id} size="xs" />
+                  <LeagueMark leagueId={league.id} size="xs" flagOnly />
                   <span className="truncate">{league.name}</span>
                 </span>
               </SelectItem>

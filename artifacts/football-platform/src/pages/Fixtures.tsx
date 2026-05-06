@@ -397,7 +397,7 @@ export function Fixtures({
                         return (
                           <SelectItem key={l.id} value={String(l.id)} className="font-mono">
                             <span className="flex items-center gap-2">
-                              <LeagueMark leagueId={l.id} leagueLogo={sample?.leagueLogo} size="xs" />
+                              <LeagueMark leagueId={l.id} leagueLogo={sample?.leagueLogo} size="xs" flagOnly />
                               <span className="truncate">
                                 {l.name ?? `League ${l.id}`} ({n})
                               </span>

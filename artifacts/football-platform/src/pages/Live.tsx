@@ -122,7 +122,7 @@ export function Live() {
               {liveFixtures.map((l) => (
                 <SelectItem key={l.leagueId} value={String(l.leagueId)}>
                   <span className="inline-flex items-center gap-2 min-w-0">
-                    <LeagueMark leagueId={l.leagueId} leagueLogo={l.leagueLogo} size="xs" />
+                    <LeagueMark leagueId={l.leagueId} leagueLogo={l.leagueLogo} size="xs" flagOnly />
                     <span className="truncate">
                       {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
                     </span>

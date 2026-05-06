@@ -399,11 +399,11 @@ export function Today() {
                 </div>
               </div>
             </Link>
-            <Link href="/signals">
+            <Link href="/odds-radar">
               <div className="glass-card rounded-xl p-3.5 hover:ring-1 hover:ring-primary/15 transition-all cursor-pointer h-full group">
                 <Zap className="w-4 h-4 text-amber-400 mb-2 group-hover:scale-105 transition-transform" />
-                <div className="text-sm font-medium text-white">Signals</div>
-                <div className="text-[11px] text-muted-foreground mt-0.5">Alerts & feed</div>
+                <div className="text-sm font-medium text-white">Oddsradar</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">Odds & linjer</div>
               </div>
             </Link>
             <Link href="/standings">

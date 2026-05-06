@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Zap, Activity, Clock, ArrowRight, TrendingDown, AlertTriangle, ChevronDown, ChevronUp } from "lucide-react";
+import { Zap, Activity, Clock, ArrowRight, TrendingDown, ChevronDown, ChevronUp } from "lucide-react";
 import { Layout } from "@/components/Layout";
 
 interface SignalAlert {
@@ -41,7 +41,7 @@ function classifySignal(text: string, key: string | null): {
 
   if (k === "live_value" || t.includes("live value")) {
     return {
-      label: "Live Value",
+      label: "Live odds",
       color: "text-teal-400",
       border: "border-teal-400/30",
       badge: "bg-teal-400/10 text-teal-400 border-teal-400/25",
@@ -49,19 +49,9 @@ function classifySignal(text: string, key: string | null): {
       icon: Activity,
     };
   }
-  if (k === "high_value_tip" || t.includes("high-value tip") || t.includes("value tip")) {
+  if (k === "odds_drop" || t.includes("dropping") || t.includes("odds drop")) {
     return {
-      label: "Value Tip",
-      color: "text-primary",
-      border: "border-primary/30",
-      badge: "bg-primary/10 text-primary border-primary/25",
-      iconColor: "text-primary",
-      icon: Zap,
-    };
-  }
-  if (t.includes("dropping") || t.includes("odds drop") || k.includes("odds")) {
-    return {
-      label: "Odds Drop",
+      label: "Odds fald",
       color: "text-amber-400",
       border: "border-amber-400/30",
       badge: "bg-amber-400/10 text-amber-400 border-amber-400/25",
@@ -69,18 +59,8 @@ function classifySignal(text: string, key: string | null): {
       icon: TrendingDown,
     };
   }
-  if (t.includes("goal") || t.includes("red card") || t.includes("penalty") || t.includes("danger")) {
-    return {
-      label: "Match Event",
-      color: "text-destructive",
-      border: "border-destructive/30",
-      badge: "bg-destructive/10 text-destructive border-destructive/25",
-      iconColor: "text-destructive",
-      icon: AlertTriangle,
-    };
-  }
   return {
-    label: "Signal",
+    label: "Odds",
     color: "text-primary",
     border: "border-primary/30",
     badge: "bg-primary/10 text-primary border-primary/25",
@@ -137,7 +117,7 @@ function FixtureCard({ group }: { group: FixtureGroup }) {
             <div className="flex items-center gap-2 mb-1 flex-wrap">
               <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider border ${cls.badge}`}>
                 <cls.icon className="w-2.5 h-2.5" />
-                {group.signals.length > 1 ? `${group.signals.length} signals` : cls.label}
+                {group.signals.length > 1 ? `${group.signals.length} odds-alerts` : cls.label}
               </span>
               {isLive && (
                 <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono text-primary border border-primary/20 bg-primary/5">
@@ -190,11 +170,11 @@ function FixtureCard({ group }: { group: FixtureGroup }) {
   );
 }
 
-export function Signals() {
+export function OddsRadar() {
   const [hours, setHours] = useState(1);
 
   const { data, isLoading } = useQuery<{ alerts: SignalAlert[]; hours: number }>({
-    queryKey: ["signals-recent", hours],
+    queryKey: ["odds-radar-recent", hours],
     refetchInterval: 30_000,
     staleTime: 25_000,
     queryFn: async () => {
@@ -237,7 +217,7 @@ export function Signals() {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-3xl font-mono font-black tracking-tight uppercase text-white">
-                Signals
+                Oddsradar
               </h1>
               {totalCount > 0 && (
                 <span className="px-2 py-0.5 rounded bg-primary/10 border border-primary/20 text-primary text-[11px] font-mono font-bold">
@@ -245,9 +225,10 @@ export function Signals() {
                 </span>
               )}
             </div>
-            <p className="text-sm text-muted-foreground font-mono">
-              Broadcast signals · last {hours}h
+            <p className="text-sm text-muted-foreground font-mono max-w-xl">
+              Kun oddsbevægelser: markante linjeskift før kamp og live-linje vs. model. Ikke momentum eller kort.
             </p>
+            <p className="text-[11px] text-muted-foreground/60 font-mono mt-1">Seneste {hours} timer</p>
           </div>
 
           <div className="flex items-center gap-1 bg-white/5 border border-white/10 rounded-lg p-1">
@@ -280,9 +261,9 @@ export function Signals() {
             <div className="w-14 h-14 rounded-2xl border border-white/10 bg-white/5 flex items-center justify-center mb-4">
               <Clock className="w-6 h-6 text-white/20" />
             </div>
-            <p className="text-white/40 font-mono text-sm">No signals in the last {hours}h</p>
+            <p className="text-white/40 font-mono text-sm">Ingen odds-alerts i de sidste {hours} timer</p>
             <p className="text-white/20 font-mono text-xs mt-1">
-              Signals appear when odds move or high-value tips are generated
+              Her vises kun markante oddsændringer og live value — når markedet bevæger sig nok.
             </p>
           </div>
         )}
@@ -298,3 +279,6 @@ export function Signals() {
     </Layout>
   );
 }
+
+/** @deprecated Brug OddsRadar — beholdes til gamle importstier */
+export { OddsRadar as Signals };

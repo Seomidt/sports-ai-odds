@@ -380,6 +380,7 @@ async function insertOddsSnapshot(
         sessionId: null,
         signalKey: "odds_drop",
         alertText: `Odds dropping fast: ${matchName} — ${dropStr} (${bm.name})`,
+        tier: "critical",
         isRead: false,
         createdAt: new Date(),
       }).catch((e: unknown) => console.error("[odds-drop] alert insert error:", e));

@@ -40,7 +40,7 @@ function isPriority(a: Alert): boolean {
   const t = (a.alertText ?? "").toLowerCase();
   const k = (a.signalKey ?? "").toLowerCase();
 
-  if (k === "high_value_tip" || t.includes("high-value tip")) return true;
+  if (k === "odds_drop" || k === "live_value") return true;
 
   const match = t.match(/(\d+(?:\.\d+)?)\s*→\s*(\d+(?:\.\d+)?)/);
   if (match) {
@@ -142,14 +142,14 @@ export function TopSignalBanner() {
 
         <button
           onClick={() => {
-            navigate("/signals");
+            navigate("/odds-radar");
             dismiss();
           }}
           className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-mono font-bold uppercase tracking-wider transition-opacity hover:opacity-70 ${
             isOddsDrop ? "text-amber-400" : "text-primary"
           }`}
         >
-          Signals <ArrowRight className="w-2.5 h-2.5" />
+          Oddsradar <ArrowRight className="w-2.5 h-2.5" />
         </button>
 
         <button

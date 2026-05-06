@@ -1,85 +1,19 @@
 import { db } from "@workspace/db";
-import { alertLog, fixtures } from "@workspace/db/schema";
-import { inArray } from "drizzle-orm";
-import { generateAlertText } from "../ai/analysisLayer.js";
+import { alertLog } from "@workspace/db/schema";
+import { and, eq } from "drizzle-orm";
 
-const ALERT_TRIGGER_KEYS = new Set([
-  "momentum_shift",
-  "upset_risk",
-  "red_card_changed_balance",
-  "home_pressure_rising",
-  "away_over_expected_tempo",
-]);
-
-const LIVE_STATUSES = ["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"];
-
-// Track (fixtureId, signalKey) combos already alerted this process run
-const alreadyAlerted = new Set<string>();
-
+/**
+ * Previously broadcast live match-state signals (momentum, cards, …) to alert_log.
+ * The app feed is now odds-only — those rows are no longer inserted.
+ * Odds drops: poller → signalKey `odds_drop`. Live line vs model: `live_value`.
+ */
 export async function runAlertEngine() {
-  // Broadcast mode: scan all live fixtures, emit one global alert per signal.
-  // sessionId=null → visible to everyone on the Signals page.
-  const live = await db
-    .select({
-      fixtureId: fixtures.fixtureId,
-      homeTeamName: fixtures.homeTeamName,
-      awayTeamName: fixtures.awayTeamName,
-    })
-    .from(fixtures)
-    .where(inArray(fixtures.statusShort, LIVE_STATUSES));
-
-  if (live.length === 0) return;
-
-  for (const fix of live) {
-    const signals = await db.query.fixtureSignals.findMany({
-      where: (s, { and: andFn, eq: eqFn }) =>
-        andFn(eqFn(s.fixtureId, fix.fixtureId), eqFn(s.phase, "live")),
-    });
-
-    const matchName = `${fix.homeTeamName} vs ${fix.awayTeamName}`;
-
-    for (const signal of signals) {
-      if (!ALERT_TRIGGER_KEYS.has(signal.signalKey)) continue;
-      if (!(signal.signalBool === true || (signal.signalValue !== null && signal.signalValue > 0.65))) continue;
-
-      const alertKey = `${fix.fixtureId}:${signal.signalKey}`;
-      if (alreadyAlerted.has(alertKey)) continue;
-
-      const existing = await db.query.alertLog.findFirst({
-        where: (a, { and: andFn, eq: eqFn, isNull: isNullFn }) =>
-          andFn(
-            eqFn(a.fixtureId, fix.fixtureId),
-            eqFn(a.signalKey, signal.signalKey),
-            isNullFn(a.sessionId),
-          ),
-      });
-      if (existing) {
-        alreadyAlerted.add(alertKey);
-        continue;
-      }
-
-      const alertText = await generateAlertText(signal.signalKey, signal.signalLabel, matchName);
-
-      await db.insert(alertLog).values({
-        fixtureId: fix.fixtureId,
-        sessionId: null,
-        signalKey: signal.signalKey,
-        alertText,
-        tier: "critical",
-        isRead: false,
-        createdAt: new Date(),
-      });
-
-      alreadyAlerted.add(alertKey);
-      console.log(`[alerts] Broadcast signal: ${matchName} — ${signal.signalLabel}`);
-    }
-  }
+  return;
 }
 
 /**
  * Emit a "critical" tier alert when a super-value tip is generated.
- * Criteria: edge ≥ 0.15 (15pp) AND confidence='high' AND primary market.
- * Called from analysisLayer after tip passes the publish filter.
+ * Not shown on the odds-radar feed (filtered server-side) but kept for optional future use / admin.
  */
 export async function emitSuperValueAlert(params: {
   fixtureId: number;
@@ -91,7 +25,7 @@ export async function emitSuperValueAlert(params: {
 }) {
   const PRIMARY_MARKETS = new Set(["match_result", "over_under", "over_under_2_5", "btts", "double_chance"]);
   if (!PRIMARY_MARKETS.has(params.betType)) return;
-  if (params.edge < 0.05) return; // 5pp minimum — matches our value filter
+  if (params.edge < 0.05) return;
 
   const signalKey = `super_value:${params.betType}:${params.betSide}`;
 
@@ -124,6 +58,6 @@ let alertEngineStarted = false;
 export function startAlertEngine() {
   if (alertEngineStarted) return;
   alertEngineStarted = true;
-  console.log("[alerts] Alert engine started (broadcast mode)");
+  console.log("[alerts] Alert engine interval started (match-state broadcasts disabled; odds alerts via poller / live_value)");
   setInterval(() => runAlertEngine().catch(console.error), 30 * 1000);
 }

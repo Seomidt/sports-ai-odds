@@ -10,18 +10,25 @@ export interface NotifPrefs {
   muted: boolean;
   types: {
     live_value: boolean;
-    high_value_tip: boolean;
     odds_drop: boolean;
-    match_event: boolean;
   };
 }
 
-const PREFS_KEY = "notif_prefs_v1";
+const PREFS_KEY = "notif_prefs_v2";
 
 export function getNotifPrefs(): NotifPrefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
-    if (raw) return { ...defaultPrefs(), ...JSON.parse(raw) };
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<NotifPrefs>;
+      return {
+        muted: !!p.muted,
+        types: {
+          live_value: p.types?.live_value !== false,
+          odds_drop: p.types?.odds_drop !== false,
+        },
+      };
+    }
   } catch {}
   return defaultPrefs();
 }
@@ -33,7 +40,7 @@ export function saveNotifPrefs(prefs: NotifPrefs) {
 function defaultPrefs(): NotifPrefs {
   return {
     muted: false,
-    types: { live_value: true, high_value_tip: true, odds_drop: true, match_event: true },
+    types: { live_value: true, odds_drop: true },
   };
 }
 
@@ -41,11 +48,9 @@ function defaultPrefs(): NotifPrefs {
 
 interface Alert { id: number; tier?: string | null; signalKey?: string | null; }
 
-const TYPE_LABELS: Record<string, string> = {
-  live_value:     "Live Value",
-  high_value_tip: "Value Tips",
-  odds_drop:      "Odds Drop",
-  match_event:    "Match Events",
+const TYPE_LABELS: Record<keyof NotifPrefs["types"], string> = {
+  live_value: "Live odds (value)",
+  odds_drop:  "Odds fald / linje",
 };
 
 const LAST_SEEN_KEY = "notif_last_seen_ts";
@@ -97,9 +102,7 @@ export function NotificationBell() {
     if (prefs.muted) return false;
     const key = a.signalKey ?? "";
     if (key === "live_value" && !prefs.types.live_value) return false;
-    if (key === "high_value_tip" && !prefs.types.high_value_tip) return false;
     if (key === "odds_drop" && !prefs.types.odds_drop) return false;
-    if ((key === "goal" || key === "red_card" || key === "match_event") && !prefs.types.match_event) return false;
     // Only count alerts newer than when the bell was last opened
     const createdAt = a.createdAt ? new Date(a.createdAt as unknown as string).getTime() : 0;
     if (createdAt <= lastSeenTs) return false;
@@ -173,7 +176,7 @@ export function NotificationBell() {
       {/* Type toggles */}
       <div className="px-4 py-2 space-y-1">
         <p className="text-[10px] font-mono text-white/30 uppercase tracking-widest mb-2">Vis notifikationer for</p>
-        {(Object.keys(TYPE_LABELS) as Array<keyof NotifPrefs["types"]>).map((key) => (
+        {(Object.keys(TYPE_LABELS) as (keyof NotifPrefs["types"])[]).map((key) => (
           <div key={key} className="flex items-center justify-between py-1.5">
             <span className={`text-[12px] font-mono transition-colors ${prefs.muted ? "text-white/25" : "text-white/60"}`}>
               {TYPE_LABELS[key]}
@@ -191,9 +194,9 @@ export function NotificationBell() {
 
       {/* Link to Signals page */}
       <div className="px-4 py-3 border-t border-white/10">
-        <Link href="/signals" onClick={() => setOpen(false)}>
+        <Link href="/odds-radar" onClick={() => setOpen(false)}>
           <span className="text-[11px] font-mono text-primary/70 hover:text-primary transition-colors cursor-pointer">
-            Se alle signals →
+            Åbn oddsradar →
           </span>
         </Link>
       </div>

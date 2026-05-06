@@ -581,6 +581,10 @@ export async function syncPredictionForFixture(fixtureId: number) {
       target: predictions.fixtureId,
       set: record,
     });
+
+  // Keep HTTP caches in sync so match pages show DB prediction without manual refresh
+  cacheDel(`fixture:${fixtureId}:intel`);
+  cacheDel(`fixture:${fixtureId}:detail-v2`);
 }
 
 /**

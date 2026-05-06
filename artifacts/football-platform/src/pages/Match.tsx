@@ -16,7 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
-import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3, RefreshCw, CloudDownload } from "lucide-react";
+import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { HelpTooltip } from "@/components/HelpTooltip";
@@ -25,7 +25,7 @@ import { useSession } from "@/lib/session";
 import { useAuth } from "@/hooks/useAuth";
 import { format } from "date-fns";
 import { useQueryClient, useQuery, useMutation } from "@tanstack/react-query";
-import { useState, Component, useCallback } from "react";
+import { useState, Component, useCallback, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 
@@ -526,6 +526,24 @@ interface IntelPrediction {
   last5Home: PredLast5 | null;
   last5Away: PredLast5 | null;
 }
+
+/** True if API-Football snapshot has anything worth rendering (avoids empty objects / all-null rows). */
+function predictionHasData(p: IntelPrediction | null | undefined): boolean {
+  if (!p) return false;
+  const h = p.homeWinPct ?? 0;
+  const d = p.drawPct ?? 0;
+  const a = p.awayWinPct ?? 0;
+  if (h > 0 || d > 0 || a > 0) return true;
+  if (p.advice && p.advice.trim().length > 0) return true;
+  if (p.winner && String(p.winner).trim().length > 0) return true;
+  const gh = p.goalsHome ?? 0;
+  const ga = p.goalsAway ?? 0;
+  if (gh > 0 || ga > 0) return true;
+  if (p.comparison && typeof p.comparison === "object" && Object.keys(p.comparison).length > 0) return true;
+  if (p.last5Home || p.last5Away) return true;
+  return false;
+}
+
 interface IntelData {
   prediction: IntelPrediction | null;
   homeCoach: { name: string | null } | null;
@@ -633,7 +651,7 @@ function BettingIntelTab({
     gcTime: 60 * 60_000,
   });
 
-  const syncPredictions = useMutation({
+  const { mutate: runPredictionSync, ...syncPredictions } = useMutation({
     mutationFn: async () => {
       const res = await fetch(`/api/fixtures/${fixtureId}/predictions/sync`, { method: "POST" });
       const body = await res.json().catch(() => ({}));
@@ -645,12 +663,10 @@ function BettingIntelTab({
       await queryClient.invalidateQueries({ queryKey: ["intel", fixtureId] });
       await queryClient.invalidateQueries({ queryKey: ["bettingTip", fixtureId] });
       await queryClient.invalidateQueries({ queryKey: ["prematchSynthesis", fixtureId] });
-      if (body.hasPrediction) {
-        toast({ title: "Prediction data loaded", description: "API-Football data is now on this page." });
-      } else {
+      if (!body.hasPrediction) {
         toast({
-          title: "No API prediction for this fixture",
-          description: "API-Football returned nothing — common for some lower leagues. Try again later.",
+          title: "Ingen API-prediction",
+          description: "API-Football returnerede intet for denne kamp (ses ofte i små ligaer).",
           variant: "destructive",
         });
       }
@@ -696,7 +712,8 @@ function BettingIntelTab({
   };
 
   const synthesis = synthesisData?.synthesis ?? null;
-  const pred = intelData?.prediction ?? dbPrediction ?? null;
+  const rawPred = intelData?.prediction ?? dbPrediction ?? null;
+  const pred = predictionHasData(rawPred) ? rawPred : null;
   const homeSidelined = intelData?.homeSidelined ?? [];
   const awaySidelined = intelData?.awaySidelined ?? [];
   const homeTopScorer = intelData?.topScorers?.find(p => p.teamId === homeTeamId);
@@ -710,6 +727,21 @@ function BettingIntelTab({
     awaySidelined.length === 0 &&
     !homeTopScorer &&
     !awayTopScorer;
+
+  const autoSyncAttemptedRef = useRef(false);
+  useEffect(() => {
+    autoSyncAttemptedRef.current = false;
+  }, [fixtureId]);
+
+  useEffect(() => {
+    if (isIntelLoading) return;
+    if (pred) return;
+    if (tips.length > 0) return;
+    if (autoSyncAttemptedRef.current) return;
+    if (syncPredictions.isPending) return;
+    autoSyncAttemptedRef.current = true;
+    runPredictionSync();
+  }, [fixtureId, isIntelLoading, pred, tips.length, runPredictionSync, syncPredictions.isPending]);
 
   return (
     <div className="space-y-4">
@@ -1002,40 +1034,18 @@ function BettingIntelTab({
                 Generated {format(new Date(tips[0].createdAt), 'MMM dd, HH:mm')} · For informational purposes only
               </div>
             </>
+          ) : syncPredictions.isPending && !pred && tips.length === 0 ? (
+            <div className="glass-card p-8 rounded-xl border border-primary/20 flex flex-col items-center gap-3 text-center">
+              <Activity className="w-7 h-7 text-primary animate-pulse" />
+              <p className="text-sm text-muted-foreground">Henter og opdaterer prediction automatisk…</p>
+            </div>
           ) : showEmptyPreMatch ? (
-            <div className="glass-card p-8 rounded-xl border border-amber-400/20 bg-amber-400/[0.03] space-y-5">
-              <div className="flex items-start gap-3">
-                <CloudDownload className="w-8 h-8 text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="text-base font-semibold text-white mb-1">Ingen prediction-data i databasen endnu</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    Denne kamp har ikke en gemt API-Football prediction (typisk for nye eller små ligaer, eller før sync-køen har kørt).
-                    Tryk for at hente direkte fra API-Football nu. Brug også fanerne{" "}
-                    <span className="text-white/80 font-mono text-xs">Odds</span> og{" "}
-                    <span className="text-white/80 font-mono text-xs">H2H</span> for rå data.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                disabled={syncPredictions.isPending || isIntelFetching}
-                onClick={() => syncPredictions.mutate()}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3 rounded-lg bg-primary text-primary-foreground font-mono text-sm font-bold uppercase tracking-wider hover:bg-primary/90 disabled:opacity-50 transition-colors"
-              >
-                {syncPredictions.isPending ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <CloudDownload className="w-4 h-4" />
-                )}
-                {syncPredictions.isPending ? "Henter…" : "Hent prediction fra API"}
-              </button>
-              <div className="pt-2 border-t border-white/10 space-y-2">
-                <p className="text-[11px] font-mono text-muted-foreground/70 uppercase tracking-wider">Når data er på plads vises</p>
-                <ul className="text-xs text-muted-foreground space-y-1.5 list-disc list-inside">
-                  <li>1X2, mål og BTTS — afledt af API-Football</li>
-                  <li>AI picks og briefing — når tip-motoren har kørt for kampen</li>
-                </ul>
-              </div>
+            <div className="glass-card p-6 rounded-xl border border-white/10 space-y-2">
+              <h3 className="text-sm font-semibold text-white">Ingen prediction tilgængelig</h3>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Der er endnu ikke gemt en brugbar API-Football prediction for denne kamp. Brug fanerne{" "}
+                <span className="text-white/80">Odds</span> og <span className="text-white/80">H2H</span> for rå data.
+              </p>
             </div>
           ) : null}
         </>

@@ -16,6 +16,7 @@ import {
 } from "@workspace/api-client-react";
 import { useRoute } from "wouter";
 import { Layout } from "@/components/Layout";
+import { LeagueMark } from "@/components/LeagueMark";
 import { Activity, Star, AlertTriangle, Info, CheckCircle2, ChevronLeft, ChevronDown, Target, TrendingUp, TrendingDown, Minus, X, Zap, HelpCircle, Wind, Thermometer, CloudRain, Shield, Users, Award, UserX, Trophy, BarChart3 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -123,7 +124,10 @@ export function Match() {
             Back
           </button>
           <span className="text-white/15">·</span>
-          <span className="truncate text-xs font-medium text-muted-foreground/90">{fixture.leagueName}</span>
+          <span className="flex items-center gap-1.5 min-w-0 truncate text-xs font-medium text-muted-foreground/90">
+            <LeagueMark leagueId={fixture.leagueId} leagueLogo={fixture.leagueLogo} size="xs" />
+            <span className="truncate">{fixture.leagueName}</span>
+          </span>
         </div>
 
         {/* Header Card */}

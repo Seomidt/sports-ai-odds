@@ -4,7 +4,8 @@ import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Activity, Newspaper, Trophy, TrendingUp, Minus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { LEAGUES, getLeagueLogo } from "@/lib/leagues";
+import { LEAGUES } from "@/lib/leagues";
+import { LeagueMark } from "@/components/LeagueMark";
 
 interface NewsArticle {
   id: string;
@@ -150,12 +151,12 @@ export function News() {
           <SelectTrigger className="w-full sm:w-72 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
             <SelectValue />
           </SelectTrigger>
-          <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
+          <SelectContent className="font-mono">
             {LEAGUES.map((league) => (
-              <SelectItem key={league.id} value={String(league.id)} className="text-white focus:bg-white/10 focus:text-white">
-                <span className="inline-flex items-center gap-2">
-                  <img src={getLeagueLogo(league.id)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                  {league.name}
+              <SelectItem key={league.id} value={String(league.id)}>
+                <span className="inline-flex items-center gap-2 min-w-0">
+                  <LeagueMark leagueId={league.id} size="xs" />
+                  <span className="truncate">{league.name}</span>
                 </span>
               </SelectItem>
             ))}

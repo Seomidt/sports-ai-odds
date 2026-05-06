@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Activity } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getLeagueLogo } from "@/lib/leagues";
+import { LeagueMark } from "@/components/LeagueMark";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 
@@ -55,15 +55,17 @@ export function Live() {
             <SelectTrigger className="w-full sm:w-72 bg-white/5 border-white/10 text-white text-sm font-mono rounded-lg focus:ring-primary/50">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-[#0f0f1a] border-white/10 text-white font-mono max-h-[300px]">
-              <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
-                🌍 All Leagues ({liveFixtures.length})
+            <SelectContent className="font-mono">
+              <SelectItem value="all">
+                All leagues ({liveFixtures.length})
               </SelectItem>
               {liveFixtures.map((l) => (
-                <SelectItem key={l.leagueId} value={String(l.leagueId)} className="text-white focus:bg-white/10 focus:text-white">
-                  <span className="inline-flex items-center gap-2">
-                    <img src={getLeagueLogo(l.leagueId)} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                    {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
+                <SelectItem key={l.leagueId} value={String(l.leagueId)}>
+                  <span className="inline-flex items-center gap-2 min-w-0">
+                    <LeagueMark leagueId={l.leagueId} leagueLogo={l.leagueLogo} size="xs" />
+                    <span className="truncate">
+                      {l.leagueName ?? `League ${l.leagueId}`} ({l.fixtures.length} live)
+                    </span>
                   </span>
                 </SelectItem>
               ))}
@@ -82,12 +84,7 @@ export function Live() {
             {visibleLeagues.map((league) => (
               <div key={league.leagueId} className="space-y-4">
                 <div className="flex items-center gap-3 pb-2 border-b border-white/10">
-                  <img
-                    src={getLeagueLogo(league.leagueId) || league.leagueLogo || ""}
-                    alt={league.leagueName ?? ""}
-                    className="w-5 h-5 object-contain shrink-0 bg-white/90 rounded p-0.5"
-                    onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
-                  />
+                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="md" />
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider font-mono">{league.leagueName}</h2>
                   <span className="text-xs text-muted-foreground font-mono ml-auto">
                     {league.fixtures.length} live

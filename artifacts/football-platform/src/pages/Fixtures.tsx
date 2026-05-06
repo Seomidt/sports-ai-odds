@@ -8,6 +8,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useEffect, useMemo, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { LeagueMark } from "@/components/LeagueMark";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
 // PST (Postponed) and SUSP (Suspended) treated as finished — never show in prematch
@@ -83,10 +84,8 @@ function FixtureCard({ fixture }: { fixture: Fixture }) {
             {phase === "postmatch" && <PostMatchBadge statusShort={fixture.statusShort} />}
           </div>
           {fixture.leagueName && (
-            <div className="flex items-center gap-1.5 overflow-hidden">
-              {fixture.leagueLogo && (
-                <img src={fixture.leagueLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" />
-              )}
+            <div className="flex items-center gap-1.5 overflow-hidden min-w-0">
+              <LeagueMark leagueId={fixture.leagueId} leagueLogo={fixture.leagueLogo} size="xs" />
               <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[90px]">
                 {fixture.leagueName}
               </span>
@@ -149,9 +148,7 @@ function FixtureGrid({ fixtures }: { fixtures: Fixture[] }) {
       {Array.from(byLeague.values()).map((league) => (
         <div key={league.leagueId}>
           <div className="flex items-center gap-2.5 mb-4 pb-2 border-b border-white/10">
-            {league.leagueLogo && (
-              <img src={league.leagueLogo} alt="" className="w-5 h-5 object-contain bg-white/90 rounded p-0.5" />
-            )}
+            <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="md" />
             <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
               {league.leagueName ?? `League ${league.leagueId}`}
             </span>
@@ -391,14 +388,20 @@ export function Fixtures({
                       <SelectValue placeholder="All leagues" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all" className="text-white focus:bg-white/10 focus:text-white">
+                      <SelectItem value="all" className="font-mono">
                         All leagues ({phaseFixtures.length})
                       </SelectItem>
                       {tabLeagues.map((l) => {
                         const n = phaseFixtures.filter((f) => f.leagueId === l.id).length;
+                        const sample = phaseFixtures.find((f) => f.leagueId === l.id);
                         return (
-                          <SelectItem key={l.id} value={String(l.id)} className="text-white focus:bg-white/10 focus:text-white">
-                            {l.name ?? `League ${l.id}`} ({n})
+                          <SelectItem key={l.id} value={String(l.id)} className="font-mono">
+                            <span className="flex items-center gap-2">
+                              <LeagueMark leagueId={l.id} leagueLogo={sample?.leagueLogo} size="xs" />
+                              <span className="truncate">
+                                {l.name ?? `League ${l.id}`} ({n})
+                              </span>
+                            </span>
                           </SelectItem>
                         );
                       })}

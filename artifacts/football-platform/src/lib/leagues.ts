@@ -46,6 +46,11 @@ export function getLeagueFlag(leagueId: number | null | undefined): string {
   return FLAG_MAP.get(leagueId) ?? "";
 }
 
+/** Emoji for UI when we want something on every league (known → country flag, unknown → ball). */
+export function getLeagueDisplayEmoji(leagueId: number | null | undefined): string {
+  return getLeagueFlag(leagueId) || "⚽";
+}
+
 /** Liga-logo URL fra API-Football — vises overalt og fungerer på alle platforme */
 export function getLeagueLogo(leagueId: number | null | undefined): string {
   if (leagueId == null) return "";

@@ -603,20 +603,16 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
           </div>
         </div>
 
-        {/* Context: advice + goals */}
-        <div className="flex-1 space-y-2">
-          {tip.adviceText && (
-            <p className="text-xs text-white/50 leading-relaxed">{tip.adviceText}</p>
-          )}
-          {tip.winnerComment && tip.winnerComment !== tip.adviceText && (
-            <p className="text-[11px] text-teal-300/50 font-mono italic">"{tip.winnerComment}"</p>
-          )}
+          {/* Compact context */}
+          <div className="flex-1 space-y-2">
 
-          {/* 1X2 win probability bar */}
-          {tip.homeWinPercent != null && (
+          {/* 1X2 bar only for match-result cards */}
+          {tip.market === "match_result" && tip.homeWinPercent != null && (
             <div className="space-y-1">
               <div className="flex justify-between text-[9px] font-mono text-muted-foreground/40 uppercase tracking-wider">
-                <span>{tip.homeTeam}</span><span>Draw</span><span>{tip.awayTeam}</span>
+                <span>{tip.homeTeam}</span>
+                {(tip.drawPercent ?? 0) >= 30 ? <span>Draw</span> : <span className="opacity-0">Draw</span>}
+                <span>{tip.awayTeam}</span>
               </div>
               <div className="flex items-center h-6 rounded overflow-hidden w-full">
                 {(tip.homeWinPercent ?? 0) > 0 && (
@@ -624,7 +620,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
                     <span className="text-[10px] font-mono font-bold text-teal-300 px-1">{Math.round(tip.homeWinPercent ?? 0)}%</span>
                   </div>
                 )}
-                {(tip.drawPercent ?? 0) > 0 && (
+                {(tip.drawPercent ?? 0) >= 30 && (
                   <div className="h-full flex items-center justify-center border-r border-amber-400/40 min-w-[2rem]" style={{ flex: tip.drawPercent ?? 0, backgroundColor: "rgba(251,191,36,0.2)" }}>
                     <span className="text-[10px] font-mono font-bold text-amber-300 px-1">{Math.round(tip.drawPercent ?? 0)}%</span>
                   </div>
@@ -638,91 +634,7 @@ function ValueOddsCard({ tip, rank }: { tip: ValueTip; rank: number }) {
             </div>
           )}
 
-          {/* Team comparison bars — skip for double chance to reduce noise */}
-          {isPrimary && tip.comparison && (() => {
-            const comp = tip.comparison as Record<string, { home: string; away: string }>;
-            const rows = [
-              { key: 'total', label: 'Overall' },
-              { key: 'form',  label: 'Form' },
-              { key: 'att',   label: 'Attack' },
-              { key: 'def',   label: 'Defence' },
-            ];
-            const validRows = rows.filter(({ key }) => {
-              const m = comp[key]; if (!m) return false;
-              return !isNaN(parseFloat(m.home)) && !isNaN(parseFloat(m.away));
-            });
-            if (validRows.length === 0) return null;
-            return (
-              <div className="space-y-1 pt-1">
-                <div className="text-[9px] font-mono text-muted-foreground/30 uppercase tracking-widest">Team Comparison</div>
-                {validRows.map(({ key, label }) => {
-                  const m = comp[key]!;
-                  const h = parseFloat(m.home);
-                  const a = parseFloat(m.away);
-                  return (
-                    <div key={key} className="flex items-center gap-2">
-                      <span className="text-[9px] font-mono text-muted-foreground/30 w-12 shrink-0 text-right">{label}</span>
-                      <div className="flex-1 flex items-center h-2.5 rounded overflow-hidden">
-                        <div className="h-full bg-teal-400/25 border-r border-teal-400/15" style={{ width: `${h}%` }} />
-                        <div className="h-full bg-violet-400/20" style={{ width: `${a}%` }} />
-                      </div>
-                      <div className="flex items-center gap-1 text-[9px] font-mono shrink-0">
-                        <span className="text-teal-300/70 tabular-nums w-7 text-right">{Math.round(h)}%</span>
-                        <span className="text-white/15">·</span>
-                        <span className="text-violet-300/70 tabular-nums w-7">{Math.round(a)}%</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })()}
-
-          {/* Predicted goals + underOver + winOrDraw */}
-          {(tip.goalsHome != null || tip.underOver || tip.winOrDraw) && (
-            <div className="text-[10px] font-mono text-muted-foreground/40 pt-0.5 flex flex-wrap gap-x-3 gap-y-0.5">
-              {tip.goalsHome != null && tip.goalsAway != null && (
-                <span>Mål <span className="text-white/40">{tip.goalsHome.toFixed(1)}–{tip.goalsAway.toFixed(1)}</span></span>
-              )}
-              {tip.underOver && (
-                <span>{tip.underOver.startsWith('-') ? `Under ${tip.underOver.replace('-', '')}` : `Over ${tip.underOver.replace('+', '')}`} goals</span>
-              )}
-              {tip.winOrDraw && (
-                <span className="text-teal-300/40">{tip.homeTeam} win or draw</span>
-              )}
-            </div>
-          )}
-
-          {/* Last 5 form */}
-          {isPrimary && (tip.last5Home || tip.last5Away) && (
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              {([
-                { label: tip.homeTeam, data: tip.last5Home, color: 'teal' },
-                { label: tip.awayTeam, data: tip.last5Away, color: 'violet' },
-              ] as const).map(({ label, data, color }) => data ? (
-                <div key={String(label)} className="bg-white/3 rounded-lg p-2 space-y-1">
-                  <div className={`text-[9px] font-mono text-${color}-400/50 uppercase tracking-wider truncate`}>{label} — Last 5</div>
-                  {data.form && (
-                    <div className="flex gap-0.5">
-                      {data.form.split('').slice(0, 5).map((r, i) => (
-                        <span key={i} className={`text-[9px] font-mono font-bold px-0.5 py-0.5 rounded ${
-                          r === 'W' ? 'bg-teal-400/20 text-teal-300' :
-                          r === 'D' ? 'bg-amber-400/20 text-amber-300' :
-                          'bg-red-400/20 text-red-400'
-                        }`}>{r}</span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="text-[9px] font-mono text-white/35">
-                    {data.goals.for.total} scored · {data.goals.against.total} conceded
-                  </div>
-                  {data.att && data.def && (
-                    <div className="text-[9px] font-mono text-white/20">Att {data.att} · Def {data.def}</div>
-                  )}
-                </div>
-              ) : null)}
-            </div>
-          )}
+          {/* Keep cards concise: detailed context lives on the match page */}
         </div>
       </div>
 

@@ -59,7 +59,7 @@ interface DerivedMarket {
   probability: number;
 }
 
-type MarketFilter = "all" | "match_result" | "over_under_25" | "btts" | "double_chance" | "combo";
+type MarketFilter = "all" | "match_result" | "over_under_25" | "btts" | "double_chance";
 
 const FILTER_TABS: { id: MarketFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -67,16 +67,35 @@ const FILTER_TABS: { id: MarketFilter; label: string }[] = [
   { id: "over_under_25", label: "O/U 2.5" },
   { id: "btts", label: "BTTS" },
   { id: "double_chance", label: "1X / X2" },
-  { id: "combo", label: "Combo" },
 ];
 
-function filterMarkets(markets: DerivedMarket[], filter: MarketFilter): DerivedMarket[] {
-  if (filter === "all") return [...markets].sort((a, b) => b.probability - a.probability);
-  if (filter === "combo") {
-    return markets
-      .filter((m) => m.market === "double_chance" || m.market === "win_or_draw")
-      .sort((a, b) => b.probability - a.probability);
+function prioritizeAllMarkets(markets: DerivedMarket[]): DerivedMarket[] {
+  const sorted = [...markets].sort((a, b) => b.probability - a.probability);
+  const preferredOrder = ["match_result", "over_under_25", "btts", "double_chance"];
+  const picked: DerivedMarket[] = [];
+
+  for (const market of preferredOrder) {
+    const candidate =
+      market === "match_result"
+        ? sorted.find((m) => m.market === market && m.side !== "draw" && !picked.includes(m)) ??
+          sorted.find((m) => m.market === market && !picked.includes(m))
+        : sorted.find((m) => m.market === market && !picked.includes(m));
+    if (candidate) picked.push(candidate);
   }
+
+  // Fill remaining slots by strongest remaining lines, while avoiding too many draw picks.
+  for (const m of sorted) {
+    if (picked.includes(m)) continue;
+    if (m.market === "match_result" && m.side === "draw" && picked.some((x) => x.market === "match_result" && x.side === "draw")) {
+      continue;
+    }
+    picked.push(m);
+  }
+  return picked;
+}
+
+function filterMarkets(markets: DerivedMarket[], filter: MarketFilter): DerivedMarket[] {
+  if (filter === "all") return prioritizeAllMarkets(markets);
   return markets.filter((m) => m.market === filter).sort((a, b) => b.probability - a.probability);
 }
 
@@ -140,7 +159,7 @@ function CompactPreRow({
   });
   const signals = signalData?.signals ?? [];
   const filtered = filterMarkets(markets, marketFilter);
-  const display = filtered.slice(0, 8);
+  const display = filtered.slice(0, 6);
   const hasPred = markets.length > 0;
 
   return (
@@ -275,16 +294,12 @@ export function PreMatch() {
 
   const marketSummary = useMemo(() => {
     let withPred = 0;
-    if (!allMarkets) return { withPred: 0, totalLines: 0 };
-    let totalLines = 0;
+    if (!allMarkets) return { withPred: 0 };
     for (const f of dayFixtures) {
       const m = allMarkets[f.fixtureId];
-      if (m?.length) {
-        withPred++;
-        totalLines += m.length;
-      }
+      if (m?.length) withPred++;
     }
-    return { withPred, totalLines };
+    return { withPred };
   }, [allMarkets, dayFixtures]);
 
   return (
@@ -293,15 +308,11 @@ export function PreMatch() {
         <header className="space-y-1">
           <div className="flex items-center gap-2">
             <TrendingUp className="w-4 h-4 text-amber-400" />
-            <h1 className="text-xl md:text-2xl font-bold font-mono tracking-tight text-white">Pre-match</h1>
+            <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-white">Pre-match</h1>
           </div>
           <p className="text-xs md:text-sm text-muted-foreground leading-snug">
-            Compact list — all derived lines from API-Football per fixture. Use the chips to show only the market types you care about.
-            {!isLoading && (
-              <span className="text-muted-foreground/60 font-mono ml-1">
-                ({marketSummary.withPred}/{dayFixtures.length} with data · {marketSummary.totalLines} lines)
-              </span>
-            )}
+            All market types on each fixture. Filter by market to remove noise.
+            {!isLoading && <span className="text-muted-foreground/60 ml-1">({marketSummary.withPred}/{dayFixtures.length})</span>}
           </p>
         </header>
 

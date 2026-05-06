@@ -245,8 +245,42 @@ interface DerivedMarket {
 
 type DeriveMarketsMode = "strict" | "prematch_full";
 
+const clampPct = (n: number, min = 1, max = 99) => Math.max(min, Math.min(max, n));
+
+function normalizeThreeWay(
+  homeRaw: number | null,
+  drawRaw: number | null,
+  awayRaw: number | null,
+): { home: number | null; draw: number | null; away: number | null } {
+  const home = homeRaw ?? 0;
+  const draw = drawRaw ?? 0;
+  const away = awayRaw ?? 0;
+  const sum = home + draw + away;
+  if (sum <= 0) return { home: null, draw: null, away: null };
+
+  const nh = (home / sum) * 100;
+  const nd = (draw / sum) * 100;
+  const na = (away / sum) * 100;
+
+  // Draw probabilities were often too dominant in API snapshots.
+  // Cap draw slightly so "all roads lead to draw" does not dominate the product surface.
+  const cappedDraw = Math.min(nd, 38);
+  const remaining = 100 - cappedDraw;
+  const sides = nh + na;
+  if (sides <= 0) return { home: null, draw: Math.round(cappedDraw), away: null };
+
+  const normalizedHome = Math.round((nh / sides) * remaining);
+  const normalizedAway = Math.max(0, Math.round(remaining - normalizedHome));
+  return {
+    home: clampPct(normalizedHome, 1, 98),
+    draw: clampPct(Math.round(cappedDraw), 2, 38),
+    away: clampPct(normalizedAway, 1, 98),
+  };
+}
+
 function deriveMarkets(pred: PredRow, trust: TrustInfo, mode: DeriveMarketsMode = "strict"): DerivedMarket[] {
   const strict = mode === "strict";
+  const oneXTwo = normalizeThreeWay(pred.homeWinPercent, pred.drawPercent, pred.awayWinPercent);
   const base = {
     fixtureId: pred.fixtureId,
     homeTeam: pred.homeTeam,
@@ -260,9 +294,9 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo, mode: DeriveMarketsMode 
     goalsHome: pred.goalsHome,
     goalsAway: pred.goalsAway,
     underOver: pred.underOver,
-    homeWinPercent: pred.homeWinPercent,
-    drawPercent: pred.drawPercent,
-    awayWinPercent: pred.awayWinPercent,
+    homeWinPercent: oneXTwo.home,
+    drawPercent: oneXTwo.draw,
+    awayWinPercent: oneXTwo.away,
     comparison: pred.comparison,
     last5Home: pred.last5Home,
     last5Away: pred.last5Away,
@@ -276,18 +310,24 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo, mode: DeriveMarketsMode 
   const away = pred.awayTeam ?? "Ude";
 
   // ── Match result ──
-  if (pred.homeWinPercent) markets.push({ ...base, market: "match_result", side: "home", label: `${home} vinder`, probability: Math.round(pred.homeWinPercent) });
-  if (pred.drawPercent) markets.push({ ...base, market: "match_result", side: "draw", label: "Uafgjort", probability: Math.round(pred.drawPercent) });
-  if (pred.awayWinPercent) markets.push({ ...base, market: "match_result", side: "away", label: `${away} vinder`, probability: Math.round(pred.awayWinPercent) });
+  if (oneXTwo.home) markets.push({ ...base, market: "match_result", side: "home", label: `${home} vinder`, probability: Math.round(oneXTwo.home) });
+  // Draw is included only at realistic levels to reduce low-signal draw spam.
+  if (oneXTwo.draw && oneXTwo.draw >= 21 && oneXTwo.draw <= 38) {
+    markets.push({ ...base, market: "match_result", side: "draw", label: "Uafgjort", probability: Math.round(oneXTwo.draw) });
+  }
+  if (oneXTwo.away) markets.push({ ...base, market: "match_result", side: "away", label: `${away} vinder`, probability: Math.round(oneXTwo.away) });
 
   // ── Over/Under 2.5 ── (Poisson-based estimate from predicted goals)
   const gh = pred.goalsHome ?? 0;
   const ga = pred.goalsAway ?? 0;
   const totalGoals = gh + ga;
   if (totalGoals > 0) {
-    // Rough Poisson CDF: P(total > 2.5) using lambda = totalGoals
-    // Precomputed for common ranges: λ=2→38%, λ=2.5→46%, λ=3→58%, λ=3.5→68%, λ=4→76%
-    const overProb = Math.min(92, Math.max(25, Math.round(50 + (totalGoals - 2.5) * 18)));
+    // Poisson(total λ) exact estimate for O/U 2.5:
+    // P(Over 2.5) = 1 - P(0) - P(1) - P(2)
+    const p0 = Math.exp(-totalGoals);
+    const p1 = totalGoals * p0;
+    const p2 = ((totalGoals * totalGoals) / 2) * p0;
+    const overProb = clampPct(Math.round((1 - (p0 + p1 + p2)) * 100), 8, 92);
     const underProb = 100 - overProb;
     // Add explicit underOver signal as a weight
     const hasOverSignal = pred.underOver?.startsWith("+");
@@ -311,19 +351,14 @@ function deriveMarkets(pred: PredRow, trust: TrustInfo, mode: DeriveMarketsMode 
   }
 
   // ── Double Chance
-  const minDc = strict ? 72 : 50;
-  if (pred.homeWinPercent && pred.drawPercent) {
-    const dc = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
+  const minDc = strict ? 80 : 58;
+  if (oneXTwo.home && oneXTwo.draw) {
+    const dc = Math.min(99, Math.round(oneXTwo.home + oneXTwo.draw));
     if (dc >= minDc) markets.push({ ...base, market: "double_chance", side: "home_draw", label: `${home} eller uafgjort`, probability: dc });
   }
-  if (pred.awayWinPercent && pred.drawPercent) {
-    const dc = Math.min(99, Math.round(pred.awayWinPercent + pred.drawPercent));
+  if (oneXTwo.away && oneXTwo.draw) {
+    const dc = Math.min(99, Math.round(oneXTwo.away + oneXTwo.draw));
     if (dc >= minDc) markets.push({ ...base, market: "double_chance", side: "away_draw", label: `${away} eller uafgjort`, probability: dc });
-  }
-
-  if (!strict && pred.winOrDraw === true && pred.homeWinPercent && pred.drawPercent) {
-    const wod = Math.min(99, Math.round(pred.homeWinPercent + pred.drawPercent));
-    markets.push({ ...base, market: "win_or_draw", side: "home", label: `${home} vinder eller uafgjort`, probability: wod });
   }
 
   return markets;
@@ -386,10 +421,11 @@ async function fetchFixturePredictions(daysAhead = 14) {
 /** Picks a diverse prediction set so the grid is not 20× double chance (1X/X2 dominate raw probability sorts). */
 function pickDiverseValueTips(all: DerivedMarket[], maxTotal = 28): DerivedMarket[] {
   const MIN_PRIMARY = 58; // 1X2, O/U, BTTS — API % can sit in high-50s for value sides
-  const MIN_DOUBLE_CHANCE = 78; // require stronger edge before showing safe combos in the headline grid
+  const MIN_DOUBLE_CHANCE = 84; // require very strong certainty for safe combos in the headline grid
 
   let eligible = all.filter((m) => {
     if (m.market === "double_chance") return m.probability >= MIN_DOUBLE_CHANCE;
+    if (m.market === "match_result" && m.side === "draw") return m.probability >= 30;
     return m.probability >= MIN_PRIMARY;
   });
   if (eligible.length === 0) {
@@ -413,7 +449,12 @@ function pickDiverseValueTips(all: DerivedMarket[], maxTotal = 28): DerivedMarke
     match_result: 12,
     over_under_25: 10,
     btts: 10,
-    double_chance: 6,
+    double_chance: 4,
+  };
+  const CAP_MATCH_RESULT_SIDE: Record<string, number> = {
+    home: 7,
+    away: 7,
+    draw: 2,
   };
 
   for (const m of sorted) {
@@ -422,6 +463,10 @@ function pickDiverseValueTips(all: DerivedMarket[], maxTotal = 28): DerivedMarke
     if (fc >= MAX_PER_FIXTURE) continue;
     const mc = countByMarket.get(m.market) ?? 0;
     if (mc >= (CAP_BY_MARKET[m.market] ?? 8)) continue;
+    if (m.market === "match_result") {
+      const sameSideCount = out.filter((x) => x.market === "match_result" && x.side === m.side).length;
+      if (sameSideCount >= (CAP_MATCH_RESULT_SIDE[m.side] ?? 6)) continue;
+    }
     out.push(m);
     countByFixture.set(m.fixtureId, fc + 1);
     countByMarket.set(m.market, mc + 1);
@@ -441,7 +486,7 @@ function pickDiverseValueTips(all: DerivedMarket[], maxTotal = 28): DerivedMarke
 
 router.get("/analysis/value-odds", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:value-odds-v5", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:value-odds-v6", TTL.MIN5, async () => {
       const pairs = await fetchFixturePredictions(14);
       const all: DerivedMarket[] = pairs.flatMap(({ row, trust }) => deriveMarkets(row as PredRow, trust));
       const valueTips = pickDiverseValueTips(all, 28);
@@ -458,7 +503,7 @@ router.get("/analysis/value-odds", async (_req, res) => {
 
 router.get("/analysis/prematch-predictions", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:prematch-predictions-v2", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:prematch-predictions-v3", TTL.MIN5, async () => {
       const pairs = await fetchFixturePredictions(14);
       const grouped: Record<number, DerivedMarket[]> = {};
       for (const { row, trust } of pairs) {

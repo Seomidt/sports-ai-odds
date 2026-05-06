@@ -172,7 +172,7 @@ function CompactPreRow({
       >
         <div className="flex items-center gap-2 min-h-[2.25rem]">
           <div className="flex items-center gap-1 shrink-0">
-            <LeagueMark leagueId={fixture.leagueId} leagueLogo={fixture.leagueLogo} size="xs" showEmoji={false} />
+            <LeagueMark leagueId={fixture.leagueId} leagueLogo={fixture.leagueLogo} size="xs" />
             <div className="flex items-center gap-1 shrink-0 w-[3rem]">
               <Clock className="w-3 h-3 text-amber-400/80 shrink-0" />
               <span className="text-[11px] font-mono font-semibold text-white tabular-nums">{kickoffShort(fixture.kickoff)}</span>

@@ -537,6 +537,9 @@ function marketCardAccent(market: string): { bar: string; chip: string; chipText
       return { bar: "bg-violet-400", chip: "bg-violet-400/15 border-violet-400/35 text-violet-200", chipText: "O/U 2.5" };
     case "btts":
       return { bar: "bg-amber-400", chip: "bg-amber-400/15 border-amber-400/35 text-amber-200", chipText: "BTTS" };
+    case "double_chance":
+    case "win_or_draw":
+      return { bar: "bg-sky-400", chip: "bg-sky-400/15 border-sky-400/35 text-sky-200", chipText: "1X / X2" };
     default:
       return { bar: "bg-white/30", chip: "bg-white/8 border-white/15 text-muted-foreground", chipText: "Combo" };
   }

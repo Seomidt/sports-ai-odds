@@ -109,7 +109,7 @@ function marketPillClass(market: string): string {
       return "bg-amber-400/12 text-amber-200 border-amber-400/25";
     case "double_chance":
     case "win_or_draw":
-      return "bg-white/6 text-white/70 border-white/12";
+      return "bg-sky-400/14 text-sky-200 border-sky-400/35";
     default:
       return "bg-white/5 text-muted-foreground border-white/10";
   }

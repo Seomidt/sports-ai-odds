@@ -1,13 +1,71 @@
 import { useState } from "react";
-import { useGetTodayFixtures } from "@workspace/api-client-react";
+import { useGetTodayFixtures, useGetFixtureSignals } from "@workspace/api-client-react";
+import type { Fixture } from "@workspace/api-client-react";
 import { Link } from "wouter";
-import { format } from "date-fns";
 import { Layout } from "@/components/Layout";
 import { Activity } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeagueMark } from "@/components/LeagueMark";
+import { LiveSignalFeed, type LiveSignalItem } from "@/components/LiveSignalFeed";
 
 const LIVE_STATUSES = new Set(["1H", "HT", "2H", "ET", "BT", "P", "INT", "LIVE"]);
+
+function LiveMatchCard({ fixture }: { fixture: Fixture }) {
+  const { data: signalData } = useGetFixtureSignals(
+    fixture.fixtureId,
+    { phase: "live" },
+    {
+      query: {
+        queryKey: ["signals", fixture.fixtureId, "live", "live-page"],
+        staleTime: 15_000,
+        refetchInterval: 15_000,
+      },
+    },
+  );
+  const signals = (signalData?.signals ?? []) as LiveSignalItem[];
+
+  return (
+    <Link href={`/match/${fixture.fixtureId}`}>
+      <div className="glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border border-primary/30 shadow-[0_0_14px_rgba(0,255,200,0.07)] flex flex-col h-full">
+        <div className="flex justify-between items-center mb-4">
+          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+            {fixture.statusElapsed != null ? `${fixture.statusElapsed}'` : fixture.statusShort}
+          </span>
+        </div>
+
+        <div className="space-y-2.5 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {fixture.homeTeamLogo && (
+                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
+              )}
+              <span className="font-semibold text-white truncate text-sm">{fixture.homeTeamName}</span>
+            </div>
+            <span className="font-mono text-2xl font-bold text-white shrink-0">{fixture.homeGoals ?? 0}</span>
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {fixture.awayTeamLogo && (
+                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
+              )}
+              <span className="font-medium text-white/60 truncate text-sm">{fixture.awayTeamName}</span>
+            </div>
+            <span className="font-mono text-2xl font-bold text-white/60 shrink-0">{fixture.awayGoals ?? 0}</span>
+          </div>
+        </div>
+
+        <LiveSignalFeed
+          variant="compact"
+          signals={signals}
+          homeTeam={fixture.homeTeamName}
+          awayTeam={fixture.awayTeamName}
+          className="mt-4 pt-3 border-t border-primary/15"
+        />
+      </div>
+    </Link>
+  );
+}
 
 export function Live() {
   const { data, isLoading } = useGetTodayFixtures();
@@ -43,7 +101,9 @@ export function Live() {
             <span className="w-2.5 h-2.5 rounded-full bg-primary animate-pulse" />
             <h1 className="text-3xl font-bold font-mono tracking-tight text-white">LIVE</h1>
           </div>
-          <p className="text-muted-foreground">Matches currently in play.</p>
+          <p className="text-muted-foreground max-w-xl">
+            Hver kort viser kun signaler for netop den kamp — opdateres løbende, så du kan se momentum, pres og live value uden støj fra andre opgør.
+          </p>
         </header>
 
         {/* League filter dropdown — only shown when there are multiple leagues */}
@@ -93,41 +153,7 @@ export function Live() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {league.fixtures.map((fixture) => (
-                    <Link key={fixture.fixtureId} href={`/match/${fixture.fixtureId}`}>
-                      <div className="glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border border-primary/30 shadow-[0_0_14px_rgba(0,255,200,0.07)]">
-                        <div className="flex justify-between items-center mb-4">
-                          <span className="inline-flex items-center gap-1.5 text-xs font-bold text-primary bg-primary/10 px-2.5 py-1 rounded font-mono">
-                            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                            {fixture.statusElapsed != null ? `${fixture.statusElapsed}'` : fixture.statusShort}
-                          </span>
-                        </div>
-
-                        <div className="space-y-2.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {fixture.homeTeamLogo && (
-                                <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
-                              )}
-                              <span className="font-semibold text-white truncate text-sm">{fixture.homeTeamName}</span>
-                            </div>
-                            <span className="font-mono text-2xl font-bold text-white shrink-0">
-                              {fixture.homeGoals ?? 0}
-                            </span>
-                          </div>
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              {fixture.awayTeamLogo && (
-                                <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
-                              )}
-                              <span className="font-medium text-white/60 truncate text-sm">{fixture.awayTeamName}</span>
-                            </div>
-                            <span className="font-mono text-2xl font-bold text-white/60 shrink-0">
-                              {fixture.awayGoals ?? 0}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </Link>
+                    <LiveMatchCard key={fixture.fixtureId} fixture={fixture} />
                   ))}
                 </div>
               </div>

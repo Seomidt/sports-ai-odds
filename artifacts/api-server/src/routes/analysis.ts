@@ -17,6 +17,59 @@ function badRequest(res: any, message: string) {
   return res.status(400).json({ error: message });
 }
 
+/** Tracked picks panel: skip 1X2 draw & draw scorelines, cap count, spread across fixtures. */
+const TRACKED_DAILY_CAP = 12;
+const TRACKED_PER_FIXTURE_CAP = 2;
+
+function isDrawSideTrackedTip(row: { betType: string; betSide: string | null }): boolean {
+  const t = row.betType;
+  const s = (row.betSide ?? "").toLowerCase().trim();
+  if (t === "match_result" && s === "draw") return true;
+  if (t === "correct_score") {
+    const norm = s.replace(/-/g, ":");
+    const parts = norm.split(":");
+    if (parts.length === 2) {
+      const a = parseInt(parts[0]!, 10);
+      const b = parseInt(parts[1]!, 10);
+      if (Number.isFinite(a) && Number.isFinite(b) && a === b) return true;
+    }
+  }
+  return false;
+}
+
+function trackedPickSortKey(betType: string): number {
+  if (betType === "match_result") return 0;
+  if (betType === "over_under") return 1;
+  if (betType === "btts") return 2;
+  if (betType === "asian_handicap") return 3;
+  if (betType === "double_chance") return 5;
+  return 4;
+}
+
+function capAndSortTrackedTips<
+  T extends { fixtureId: number; betType: string; edge: number | null; trustScore: number; betSide: string | null },
+>(rows: T[]): T[] {
+  const sorted = [...rows]
+    .filter((r) => !isDrawSideTrackedTip(r))
+    .sort((a, b) => {
+      const p = trackedPickSortKey(a.betType) - trackedPickSortKey(b.betType);
+      if (p !== 0) return p;
+      const ed = (b.edge ?? 0) - (a.edge ?? 0);
+      if (ed !== 0) return ed;
+      return b.trustScore - a.trustScore;
+    });
+  const out: T[] = [];
+  const perFx = new Map<number, number>();
+  for (const r of sorted) {
+    if (out.length >= TRACKED_DAILY_CAP) break;
+    const c = perFx.get(r.fixtureId) ?? 0;
+    if (c >= TRACKED_PER_FIXTURE_CAP) continue;
+    perFx.set(r.fixtureId, c + 1);
+    out.push(r);
+  }
+  return out;
+}
+
 // Fase 2.1 — Free plan sees only low-confidence or non-primary-market tips,
 // and only after a 24h delay. Pro sees everything.
 const PRIMARY_MARKETS = new Set(["match_result", "over_under_2_5", "btts"]);
@@ -547,7 +600,7 @@ router.get("/analysis/accuracy", async (_req, res) => {
 
 router.get("/analysis/daily-summary", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:daily-summary", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:daily-summary:v2", TTL.MIN5, async () => {
       const now = new Date();
       const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       // "Today picks" covers next 7 days — so the Highest Edge widget always has content
@@ -566,6 +619,7 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           leagueName: aiBettingTips.leagueName,
           recommendation: aiBettingTips.recommendation,
           betType: aiBettingTips.betType,
+          betSide: aiBettingTips.betSide,
           trustScore: aiBettingTips.trustScore,
           marketOdds: aiBettingTips.marketOdds,
           valueRating: aiBettingTips.valueRating,
@@ -657,10 +711,11 @@ router.get("/analysis/daily-summary", async (_req, res) => {
           }).from(predictions).where(inArray(predictions.fixtureId, todayFixtureIds))
         : [];
       const todayPredMap = new Map(todayPredRows.map((p) => [p.fixtureId, p]));
-      const todayPicks = todayPicksFiltered.map((t) => {
+      const todayPicksEnriched = todayPicksFiltered.map((t) => {
         const pred = todayPredMap.get(t.fixtureId ?? -1) ?? null;
         return { ...t, winnerComment: pred?.winnerComment ?? null, underOver: pred?.underOver ?? null };
       });
+      const todayPicks = capAndSortTrackedTips(todayPicksEnriched);
 
       // Yesterday + allReviewed: only count tips where we had genuine edge (value+).
       // This ensures hit rate and ROI reflect actual "played" picks, not all generated tips.

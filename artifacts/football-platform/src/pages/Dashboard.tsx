@@ -233,6 +233,22 @@ function StreakRoiCard({ streak, roi, badge }: { streak: StreakState; roi: RoiSt
 
 // ─── DailyLoopBar ────────────────────────────────────────────────────────────
 
+/** Én hurtig 0–100 score: model vs implied, ellers trust. Ingen %-point i UI. */
+function pickQuickScore(tip: TipSummary): number {
+  const implied = tip.impliedProbability ?? (tip.marketOdds && tip.marketOdds > 1 ? 1 / tip.marketOdds : null);
+  if (tip.aiProbability != null && implied != null) {
+    const edge = tip.aiProbability - implied;
+    return Math.max(0, Math.min(100, Math.round(50 + edge * 3)));
+  }
+  return Math.max(0, Math.min(100, Math.round((tip.trustScore / 9) * 100)));
+}
+
+function pickScoreTierClass(score: number): string {
+  if (score >= 72) return "text-teal-400";
+  if (score >= 55) return "text-violet-300";
+  return "text-amber-400/90";
+}
+
 function DailyLoopBar({ summary }: { summary: DailySummary }) {
   const { todayPicks, yesterdayTips, yesterdayUncovered = [], yesterdayResults, streak, roi } = summary;
   const [todayOpen, setTodayOpen] = useState(false);
@@ -241,14 +257,9 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
   const yr = yesterdayResults;
   const yrResolved = yr.wins + yr.losses + yr.pushes;
   const yrHitRate = yrResolved > 0 ? Math.round((yr.wins / yrResolved) * 100) : null;
-  const edgePpFor = (tip: TipSummary) => {
-    const implied = tip.impliedProbability ?? (tip.marketOdds && tip.marketOdds > 1 ? 1 / tip.marketOdds : null);
-    return tip.aiProbability != null && implied != null ? (tip.aiProbability - implied) * 100 : null;
-  };
-  const edgeRankFor = (tip: TipSummary) => edgePpFor(tip) ?? (tip.edge != null ? tip.edge * 100 : Number.NEGATIVE_INFINITY);
   const topPick = todayPicks.reduce<TipSummary | null>((best, tip) => {
     if (!best) return tip;
-    return edgeRankFor(tip) > edgeRankFor(best) ? tip : best;
+    return pickQuickScore(tip) > pickQuickScore(best) ? tip : best;
   }, null);
   const badge = streak.badge ? BADGE_CONFIG[streak.badge] : null;
 
@@ -257,17 +268,17 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
       {/* Row 1: Today + Yesterday side by side */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
-        {/* Highest Edge Picks */}
+        {/* AI-trackede tips (kort liste — samme pipeline som i går / streak) */}
         <div className="glass-card rounded-xl border border-white/8 overflow-hidden">
           <button
             onClick={() => setTodayOpen(o => !o)}
             className="w-full text-left p-4 hover:bg-white/3 transition-colors"
           >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Zap className="w-3.5 h-3.5 text-teal-400" />
-                <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-widest">Highest Edge</span>
-                <span className="text-[9px] font-mono text-muted-foreground/40">1–7 dage</span>
+                <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-widest">Udvalgte tips</span>
+                <span className="text-[9px] font-mono text-muted-foreground/45">7 dage · max 12 · uden uafgjort 1X2</span>
               </div>
               {todayPicks.length > 0 && (
                 todayOpen
@@ -275,23 +286,26 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                   : <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40" />
               )}
             </div>
+            <p className="text-[11px] text-muted-foreground/55 leading-snug mb-2">
+              Sporbare AI-anbefalinger (ikke det samme som markedsscan-kortene nedenunder). Sorteret efter markedstype og styrke — ikke fyldt med X.
+            </p>
             {todayPicks.length === 0 ? (
-              <div className="text-sm text-muted-foreground/50">Ingen value picks de næste 7 dage</div>
+              <div className="text-sm text-muted-foreground/50">Ingen tips i vinduet, der matcher filteret.</div>
             ) : (
               <>
                 <div className="flex items-baseline gap-2 mb-1">
                   <span className="text-3xl font-bold font-mono text-white tabular-nums">{todayPicks.length}</span>
-                  <span className="text-xs text-muted-foreground font-mono">best value picks</span>
+                  <span className="text-xs text-muted-foreground">i listen lige nu</span>
                 </div>
                 {topPick && !todayOpen && (
                   <div className="text-xs text-muted-foreground/70 truncate">
-                    Top: <span className="text-white/80">{topPick.recommendation}</span>
-                    {(() => {
-                      const pp = edgePpFor(topPick);
-                      return pp != null ? <span className="text-teal-400 font-mono ml-1">{pp >= 0 ? '+' : ''}{pp.toFixed(1)}pp</span> : null;
-                    })()}
-                    {topPick.marketOdds != null && topPick.aiProbability == null && (
-                      <span className="text-teal-400 font-mono ml-1">@ {topPick.marketOdds.toFixed(2)}</span>
+                    Stærkest: <span className="text-white/85">{topPick.recommendation}</span>
+                    <span className={`font-mono font-semibold tabular-nums ml-1.5 ${pickScoreTierClass(pickQuickScore(topPick))}`}>
+                      {pickQuickScore(topPick)}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/50 ml-0.5">score</span>
+                    {topPick.marketOdds != null && (
+                      <span className="text-muted-foreground/60 font-mono ml-1.5">@ {topPick.marketOdds.toFixed(2)}</span>
                     )}
                   </div>
                 )}
@@ -299,23 +313,17 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
             )}
           </button>
 
-          {/* Expanded highest edge list */}
           {todayOpen && todayPicks.length > 0 && (
             <div className="border-t border-white/5 divide-y divide-white/5">
               {todayPicks.map(tip => (
                 <Link key={tip.id} href={`/match/${tip.fixtureId}`}>
-                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/4 transition-colors cursor-pointer">
+                  <div className="flex items-center gap-3 px-4 py-2.5 hover:bg-white/4 transition-colors cursor-pointer">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-0.5">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
                         <span className="text-[10px] font-mono text-muted-foreground/50 uppercase">{betTypeLabel(tip.betType)}</span>
                         <ValueBadge rating={tip.valueRating} />
                       </div>
                       <div className="text-sm font-semibold text-white truncate">{tip.recommendation}</div>
-                      {tip.winnerComment && (
-                        <div className="text-[10px] text-teal-300/60 font-mono italic truncate mt-0.5">
-                          {tip.winnerComment}
-                        </div>
-                      )}
                       <div className="text-xs text-muted-foreground/60 truncate mt-0.5">
                         {tip.homeTeam} vs {tip.awayTeam}
                         {tip.kickoff && (
@@ -326,24 +334,15 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      {(() => {
-                        const pp = edgePpFor(tip);
-                        if (pp != null) {
-                          return (
-                            <span className={`font-mono text-sm font-bold tabular-nums ${
-                              pp >= 5 ? 'text-teal-400' :
-                              pp >= -5 ? 'text-violet-400' :
-                              'text-amber-400'
-                            }`}>
-                              {pp >= 0 ? '+' : ''}{pp.toFixed(1)}pp
-                            </span>
-                          );
-                        }
-                        if (tip.marketOdds != null) {
-                          return <span className="font-mono text-sm font-bold text-teal-400">{tip.marketOdds.toFixed(2)}</span>;
-                        }
-                        return null;
-                      })()}
+                      <div className="text-right">
+                        <div className={`font-mono text-sm font-bold tabular-nums leading-none ${pickScoreTierClass(pickQuickScore(tip))}`}>
+                          {pickQuickScore(tip)}
+                        </div>
+                        <div className="text-[9px] text-muted-foreground/45 uppercase tracking-wide">score</div>
+                        {tip.marketOdds != null && (
+                          <div className="text-[10px] font-mono text-muted-foreground/55 tabular-nums mt-0.5">@ {tip.marketOdds.toFixed(2)}</div>
+                        )}
+                      </div>
                       {tip.confidence && (
                         <span className={`text-[9px] font-mono font-bold px-1 py-0.5 rounded border uppercase tracking-wider ${
                           tip.confidence === 'high' ? 'text-teal-300 bg-teal-400/10 border-teal-400/30' :
@@ -379,7 +378,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
                     <span onClick={e => e.stopPropagation()}>
                       <HelpTooltip side="bottom">
                         <p className="leading-relaxed">
-                          Tracker kun tips med <span className="text-teal-300">Value</span> eller <span className="text-teal-300">Strong Value</span> rating (edge ≥ 5pp) — det er de bets vi rent faktisk anbefaler at spille.
+                          Kun tips med <span className="text-teal-300">Value</span> eller <span className="text-teal-300">Strong Value</span> — dem vi regner for “spilleværdige” ift. markedet. Hit rate og ROI er på disse linjer, ikke på hele markedsscan-grid’et.
                         </p>
                       </HelpTooltip>
                     </span>
@@ -798,11 +797,15 @@ export function Dashboard() {
           title="Full prediction grid"
           description={
             <>
-              Mixed markets (1X2, goals, BTTS, double chance) from API-Football. For a shorter list, see{" "}
+              <span className="block mb-1.5">
+                Nederst: bred <strong className="text-white/90 font-medium">markedsscan</strong> (mange markeder). Midt på siden:{" "}
+                <strong className="text-white/90 font-medium">Udvalgte tips</strong> — færre linjer, sporbare AI-anbefalinger (uden 1X2 uafgjort).
+              </span>
+              Kort daglig oversigt:{" "}
               <Link href="/today" className="text-primary hover:text-primary/90 underline underline-offset-2 decoration-primary/35">
                 Today
               </Link>
-              . Track outcomes in{" "}
+              . Historik:{" "}
               <Link href="/performance" className="text-primary hover:text-primary/90 underline underline-offset-2 decoration-primary/35">
                 Performance
               </Link>

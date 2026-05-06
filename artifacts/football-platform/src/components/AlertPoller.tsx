@@ -191,9 +191,7 @@ export function AlertPoller() {
       if (prefs.muted) return false;
       const key = a.signalKey ?? "";
       if (key === "live_value" && !prefs.types.live_value) return false;
-      if (key === "high_value_tip" && !prefs.types.high_value_tip) return false;
       if (key === "odds_drop" && !prefs.types.odds_drop) return false;
-      if ((key === "goal" || key === "red_card" || key === "match_event") && !prefs.types.match_event) return false;
       return true;
     });
     let changed = false;

@@ -52,7 +52,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/live", label: "Live", icon: Radio },
     { href: "/pre-match", label: "Pre-Match", icon: Clock },
     { href: "/post-match", label: "Post-Match", icon: CheckCircle2 },
-    { href: "/signals", label: "Signals", icon: Zap },
+    { href: "/odds-radar", label: "Oddsradar", icon: Zap },
     { href: "/following", label: "Watchlist", icon: Star },
     { href: "/standings", label: "Standings", icon: ListOrdered },
     { href: "/news", label: "News", icon: Newspaper },

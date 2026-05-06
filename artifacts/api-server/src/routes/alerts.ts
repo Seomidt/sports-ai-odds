@@ -1,10 +1,13 @@
 import { Router, type Request, type Response } from "express";
-import { and, desc, eq, gte } from "drizzle-orm";
+import { and, desc, eq, gte, inArray } from "drizzle-orm";
 
 import { db } from "@workspace/db";
 import { alertLog, fixtures } from "@workspace/db/schema";
 
 const router = Router();
+
+/** Kun linjeskift (prematch) og live odds vs. marked — ikke momentum/kort osv. */
+export const ODDS_MOVEMENT_SIGNAL_KEYS = ["odds_drop", "live_value"] as const;
 
 router.get("/alerts/recent", async (req: Request, res: Response) => {
   const hours = Math.min(Math.max(Number(req.query.hours) || 1, 1), 24);
@@ -28,7 +31,12 @@ router.get("/alerts/recent", async (req: Request, res: Response) => {
       })
       .from(alertLog)
       .leftJoin(fixtures, eq(alertLog.fixtureId, fixtures.fixtureId))
-      .where(gte(alertLog.createdAt, since))
+      .where(
+        and(
+          gte(alertLog.createdAt, since),
+          inArray(alertLog.signalKey, [...ODDS_MOVEMENT_SIGNAL_KEYS]),
+        ),
+      )
       .orderBy(desc(alertLog.createdAt))
       .limit(200);
 
@@ -60,7 +68,13 @@ router.get("/alerts/unread", async (_req: Request, res: Response) => {
       })
       .from(alertLog)
       .leftJoin(fixtures, eq(alertLog.fixtureId, fixtures.fixtureId))
-      .where(and(eq(alertLog.tier, "critical"), gte(alertLog.createdAt, since)))
+      .where(
+        and(
+          eq(alertLog.tier, "critical"),
+          gte(alertLog.createdAt, since),
+          inArray(alertLog.signalKey, [...ODDS_MOVEMENT_SIGNAL_KEYS]),
+        ),
+      )
       .orderBy(desc(alertLog.createdAt))
       .limit(20);
 

@@ -18,7 +18,7 @@ import { Standings } from "./pages/Standings";
 import { Following } from "./pages/Following";
 import { News } from "./pages/News";
 import { Admin } from "./pages/Admin";
-import { Signals } from "./pages/Signals";
+import { OddsRadar } from "./pages/Signals";
 import { Performance } from "./pages/Performance";
 import { PricingGate } from "./pages/PricingGate";
 import NotFound from "./pages/not-found";
@@ -168,7 +168,8 @@ function AppRoutes() {
           <Route path="/pre-match"><ProtectedRoute component={PreMatch} /></Route>
           <Route path="/post-match"><ProtectedRoute component={PostMatch} /></Route>
           <Route path="/match/:id"><ProtectedRoute component={Match} /></Route>
-          <Route path="/signals"><ProtectedRoute component={Signals} /></Route>
+          <Route path="/odds-radar"><ProtectedRoute component={OddsRadar} /></Route>
+          <Route path="/signals"><Redirect to="/odds-radar" /></Route>
           <Route path="/standings"><ProtectedRoute component={Standings} /></Route>
           <Route path="/following"><ProtectedRoute component={Following} /></Route>
           <Route path="/news"><ProtectedRoute component={News} /></Route>

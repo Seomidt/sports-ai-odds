@@ -17,9 +17,10 @@ function badRequest(res: any, message: string) {
   return res.status(400).json({ error: message });
 }
 
-/** Tracked picks panel: skip 1X2 draw & draw scorelines, cap count, spread across fixtures. */
+/** Tracked picks panel: skip 1X2 draw, draw scorelines, and draw-heavy markets (DC); cap count. */
 const TRACKED_DAILY_CAP = 12;
 const TRACKED_PER_FIXTURE_CAP = 2;
+const TRACKED_EXCLUDED_BET_TYPES = new Set(["double_chance", "win_or_draw"]);
 
 function isDrawSideTrackedTip(row: { betType: string; betSide: string | null }): boolean {
   const t = row.betType;
@@ -42,7 +43,6 @@ function trackedPickSortKey(betType: string): number {
   if (betType === "over_under") return 1;
   if (betType === "btts") return 2;
   if (betType === "asian_handicap") return 3;
-  if (betType === "double_chance") return 5;
   return 4;
 }
 
@@ -50,7 +50,7 @@ function capAndSortTrackedTips<
   T extends { fixtureId: number; betType: string; edge: number | null; trustScore: number; betSide: string | null },
 >(rows: T[]): T[] {
   const sorted = [...rows]
-    .filter((r) => !isDrawSideTrackedTip(r))
+    .filter((r) => !TRACKED_EXCLUDED_BET_TYPES.has(r.betType) && !isDrawSideTrackedTip(r))
     .sort((a, b) => {
       const p = trackedPickSortKey(a.betType) - trackedPickSortKey(b.betType);
       if (p !== 0) return p;
@@ -600,7 +600,7 @@ router.get("/analysis/accuracy", async (_req, res) => {
 
 router.get("/analysis/daily-summary", async (_req, res) => {
   try {
-    const result = await getOrFetch("analysis:daily-summary:v2", TTL.MIN5, async () => {
+    const result = await getOrFetch("analysis:daily-summary:v3", TTL.MIN5, async () => {
       const now = new Date();
       const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       // "Today picks" covers next 7 days — so the Highest Edge widget always has content

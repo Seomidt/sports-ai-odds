@@ -172,14 +172,15 @@ export function Today() {
           title="What matters right now"
           description={
             <>
-              Live games, next kickoffs, and model edges in one calm view.{" "}
+              Live, næste kickoffs og udvalgte linjer — rolig oversigt.{" "}
               <Link href="/matches" className="text-primary hover:text-primary/85 underline underline-offset-2 decoration-primary/40">
-                Matches
+                Kampe
               </Link>{" "}
               ·{" "}
               <Link href="/predictions" className="text-primary hover:text-primary/85 underline underline-offset-2 decoration-primary/40">
                 Predictions
-              </Link>
+              </Link>{" "}
+              (markedsscan + sporbare tips)
             </>
           }
           icon={LayoutDashboard}
@@ -313,14 +314,14 @@ export function Today() {
         </div>
 
         <SectionCard
-          title="Top model edges"
-          subtitle="Highest-confidence picks — tap for full breakdown"
+          title="Stærkeste linjer"
+          subtitle="Fra markedsscannet — samme data som det store grid på Predictions (Udvalgte tips er en kortere, separat liste dér)"
           icon={Target}
           iconClass="text-teal-400"
           footer={
             <Link href="/predictions">
               <div className="flex items-center justify-center gap-1 text-xs font-semibold text-primary hover:underline cursor-pointer py-2.5 border-t border-white/[0.06] -mb-1">
-                See all predictions <ArrowRight className="w-3 h-3" />
+                Åbn Predictions (fuld grid) <ArrowRight className="w-3 h-3" />
               </div>
             </Link>
           }

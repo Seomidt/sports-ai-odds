@@ -278,7 +278,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
               <div className="flex items-center gap-2 flex-wrap">
                 <Zap className="w-3.5 h-3.5 text-teal-400" />
                 <span className="text-[10px] font-mono font-bold text-teal-400 uppercase tracking-widest">Udvalgte tips</span>
-                <span className="text-[9px] font-mono text-muted-foreground/45">7 dage · max 12 · uden uafgjort 1X2</span>
+                <span className="text-[9px] font-mono text-muted-foreground/45">7 dage · max 12 · uden X / double chance</span>
               </div>
               {todayPicks.length > 0 && (
                 todayOpen

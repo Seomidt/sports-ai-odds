@@ -26,7 +26,7 @@ import {
   alertLog,
   aiBettingTips,
 } from "@workspace/db/schema";
-import { eq, and, inArray, lt, sql, isNull, isNotNull, ne, gte } from "drizzle-orm";
+import { eq, and, or, inArray, lt, sql, isNull, isNotNull, ne, gte } from "drizzle-orm";
 import {
   TRACKED_LEAGUES,
   fetchTodayFixtures,
@@ -385,6 +385,35 @@ async function insertOddsSnapshot(
       }).catch((e: unknown) => console.error("[odds-drop] alert insert error:", e));
     }
   }
+}
+
+/** Populate odds_snapshots (1X2 + side markets) — same sources as syncOdds(). */
+async function fillOddsSnapshotsForFixture(fixtureId: number): Promise<boolean> {
+  let any = false;
+  const seen = new Set<string>();
+  const odds = await fetchOdds(fixtureId);
+  if (odds && odds.bookmakers.length > 0) {
+    for (const bm of odds.bookmakers) {
+      if (seen.has(bm.name)) continue;
+      seen.add(bm.name);
+      await insertOddsSnapshot(fixtureId, bm.name, odds.bookmakers, {
+        btts: odds._btts,
+        overUnder25: odds._overUnder25,
+        handicapHome: odds._handicapHome,
+      });
+      any = true;
+    }
+  }
+  for (const [bmId, bmName] of Object.entries(PRIORITY_BOOKMAKER_IDS)) {
+    if (seen.has(bmName)) continue;
+    const bmOdds = await fetchOddsForBookmaker(fixtureId, Number(bmId));
+    if (!bmOdds || bmOdds.bookmakers.length === 0) continue;
+    seen.add(bmName);
+    await insertOddsSnapshot(fixtureId, bmOdds.bookmakers[0]!.name, bmOdds.bookmakers);
+    any = true;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  return any;
 }
 
 async function syncOdds() {
@@ -2713,7 +2742,67 @@ export async function syncOddsForFixture(fixtureId: number): Promise<boolean> {
     wrote = true;
     await new Promise((r) => setTimeout(r, 150));
   }
-  return wrote;
+  const snapWrote = await fillOddsSnapshotsForFixture(fixtureId);
+  return wrote || snapWrote;
+}
+
+/**
+ * If DB has no H2H rows for this fixture's team pair, fetch from API-Football and store.
+ */
+export async function ensureH2HDataForFixture(fixtureId: number): Promise<boolean> {
+  const [fix] = await db
+    .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId })
+    .from(fixtures)
+    .where(eq(fixtures.fixtureId, fixtureId))
+    .limit(1);
+  if (!fix?.homeTeamId || !fix?.awayTeamId) return false;
+
+  const existing = await db.query.h2hFixtures.findFirst({
+    where: (h, { or: orFn, and: andFn, eq: e }) =>
+      orFn(
+        andFn(e(h.forTeam1Id, fix.homeTeamId), e(h.forTeam2Id, fix.awayTeamId)),
+        andFn(e(h.forTeam1Id, fix.awayTeamId), e(h.forTeam2Id, fix.homeTeamId)),
+      ),
+  });
+  if (existing) return true;
+
+  const data = await fetchH2H(fix.homeTeamId, fix.awayTeamId, 10);
+  if (!data || data.length === 0) return false;
+
+  for (const entry of data) {
+    if (!["FT", "AET", "PEN"].includes(entry.fixture.status.short)) continue;
+    await db
+      .insert(h2hFixtures)
+      .values({
+        fixtureId: entry.fixture.id,
+        leagueId: entry.league.id,
+        leagueName: entry.league.name,
+        seasonYear: entry.league.season,
+        homeTeamId: entry.teams.home.id,
+        homeTeamName: entry.teams.home.name,
+        homeTeamLogo: entry.teams.home.logo,
+        awayTeamId: entry.teams.away.id,
+        awayTeamName: entry.teams.away.name,
+        awayTeamLogo: entry.teams.away.logo,
+        homeGoals: entry.goals.home,
+        awayGoals: entry.goals.away,
+        kickoff: entry.fixture.date ? new Date(entry.fixture.date) : null,
+        statusShort: entry.fixture.status.short,
+        forTeam1Id: fix.homeTeamId,
+        forTeam2Id: fix.awayTeamId,
+      })
+      .onConflictDoNothing();
+
+    const statsExist = await db.query.h2hFixtureStats.findFirst({
+      where: (s, { eq: e }) => e(s.fixtureId, entry.fixture.id),
+    });
+    if (!statsExist) {
+      const statsData = await fetchFixtureStats(entry.fixture.id).catch(() => null);
+      if (statsData) await upsertH2HFixtureStats(entry.fixture.id, statsData);
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }
+  return true;
 }
 
 // ─── One-time H2H stats backfill ──────────────────────────────────────────────

@@ -10,7 +10,7 @@ import {
   fixtureSignals, trophies, playerStats as playerStatsTable, followedFixtures,
 } from "@workspace/db/schema";
 import { getOrFetch, TTL, cacheDel } from "../lib/routeCache.js";
-import { syncPredictionForFixture } from "../ingestion/poller.js";
+import { syncPredictionForFixture, syncOddsForFixture, ensureH2HDataForFixture } from "../ingestion/poller.js";
 
 const router = Router();
 
@@ -52,6 +52,99 @@ function badRequest(res: Response, message: string) {
 
 function reqLogError(scope: string, error: unknown) {
   console.error(`[routes:${scope}]`, error);
+}
+
+async function loadFixtureOddsSnapshot(fixtureId: number) {
+  const rows = await db
+    .select()
+    .from(oddsSnapshots)
+    .where(eq(oddsSnapshots.fixtureId, fixtureId))
+    .orderBy(desc(oddsSnapshots.snappedAt))
+    .limit(1);
+  return { odds: rows[0] ?? null };
+}
+
+async function loadFixtureOddsMarkets(fixtureId: number) {
+  const rows = await db
+    .select()
+    .from(oddsMarkets)
+    .where(eq(oddsMarkets.fixtureId, fixtureId))
+    .orderBy(desc(oddsMarkets.snappedAt))
+    .limit(5);
+  return { oddsMarkets: rows };
+}
+
+async function loadFixtureH2HPayload(fixtureId: number) {
+  const [fix] = await db
+    .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId })
+    .from(fixtures)
+    .where(eq(fixtures.fixtureId, fixtureId))
+    .limit(1);
+  if (!fix) return { h2h: [], stats: null };
+
+  const rows = await db
+    .select()
+    .from(h2hFixtures)
+    .where(
+      or(
+        and(eq(h2hFixtures.forTeam1Id, fix.homeTeamId), eq(h2hFixtures.forTeam2Id, fix.awayTeamId)),
+        and(eq(h2hFixtures.forTeam1Id, fix.awayTeamId), eq(h2hFixtures.forTeam2Id, fix.homeTeamId)),
+      ),
+    )
+    .orderBy(desc(h2hFixtures.kickoff))
+    .limit(20);
+
+  const fixtureIds = rows.map((r) => r.fixtureId);
+  let aggregateStats = null;
+
+  if (fixtureIds.length > 0) {
+    const statsRows = await db
+      .select()
+      .from(h2hFixtureStats)
+      .where(inArray(h2hFixtureStats.fixtureId, fixtureIds));
+
+    const goalsMap = new Map<number, { goals: number; btts: boolean }>();
+    for (const row of rows) {
+      const hg = row.homeGoals ?? 0;
+      const ag = row.awayGoals ?? 0;
+      if (hg != null && ag != null) {
+        goalsMap.set(row.fixtureId, { goals: hg + ag, btts: hg > 0 && ag > 0 });
+      }
+    }
+
+    const statsMap = new Map<number, { xg: number; shots: number; corners: number }>();
+    for (const s of statsRows) {
+      const cur = statsMap.get(s.fixtureId) ?? { xg: 0, shots: 0, corners: 0 };
+      cur.xg += s.expectedGoals ?? 0;
+      cur.shots += s.totalShots ?? 0;
+      cur.corners += s.cornerKicks ?? 0;
+      statsMap.set(s.fixtureId, cur);
+    }
+
+    const n = goalsMap.size;
+    const goalsList = [...goalsMap.values()];
+    const over25Count = goalsList.filter((g) => g.goals > 2).length;
+    const bttsCount = goalsList.filter((g) => g.btts).length;
+    const totalGoals = goalsList.reduce((s, g) => s + g.goals, 0);
+
+    const statsList = [...statsMap.values()];
+    const withXg = statsList.filter((s) => s.xg > 0);
+    const withShots = statsList.filter((s) => s.shots > 0);
+    const withCorners = statsList.filter((s) => s.corners > 0);
+
+    aggregateStats = {
+      matchCount: n,
+      xgMatchCount: withXg.length,
+      avgGoals: n > 0 ? +(totalGoals / n).toFixed(2) : null,
+      bttsRate: n > 0 ? +(bttsCount / n).toFixed(2) : null,
+      over25Rate: n > 0 ? +(over25Count / n).toFixed(2) : null,
+      avgXg: withXg.length > 0 ? +(withXg.reduce((s, r) => s + r.xg, 0) / withXg.length).toFixed(2) : null,
+      avgShots: withShots.length > 0 ? +(withShots.reduce((s, r) => s + r.shots, 0) / withShots.length).toFixed(1) : null,
+      avgCorners: withCorners.length > 0 ? +(withCorners.reduce((s, r) => s + r.corners, 0) / withCorners.length).toFixed(1) : null,
+    };
+  }
+
+  return { h2h: rows, stats: aggregateStats };
 }
 
 const POST_STATUSES = ["FT", "AET", "PEN", "ABD", "CANC", "AWD", "WO"];
@@ -365,15 +458,17 @@ router.get("/fixtures/:id/odds", async (req: Request, res: Response) => {
     const fixtureId = Number(req.params.id);
     if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
 
-    const result = await getOrFetch(`fixture:${fixtureId}:odds`, TTL.MIN2, async () => {
-      const rows = await db
-        .select()
-        .from(oddsSnapshots)
-        .where(eq(oddsSnapshots.fixtureId, fixtureId))
-        .orderBy(desc(oddsSnapshots.snappedAt))
-        .limit(1);
-      return { odds: rows[0] ?? null };
-    });
+    let result = await getOrFetch(`fixture:${fixtureId}:odds`, TTL.MIN2, () => loadFixtureOddsSnapshot(fixtureId));
+    if (!result.odds) {
+      try {
+        await syncOddsForFixture(fixtureId);
+      } catch (e) {
+        reqLogError("fixtures.odds.backfill", e);
+      }
+      cacheDel(`fixture:${fixtureId}:odds`);
+      cacheDel(`fixture:${fixtureId}:odds-markets`);
+      result = await getOrFetch(`fixture:${fixtureId}:odds`, TTL.MIN2, () => loadFixtureOddsSnapshot(fixtureId));
+    }
     return res.json(result);
   } catch (error) {
     reqLogError("fixtures.odds", error);
@@ -407,15 +502,17 @@ router.get("/fixtures/:id/odds-markets", async (req: Request, res: Response) => 
     const fixtureId = Number(req.params.id);
     if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
 
-    const result = await getOrFetch(`fixture:${fixtureId}:odds-markets`, TTL.MIN2, async () => {
-      const rows = await db
-        .select()
-        .from(oddsMarkets)
-        .where(eq(oddsMarkets.fixtureId, fixtureId))
-        .orderBy(desc(oddsMarkets.snappedAt))
-        .limit(5);
-      return { oddsMarkets: rows };
-    });
+    let result = await getOrFetch(`fixture:${fixtureId}:odds-markets`, TTL.MIN2, () => loadFixtureOddsMarkets(fixtureId));
+    if (!result.oddsMarkets || result.oddsMarkets.length === 0) {
+      try {
+        await syncOddsForFixture(fixtureId);
+      } catch (e) {
+        reqLogError("fixtures.oddsMarkets.backfill", e);
+      }
+      cacheDel(`fixture:${fixtureId}:odds-markets`);
+      cacheDel(`fixture:${fixtureId}:odds`);
+      result = await getOrFetch(`fixture:${fixtureId}:odds-markets`, TTL.MIN2, () => loadFixtureOddsMarkets(fixtureId));
+    }
     return res.json(result);
   } catch (error) {
     reqLogError("fixtures.oddsMarkets", error);
@@ -428,80 +525,16 @@ router.get("/fixtures/:id/h2h", async (req: Request, res: Response) => {
     const fixtureId = Number(req.params.id);
     if (!Number.isFinite(fixtureId) || fixtureId <= 0) return badRequest(res, "Invalid fixture id");
 
-    const result = await getOrFetch(`fixture:${fixtureId}:h2h`, TTL.MIN10, async () => {
-      const [fix] = await db
-        .select({ homeTeamId: fixtures.homeTeamId, awayTeamId: fixtures.awayTeamId })
-        .from(fixtures)
-        .where(eq(fixtures.fixtureId, fixtureId))
-        .limit(1);
-      if (!fix) return { h2h: [], stats: null };
-
-      const rows = await db
-        .select()
-        .from(h2hFixtures)
-        .where(
-          or(
-            and(eq(h2hFixtures.forTeam1Id, fix.homeTeamId), eq(h2hFixtures.forTeam2Id, fix.awayTeamId)),
-            and(eq(h2hFixtures.forTeam1Id, fix.awayTeamId), eq(h2hFixtures.forTeam2Id, fix.homeTeamId)),
-          ),
-        )
-        .orderBy(desc(h2hFixtures.kickoff))
-        .limit(20);
-
-      // Compute aggregate stats from h2hFixtureStats
-      const fixtureIds = rows.map((r) => r.fixtureId);
-      let aggregateStats = null;
-      if (fixtureIds.length > 0) {
-        const statsRows = await db
-          .select()
-          .from(h2hFixtureStats)
-          .where(inArray(h2hFixtureStats.fixtureId, fixtureIds));
-
-        // Goals info keyed by fixtureId (from h2hFixtures)
-        const goalsMap = new Map<number, { goals: number; btts: boolean }>();
-        for (const row of rows) {
-          const hg = row.homeGoals ?? 0;
-          const ag = row.awayGoals ?? 0;
-          if (hg != null && ag != null) {
-            goalsMap.set(row.fixtureId, { goals: hg + ag, btts: hg > 0 && ag > 0 });
-          }
-        }
-
-        // Per-fixture totals from stats rows (sum both teams)
-        const statsMap = new Map<number, { xg: number; shots: number; corners: number }>();
-        for (const s of statsRows) {
-          const cur = statsMap.get(s.fixtureId) ?? { xg: 0, shots: 0, corners: 0 };
-          cur.xg     += s.expectedGoals ?? 0;
-          cur.shots  += s.totalShots    ?? 0;
-          cur.corners += s.cornerKicks  ?? 0;
-          statsMap.set(s.fixtureId, cur);
-        }
-
-        const n = goalsMap.size;
-        const goalsList = [...goalsMap.values()];
-        const over25Count = goalsList.filter((g) => g.goals > 2).length;
-        const bttsCount   = goalsList.filter((g) => g.btts).length;
-        const totalGoals  = goalsList.reduce((s, g) => s + g.goals, 0);
-
-        const statsList = [...statsMap.values()];
-        const withXg      = statsList.filter((s) => s.xg > 0);
-        const withShots   = statsList.filter((s) => s.shots > 0);
-        const withCorners = statsList.filter((s) => s.corners > 0);
-
-        aggregateStats = {
-          matchCount:   n,
-          xgMatchCount: withXg.length,
-          avgGoals:     n > 0 ? +(totalGoals / n).toFixed(2) : null,
-          bttsRate:     n > 0 ? +(bttsCount  / n).toFixed(2) : null,
-          over25Rate:   n > 0 ? +(over25Count / n).toFixed(2) : null,
-          avgXg:        withXg.length      > 0 ? +(withXg.reduce((s, r)      => s + r.xg,      0) / withXg.length).toFixed(2)      : null,
-          avgShots:     withShots.length   > 0 ? +(withShots.reduce((s, r)   => s + r.shots,   0) / withShots.length).toFixed(1)   : null,
-          avgCorners:   withCorners.length > 0 ? +(withCorners.reduce((s, r) => s + r.corners, 0) / withCorners.length).toFixed(1) : null,
-        };
+    let result = await getOrFetch(`fixture:${fixtureId}:h2h`, TTL.MIN10, () => loadFixtureH2HPayload(fixtureId));
+    if (!result.h2h || result.h2h.length === 0) {
+      try {
+        await ensureH2HDataForFixture(fixtureId);
+      } catch (e) {
+        reqLogError("fixtures.h2h.backfill", e);
       }
-
-      return { h2h: rows, stats: aggregateStats };
-    });
+      cacheDel(`fixture:${fixtureId}:h2h`);
+      result = await getOrFetch(`fixture:${fixtureId}:h2h`, TTL.MIN10, () => loadFixtureH2HPayload(fixtureId));
+    }
     return res.json(result);
   } catch (error) {
     reqLogError("fixtures.h2h", error);

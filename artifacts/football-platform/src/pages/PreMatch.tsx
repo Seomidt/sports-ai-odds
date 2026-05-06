@@ -166,29 +166,25 @@ function CompactPreRow({
     <Link href={`/match/${fixture.fixtureId}`}>
       <div
         className={cn(
-          "group rounded-lg border px-2.5 py-2 cursor-pointer transition-colors hover:bg-white/[0.04]",
-          signals.length >= 3 ? "border-primary/25" : "border-white/[0.07]",
+          "group rounded-md border px-2 py-1.5 cursor-pointer transition-all hover:bg-white/[0.035] hover:border-white/12",
+          signals.length >= 3 ? "border-primary/22 bg-primary/[0.03]" : "border-white/[0.06] bg-white/[0.015]",
         )}
       >
-        <div className="flex items-center gap-2 min-h-[2.25rem]">
-          <div className="flex items-center gap-1 shrink-0">
-            <LeagueMark leagueId={fixture.leagueId} leagueLogo={fixture.leagueLogo} size="xs" />
-            <div className="flex items-center gap-1 shrink-0 w-[3rem]">
-              <Clock className="w-3 h-3 text-amber-400/80 shrink-0" />
-              <span className="text-[11px] font-mono font-semibold text-white tabular-nums">{kickoffShort(fixture.kickoff)}</span>
-            </div>
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-0.5 shrink-0 w-[2.75rem] sm:w-12 justify-end sm:justify-start">
+            <span className="text-[10px] font-mono font-medium text-white/55 tabular-nums">{kickoffShort(fixture.kickoff)}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-1.5 min-w-0">
+            <div className="flex items-center gap-1 min-w-0 flex-wrap sm:flex-nowrap">
               {fixture.homeTeamLogo && (
-                <img src={fixture.homeTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded-sm" />
+                <img src={fixture.homeTeamLogo} alt="" className="w-3.5 h-3.5 object-contain shrink-0 bg-white/90 rounded-[3px]" />
               )}
-              <span className="text-xs font-medium text-white truncate">{fixture.homeTeamName}</span>
-              <span className="text-[10px] text-white/25 shrink-0">v</span>
+              <span className="text-[11px] sm:text-xs font-medium text-white/95 truncate max-w-[42%] sm:max-w-none">{fixture.homeTeamName}</span>
+              <span className="text-[9px] text-white/20 shrink-0 px-0.5">–</span>
               {fixture.awayTeamLogo && (
-                <img src={fixture.awayTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded-sm" />
+                <img src={fixture.awayTeamLogo} alt="" className="w-3.5 h-3.5 object-contain shrink-0 bg-white/90 rounded-[3px]" />
               )}
-              <span className="text-xs text-white/75 truncate">{fixture.awayTeamName}</span>
+              <span className="text-[11px] sm:text-xs text-white/70 truncate max-w-[42%] sm:max-w-none">{fixture.awayTeamName}</span>
             </div>
           </div>
           <div className="hidden sm:flex items-center gap-1 shrink-0">
@@ -199,7 +195,7 @@ function CompactPreRow({
               icon={fixture.weatherIcon ?? null}
             />
             {signals.length > 0 && (
-              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-primary px-1 py-0.5 rounded border border-primary/20 bg-primary/5">
+              <span className="inline-flex items-center gap-0.5 text-[9px] font-mono text-primary px-1 py-0.5 rounded border border-primary/18 bg-primary/[0.06]">
                 <Zap className="w-2.5 h-2.5" />
                 {signals.length}
               </span>
@@ -208,26 +204,24 @@ function CompactPreRow({
         </div>
 
         {SPECIAL_STATUS_LABEL[fixture.statusShort ?? ""] ? (
-          <div className="mt-1 text-[10px] font-mono text-amber-400">{SPECIAL_STATUS_LABEL[fixture.statusShort!]}</div>
+          <div className="mt-1 pl-[2.75rem] sm:pl-12 text-[9px] font-mono text-amber-400/90">{SPECIAL_STATUS_LABEL[fixture.statusShort!]}</div>
         ) : hasPred && display.length > 0 ? (
-          <div className="mt-1.5 flex flex-wrap gap-1">
+          <div className="mt-1 pl-[2.75rem] sm:pl-12 flex flex-wrap gap-0.5">
             {display.map((m, i) => (
               <span
                 key={`${m.market}-${m.side}-${i}`}
                 className={cn(
-                  "inline-flex items-center gap-1 max-w-[100%] rounded px-1.5 py-0.5 text-[10px] font-mono border truncate",
+                  "inline-flex items-center gap-0.5 max-w-[100%] rounded px-1 py-0.5 text-[9px] font-mono border truncate leading-tight",
                   marketPillClass(m.market),
                 )}
                 title={m.label}
               >
                 <span className="truncate">{m.label}</span>
-                <span className="tabular-nums font-bold shrink-0 opacity-90">{m.probability}%</span>
+                <span className="tabular-nums font-semibold shrink-0 opacity-90">{m.probability}%</span>
               </span>
             ))}
           </div>
-        ) : (
-          <div className="mt-1 text-[10px] font-mono text-muted-foreground/50">No API prediction yet — open match to sync</div>
-        )}
+        ) : null}
       </div>
     </Link>
   );
@@ -412,17 +406,17 @@ export function PreMatch() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-5">
+          <div className="space-y-4">
             {visibleLeagues.map((league) => (
               <div key={league.leagueId}>
-                <div className="flex items-center gap-2 mb-2 pb-1 border-b border-white/8">
-                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="sm" />
-                  <span className="text-xs font-mono font-bold text-white/90 uppercase tracking-wide truncate">
+                <div className="flex items-center gap-2 mb-1.5 pb-1 border-b border-white/[0.07]">
+                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="xs" />
+                  <span className="text-[11px] font-semibold text-white/90 tracking-tight truncate font-sans">
                     {league.leagueName ?? `League ${league.leagueId}`}
                   </span>
-                  <span className="text-[10px] font-mono text-muted-foreground ml-auto tabular-nums">{league.fixtures.length}</span>
+                  <span className="text-[10px] text-muted-foreground/80 ml-auto tabular-nums">{league.fixtures.length}</span>
                 </div>
-                <div className="flex flex-col gap-1">
+                <div className="flex flex-col gap-0.5">
                   {league.fixtures.map((fixture) => (
                     <CompactPreRow
                       key={fixture.fixtureId}

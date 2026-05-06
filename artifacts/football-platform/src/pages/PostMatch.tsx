@@ -8,6 +8,7 @@ import { useScrollRestoration } from "@/hooks/use-scroll-restoration";
 import { useQuery } from "@tanstack/react-query";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeagueMark } from "@/components/LeagueMark";
+import { cn } from "@/lib/utils";
 
 type PostMatchTip = {
   id: number;
@@ -30,27 +31,27 @@ function TipOutcomeStrip({ tips }: { tips: PostMatchTip[] | undefined }) {
   const total = resolved.length;
 
   return (
-    <div className="border-t border-white/5 pt-2.5 mt-2.5 space-y-1.5">
+    <div className="border-t border-white/[0.06] pt-1.5 mt-1.5">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Target className="w-3 h-3 text-primary/60 shrink-0" />
-          <span className="text-[11px] font-mono text-white/70 truncate">
+        <div className="flex items-center gap-1 min-w-0">
+          <Target className="w-2.5 h-2.5 text-primary/50 shrink-0" />
+          <span className="text-[10px] text-white/65 truncate leading-tight">
             {top.recommendation}
             {top.marketOdds ? ` · ${top.marketOdds.toFixed(2)}` : ""}
           </span>
         </div>
         <div className="shrink-0">
-          {top.outcome === "hit" && <CheckCircle2 className="w-4 h-4 text-teal-400" />}
-          {top.outcome === "miss" && <XCircle className="w-4 h-4 text-amber-400" />}
-          {!top.outcome && total === 0 && <MinusCircle className="w-4 h-4 text-white/20" />}
+          {top.outcome === "hit" && <CheckCircle2 className="w-3.5 h-3.5 text-teal-400" />}
+          {top.outcome === "miss" && <XCircle className="w-3.5 h-3.5 text-amber-400" />}
+          {!top.outcome && total === 0 && <MinusCircle className="w-3.5 h-3.5 text-white/18" />}
         </div>
       </div>
       {total > 1 && (
-        <div className="text-[10px] font-mono text-muted-foreground pl-4.5">
-          <span className="text-teal-400">{hits}W</span>
-          <span className="text-white/20 mx-1">·</span>
-          <span className="text-amber-400">{total - hits}L</span>
-          <span className="text-white/30 ml-1">of {total} tips</span>
+        <div className="text-[9px] text-muted-foreground/90 mt-0.5 pl-3.5 tabular-nums">
+          <span className="text-teal-400/90">{hits}W</span>
+          <span className="text-white/15 mx-1">·</span>
+          <span className="text-amber-400/90">{total - hits}L</span>
+          <span className="text-white/25 ml-1">/ {total}</span>
         </div>
       )}
     </div>
@@ -100,10 +101,12 @@ export function PostMatch() {
 
   return (
     <Layout>
-      <div className="space-y-8">
-        <header>
-          <h1 className="text-3xl font-bold font-mono tracking-tight text-white mb-2">POST-MATCH</h1>
-          <p className="text-muted-foreground text-sm">Finished fixtures from the last 7 days — click any to see how algorithm tips performed. Active markets: Match Result, BTTS &amp; Asian Handicap.</p>
+      <div className="space-y-5 max-w-6xl mx-auto">
+        <header className="space-y-1">
+          <h1 className="text-xl md:text-2xl font-semibold tracking-tight text-white">Post-match</h1>
+          <p className="text-xs md:text-sm text-muted-foreground leading-snug max-w-2xl">
+            Afsluttede kampe (7 dage). Åbn en kamp for at se tip-historik. Markeder: 1X2, BTTS, asiatisk handicap.
+          </p>
         </header>
 
         {leagues.length > 1 && (
@@ -157,19 +160,19 @@ export function PostMatch() {
             </div>
           </div>
         ) : (
-          <div className="space-y-10">
+          <div className="space-y-6">
             {visibleLeagues.map((league) => (
-              <div key={league.leagueId} className="space-y-4">
-                <div className="flex items-center gap-3 pb-2 border-b border-white/10">
-                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="md" />
-                  <span className="text-sm font-bold font-mono text-white uppercase tracking-wider">
+              <div key={league.leagueId} className="space-y-2">
+                <div className="flex items-center gap-2 pb-1 border-b border-white/[0.07]">
+                  <LeagueMark leagueId={league.leagueId} leagueLogo={league.leagueLogo} size="xs" />
+                  <span className="text-[11px] font-semibold text-white/90 tracking-tight truncate font-sans">
                     {league.leagueName ?? `League ${league.leagueId}`}
                   </span>
-                  <span className="text-xs text-muted-foreground font-mono ml-auto">
-                    {league.fixtures.length} {league.fixtures.length === 1 ? "match" : "matches"}
+                  <span className="text-[10px] text-muted-foreground/80 ml-auto tabular-nums">
+                    {league.fixtures.length}
                   </span>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
                   {league.fixtures.map((fixture) => {
                     const homeWon = (fixture.homeGoals ?? 0) > (fixture.awayGoals ?? 0);
                     const awayWon = (fixture.awayGoals ?? 0) > (fixture.homeGoals ?? 0);
@@ -184,40 +187,44 @@ export function PostMatch() {
                     );
                     return (
                       <Link key={fixture.fixtureId} href={`/match/${fixture.fixtureId}`}>
-                        <div className="glass-card p-5 rounded-xl cursor-pointer transition-all hover:bg-white/5 border border-white/5">
-                          <div className="flex justify-between items-center mb-4">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-white/5 px-2.5 py-1 rounded font-mono">
-                              <CheckCircle2 className="w-3 h-3 shrink-0" />
+                        <div
+                          className={cn(
+                            "rounded-md border px-2.5 py-2 cursor-pointer transition-all",
+                            "border-white/[0.06] bg-white/[0.02] hover:border-white/14 hover:bg-white/[0.04]",
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[9px] font-mono font-medium text-white/40 tabular-nums">
                               {fixture.statusShort ?? "FT"}
                             </span>
-                            <span className="text-xs text-muted-foreground font-mono">
-                              {fixture.kickoff ? format(new Date(fixture.kickoff), "HH:mm") : "--:--"}
+                            <span className="text-[9px] font-mono text-white/35 tabular-nums">
+                              {fixture.kickoff ? format(new Date(fixture.kickoff), "HH:mm") : "—"}
                             </span>
                           </div>
-                          <div className="space-y-2.5">
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center justify-between gap-2 min-h-[1.35rem]">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 {fixture.homeTeamLogo && (
-                                  <img src={fixture.homeTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
+                                  <img src={fixture.homeTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded-[3px]" />
                                 )}
-                                <span className={`font-medium truncate text-sm ${homeWon ? "text-white" : "text-muted-foreground"}`}>
+                                <span className={`text-[11px] font-medium truncate ${homeWon ? "text-white" : "text-white/45"}`}>
                                   {fixture.homeTeamName}
                                 </span>
                               </div>
-                              <span className={`font-mono text-lg font-bold shrink-0 ${homeWon ? "text-white" : "text-muted-foreground"}`}>
+                              <span className={`text-sm font-semibold tabular-nums shrink-0 w-5 text-right ${homeWon ? "text-white" : "text-white/40"}`}>
                                 {fixture.homeGoals ?? 0}
                               </span>
                             </div>
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="flex items-center justify-between gap-2 min-h-[1.35rem]">
+                              <div className="flex items-center gap-1.5 min-w-0">
                                 {fixture.awayTeamLogo && (
-                                  <img src={fixture.awayTeamLogo} alt="" className="w-6 h-6 object-contain shrink-0 bg-white/90 rounded p-0.5" />
+                                  <img src={fixture.awayTeamLogo} alt="" className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded-[3px]" />
                                 )}
-                                <span className={`font-medium truncate text-sm ${awayWon ? "text-white" : "text-muted-foreground"}`}>
+                                <span className={`text-[11px] font-medium truncate ${awayWon ? "text-white" : "text-white/45"}`}>
                                   {fixture.awayTeamName}
                                 </span>
                               </div>
-                              <span className={`font-mono text-lg font-bold shrink-0 ${awayWon ? "text-white" : "text-muted-foreground"}`}>
+                              <span className={`text-sm font-semibold tabular-nums shrink-0 w-5 text-right ${awayWon ? "text-white" : "text-white/40"}`}>
                                 {fixture.awayGoals ?? 0}
                               </span>
                             </div>
@@ -225,20 +232,31 @@ export function PostMatch() {
                           <TipOutcomeStrip tips={tipsData?.tips?.[fixture.fixtureId]} />
 
                           {hasWeather && (
-                            <div className={`mt-3 pt-3 border-t border-white/5 flex items-center gap-2 text-xs font-mono ${isAdverseWeather ? "text-amber-400" : "text-violet-300"}`}>
-                              {fixture.weatherIcon
-                                ? <img src={`https://openweathermap.org/img/wn/${fixture.weatherIcon}.png`} className="w-4 h-4 object-contain shrink-0 bg-white/90 rounded p-0.5" alt={fixture.weatherDesc ?? ""} />
-                                : <Thermometer className="w-3.5 h-3.5 shrink-0" />
-                              }
-                              <span className="capitalize truncate">{fixture.weatherDesc}</span>
-                              <span className="shrink-0 ml-auto flex items-center gap-1">
-                                {Math.round(fixture.weatherTemp ?? 0)}°C
+                            <div
+                              className={cn(
+                                "mt-1.5 pt-1.5 border-t border-white/[0.06] flex items-center gap-1.5 text-[9px]",
+                                isAdverseWeather ? "text-amber-400/95" : "text-violet-300/85",
+                              )}
+                            >
+                              {fixture.weatherIcon ? (
+                                <img
+                                  src={`https://openweathermap.org/img/wn/${fixture.weatherIcon}.png`}
+                                  className="w-3 h-3 object-contain shrink-0"
+                                  alt=""
+                                />
+                              ) : (
+                                <Thermometer className="w-2.5 h-2.5 shrink-0 opacity-70" />
+                              )}
+                              <span className="capitalize truncate min-w-0">{fixture.weatherDesc}</span>
+                              <span className="shrink-0 ml-auto flex items-center gap-1 tabular-nums">
+                                {Math.round(fixture.weatherTemp ?? 0)}°
                                 {(fixture.weatherWind ?? 0) > 3 && (
                                   <span className="opacity-70 flex items-center gap-0.5">
-                                    <Wind className="w-3 h-3" />{Math.round(fixture.weatherWind ?? 0)}m/s
+                                    <Wind className="w-2.5 h-2.5" />
+                                    {Math.round(fixture.weatherWind ?? 0)}
                                   </span>
                                 )}
-                                {isAdverseWeather && <AlertTriangle className="w-3 h-3 text-amber-400" />}
+                                {isAdverseWeather && <AlertTriangle className="w-2.5 h-2.5" />}
                               </span>
                             </div>
                           )}

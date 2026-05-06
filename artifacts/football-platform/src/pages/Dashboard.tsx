@@ -287,7 +287,7 @@ function DailyLoopBar({ summary }: { summary: DailySummary }) {
               )}
             </div>
             <p className="text-[11px] text-muted-foreground/55 leading-snug mb-2">
-              Sporbare AI-anbefalinger (ikke det samme som markedsscan-kortene nedenunder). Sorteret efter markedstype og styrke — ikke fyldt med X.
+              Sporbare AI-anbefalinger (ikke det samme som markedsscan-kortene nedenunder). Uden 1X2-uafgjort og uden double chance — fokus på retnings- og målmarkeder.
             </p>
             {todayPicks.length === 0 ? (
               <div className="text-sm text-muted-foreground/50">Ingen tips i vinduet, der matcher filteret.</div>
